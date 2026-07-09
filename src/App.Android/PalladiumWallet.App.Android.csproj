@@ -8,8 +8,8 @@
     <Nullable>enable</Nullable>
     <ApplicationId>io.github.davide3011.palladiumwallet</ApplicationId>
     <!-- ApplicationVersion = versionCode (intero), ApplicationDisplayVersion = versionName -->
-    <ApplicationVersion>2</ApplicationVersion>
-    <ApplicationDisplayVersion>0.9.1</ApplicationDisplayVersion>
+    <ApplicationVersion>3</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <!-- Includi le assembly .NET DENTRO l'apk: senza, in Debug si usa il Fast
          Deployment (assembly spinte via adb da `dotnet run`) e un apk installato

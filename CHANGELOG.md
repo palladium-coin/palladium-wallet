@@ -5,6 +5,108 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
+## [1.0.0] — 2026-07-09
+
+First stable release. Closes the last open security gap from 0.9.x (header
+trust was not actually anchored to any checkpoint), fixes several crash
+paths found by a new fuzzing harness, and adds OP_RETURN/coinbase-tag
+decoding to the transaction detail view.
+
+### Security
+
+- `WalletSynchronizer.AnchorToCheckpointAsync`: header trust is now actually
+  anchored to `ChainProfiles.Mainnet.Checkpoints` (24 real `[height, hash,
+  bits]` checkpoints pulled from a fully-synced node, every 20,000 blocks
+  plus one near tip). Previously the checkpoint array was empty and the
+  methods meant to enforce it (`MatchesCheckpoint`/`IsValidChild`) were
+  never called — on this LWMA chain, where PoW can't be recomputed
+  client-side, a malicious or eclipsing server could hand back any
+  internally-consistent header for a Merkle proof with nothing tying it to
+  the real chain. For every header used in a Merkle proof, the intervening
+  headers are now downloaded back to the nearest checkpoint and verified as
+  an unbroken prev-hash chain terminating in that checkpoint's exact hash
+  (memoized per sync session). Testnet/Regtest remain unanchored (no node
+  available to source checkpoints from); a missing checkpoint is a no-op,
+  not a failure.
+- New fuzzing harness (`tests/PalladiumWallet.Fuzz`, SharpFuzz-based): one
+  target per untrusted-input parser (header, Merkle proof, peer list,
+  wallet file, mnemonic/key/address/amount), each encoding that parser's
+  documented error contract. Found and fixed:
+  - `Bip39.TryParse` threw `NotSupportedException` on text resembling no
+    wordlist instead of failing gracefully.
+  - `ElectrumApi.ParsePeers` threw on any `server.peers.subscribe` response
+    shape other than the expected `[ip, hostname, [features...]]`, and on a
+    JSON string containing invalid UTF-8.
+  - `EncryptedFile.Decrypt` let a tampered/corrupted wallet file escape as
+    raw `JsonException`/`FormatException`/`ArgumentNullException` instead of
+    the documented `WrongPasswordException`/`InvalidDataException`
+    contract; worse, the PBKDF2 iteration count was read from the
+    (attacker-controlled) container with no upper bound — a tampered file
+    demanding e.g. 2³¹ iterations would hang the wallet on open. Iteration
+    count is now clamped to 10,000,000.
+  - `CertificatePinStore.Load`: a corrupted pin file blocked every SSL
+    connection until manually deleted; now falls back to first-contact
+    TOFU like `ServerRegistry` already did.
+  - The seed corpus (incl. a regression input per fixed finding) replays
+    inside `dotnet test` via `FuzzCorpusTests`, so a fix can't silently
+    regress.
+- `SECURITY.md` corrected: PBKDF2 parameters (600,000 iterations / 16-byte
+  salt, not the pre-hardening 100,000 / 32-byte), a stale file reference,
+  and disclosure of the AI-assisted testing methodology used (adversarial
+  fake-server simulation, property-based fuzzing, targeted security
+  review) as a complement to, not a replacement for, independent review.
+
+### Added
+
+- Transaction detail view now decodes OP_RETURN output payloads (UTF-8, or
+  hex if the bytes aren't valid text — multiple OP_RETURN outputs in one tx
+  are each decoded independently) and coinbase scriptSig pool tags (e.g.
+  `/slush/`, extracted as printable-ASCII runs amid the binary BIP34
+  height/extranonce). Both were previously dropped entirely — discarded
+  once no destination address could be derived from the script.
+- Help overlay: "User guide" button next to "Report a bug", linking to
+  `USERGUIDE.md` on GitHub.
+- `USERGUIDE.md`: full end-user reference for GUI and CLI (wizard flows,
+  script types, fees, gap limit, TOFU cert pinning, CLI commands) with the
+  exact numbers the software enforces.
+
+### Fixed
+
+- Send/Donate/Sync/Wizard view models wrote status/error strings directly
+  in Italian regardless of the active language; routed through `Loc` with
+  the missing keys added. `CertificatePinMismatchException` no longer
+  bakes an Italian message into `.Message` — it exposes `Host`/`Port` for
+  the UI to translate.
+- CLI (`src/Cli/Program.cs`) printed all output in Italian regardless of
+  the code/docs-are-English-only policy; translated every user-facing
+  string and comment.
+
+### Testing
+
+- Test suite expanded from 307 to 392 tests, closing coverage gaps in:
+  checkpoint-anchoring (including the memoization and non-generic-retry
+  branches), the PoW-checked branch of `BlockHeaderInfo.IsValidChild`
+  (never run since every profile sets `SkipPowValidation`), all 8 BIP-39
+  wordlist languages plus the empty-input guard, SLIP-132 rejection of
+  malformed/corrupted keys, `TransactionFactory`'s standardness-policy
+  rejection, `ImportedKeyAccount`'s fund-safety fallbacks,
+  `WalletLoader`'s defensive branches for corrupted files,
+  `PalladiumNetworks.For`/`INetworkSet`, `AppPaths`' full data-root
+  precedence chain (via new internal override seams), `UpdateChecker`
+  end-to-end via a stub-transport seam, and `ElectrumClient`'s
+  multi-segment response dispatch.
+- OP_RETURN/coinbase-tag decoding covered: UTF-8 text, binary fallback to
+  hex, multiple OP_RETURN outputs in one tx, pool-tag extraction, and the
+  absence of false positives on standard outputs/inputs.
+
+### Documentation
+
+- `AGENTS.md`/`CLAUDE.md` re-synced (had drifted) and reformatted from
+  dense prose to scannable bullet lists; a stale `SECURITY.md` file
+  reference fixed.
+- `README.md` test-coverage section and `SECURITY.md` updated to describe
+  the checkpoint anchoring and fuzzing guarantees actually enforced now.
+
 ## [0.9.1] — 2026-07-02
 
 ### Testing
