@@ -72,10 +72,11 @@ Running without arguments shows an interactive menu — pick a single target or
 ./docker/build.sh [TARGET] [--rebuild]
 
 Targets:
-  windows   Win x64 single-file executable (native libs embedded)
-  linux     Linux x64 single-file binary (runs as-is, nothing to install)
-  android   Android APK (release-signed, prompts for keystore passwords)
-  all       All three targets
+  windows     Win x64 single-file executable (native libs embedded)
+  linux       Linux x64 single-file binary (runs as-is, nothing to install)
+  linux-arm64 Linux ARM64 single-file binary (runs as-is, nothing to install)
+  android     Android APK (release-signed, prompts for keystore passwords)
+  all         All targets above
 
 Options:
   --rebuild   Force rebuild of the Docker images (needed after editing a Dockerfile)
@@ -86,6 +87,7 @@ Examples:
 ```bash
 ./docker/build.sh all               # build everything
 ./docker/build.sh windows           # Windows only
+./docker/build.sh linux-arm64       # Linux ARM64 only
 ./docker/build.sh android --rebuild # Android, rebuilding the image first
 ```
 
@@ -96,11 +98,12 @@ Examples:
 All artifacts land in `dist/` at the repository root. The version number is
 read automatically from `<Version>` in `src/App/PalladiumWallet.App.csproj`.
 
-| Target  | Path                                             |
-|---------|--------------------------------------------------|
-| Windows | `dist/windows/PalladiumWallet-{ver}-win-x64.exe` |
-| Linux   | `dist/linux/PalladiumWallet-{ver}-linux-x64`     |
-| Android | `dist/android/PalladiumWallet-{ver}.apk`         |
+| Target      | Path                                                     |
+|-------------|-----------------------------------------------------------|
+| Windows     | `dist/windows/PalladiumWallet-{ver}-win-x64.exe`          |
+| Linux       | `dist/linux/PalladiumWallet-{ver}-linux-x64`              |
+| Linux ARM64 | `dist/linux-arm64/PalladiumWallet-{ver}-linux-arm64`      |
+| Android     | `dist/android/PalladiumWallet-{ver}.apk`                  |
 
 **Windows** — a single self-contained `.exe` (runtime and native libraries
 embedded). Copy it to any 64-bit Windows 10/11 machine and double-click.
@@ -118,6 +121,15 @@ Works on any desktop distro with glibc, X11/Wayland and fontconfig (i.e.
 effectively all of them); no .NET or other packages to install. If you
 transfer it through a channel that strips permissions (e.g. a web download),
 restore the execute bit with `chmod +x`.
+
+**Linux ARM64** — same as above, cross-published for `aarch64` (e.g.
+Raspberry Pi 4/5, ARM-based SBCs/laptops running a 64-bit distro). The build
+runs on an x64 Docker host — .NET's self-contained publish cross-targets
+`linux-arm64` without needing ARM hardware. Run it the same way:
+
+```bash
+./PalladiumWallet-{ver}-linux-arm64
+```
 
 **Android** — a release-signed APK for sideloading: transfer it to the phone
 and open it (enable "install from unknown sources" if prompted), or install
@@ -138,7 +150,7 @@ via `adb install dist/android/PalladiumWallet-*.apk`. Supports Android 6.0+
 
 | Image               | Dockerfile           | Used for        | Size    |
 |---------------------|----------------------|-----------------|---------|
-| `plm-build-desktop` | `Dockerfile.desktop` | windows + linux | ~1.5 GB |
+| `plm-build-desktop` | `Dockerfile.desktop` | windows + linux + linux-arm64 | ~1.5 GB |
 | `plm-build-android` | `Dockerfile.android` | android         | ~5 GB   |
 
 Images are built automatically the first time a target needs them and reused

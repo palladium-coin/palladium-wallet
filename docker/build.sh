@@ -27,10 +27,11 @@ usage() {
 $(bold "Usage:") $(basename "$0") [TARGET] [OPTIONS]
 
 $(bold "Targets:")
-  windows   Win x64 single-file executable  →  dist/windows/
-  linux     Linux x64 single-file binary    →  dist/linux/
-  android   Android APK (release-signed)    →  dist/android/
-  all       All three targets
+  windows     Win x64 single-file executable  →  dist/windows/
+  linux       Linux x64 single-file binary    →  dist/linux/
+  linux-arm64 Linux ARM64 single-file binary  →  dist/linux-arm64/
+  android     Android APK (release-signed)    →  dist/android/
+  all         All targets above
 
 $(bold "Options:")
   --rebuild   Force rebuild of Docker images (e.g. after Dockerfile change)
@@ -50,9 +51,9 @@ TARGET=""
 
 for arg in "$@"; do
     case "$arg" in
-        windows|linux|android|all) TARGET="$arg" ;;
-        --rebuild)                 REBUILD=true ;;
-        -h|--help)                 usage; exit 0 ;;
+        windows|linux|linux-arm64|android|all) TARGET="$arg" ;;
+        --rebuild)                             REBUILD=true ;;
+        -h|--help)                              usage; exit 0 ;;
         *) err "Unknown argument: $arg"; usage; exit 1 ;;
     esac
 done
@@ -62,10 +63,10 @@ if [[ -z "$TARGET" ]]; then
     bold "PalladiumWallet — reproducible build"
     echo ""
     PS3="Select target: "
-    options=("windows" "linux" "android" "all" "quit")
+    options=("windows" "linux" "linux-arm64" "android" "all" "quit")
     select opt in "${options[@]}"; do
         case "$opt" in
-            windows|linux|android|all) TARGET="$opt"; break ;;
+            windows|linux|linux-arm64|android|all) TARGET="$opt"; break ;;
             quit) echo "Aborted."; exit 0 ;;
             *) echo "Invalid choice, try again." ;;
         esac
@@ -172,6 +173,23 @@ build_linux() {
     ok "Linux → dist/linux/PalladiumWallet-${VERSION}-linux-x64"
 }
 
+build_linux_arm64() {
+    ensure_desktop_image
+    info "Building Linux ARM64 …"
+    run_build "$IMAGE_DESKTOP" \
+        "dotnet publish src/App.Desktop \
+            -r linux-arm64 \
+            -c Release \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            --self-contained \
+            -o /tmp/linux-arm64-out
+         install -m 755 /tmp/linux-arm64-out/PalladiumWallet \
+             \"/output/PalladiumWallet-${VERSION}-linux-arm64\"" \
+        "${DIST_DIR}/linux-arm64"
+    ok "Linux ARM64 → dist/linux-arm64/PalladiumWallet-${VERSION}-linux-arm64"
+}
+
 build_android() {
     ensure_android_image
 
@@ -221,12 +239,14 @@ build_android() {
 START=$(date +%s)
 
 case "$TARGET" in
-    windows) build_windows ;;
-    linux)   build_linux   ;;
-    android) build_android ;;
+    windows)     build_windows     ;;
+    linux)       build_linux       ;;
+    linux-arm64) build_linux_arm64 ;;
+    android)     build_android     ;;
     all)
         build_windows
         build_linux
+        build_linux_arm64
         build_android
         ;;
 esac
