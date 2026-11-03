@@ -2,6 +2,9 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using NBitcoin;
+using PalladiumWallet.App.Localization;
+using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Storage;
 
 namespace PalladiumWallet.App.ViewModels;
@@ -33,8 +36,23 @@ public partial class MainWindowViewModel
     private void AddContact()
     {
         var name = NewContactName.Trim();
-        var addr = NewContactAddress.Trim();
+        // Pasted addresses often carry spaces or line breaks anywhere: drop all whitespace.
+        var addr = string.Concat(NewContactAddress.Where(c => !char.IsWhiteSpace(c)));
         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(addr)) return;
+        try
+        {
+            BitcoinAddress.Create(addr, PalladiumNetworks.For(Net));
+        }
+        catch (System.FormatException)
+        {
+            StatusMessage = Loc.Tr("msg.contact.address.invalid");
+            return;
+        }
+        if (Contacts.Any(c => string.Equals(c.Address, addr, System.StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusMessage = Loc.Tr("msg.contact.duplicate");
+            return;
+        }
         Contacts.Add(new ContactEntry(name, addr));
         NewContactName = NewContactAddress = "";
         PersistContacts();

@@ -477,6 +477,22 @@ public sealed class Loc
             "服务器 {0} 不在 Palladium 链上（创世块或检查点不同）。请选择其他服务器。"],
 
         // Contacts
+        ["msg.contact.address.invalid"] = [
+            "Indirizzo non valido per questa rete: il contatto non è stato salvato.",
+            "Invalid address for this network: the contact was not saved.",
+            "Dirección no válida para esta red: el contacto no se guardó.",
+            "Adresse invalide pour ce réseau : le contact n'a pas été enregistré.",
+            "Endereço inválido para esta rede: o contato não foi salvo.",
+            "Ungültige Adresse für dieses Netzwerk: Der Kontakt wurde nicht gespeichert.",
+            "该网络的地址无效：联系人未保存。"],
+        ["msg.contact.duplicate"] = [
+            "Esiste già un contatto con questo indirizzo.",
+            "A contact with this address already exists.",
+            "Ya existe un contacto con esta dirección.",
+            "Un contact avec cette adresse existe déjà.",
+            "Já existe um contato com este endereço.",
+            "Ein Kontakt mit dieser Adresse existiert bereits.",
+            "已存在相同地址的联系人。"],
         ["contacts.name"]         = ["Nome",                                                              "Name",                         "Nombre",                               "Nom",                                      "Nome",                                     "Name",                                          "姓名"],
         ["contacts.address"]      = ["Indirizzo",                                                         "Address",                      "Dirección",                            "Adresse",                                  "Endereço",                                 "Adresse",                                       "地址"],
         ["contacts.name.ph"]      = ["Nome contatto",                                                     "Contact name",                 "Nombre del contacto",                  "Nom du contact",                           "Nome do contato",                          "Kontaktname",                                   "联系人姓名"],

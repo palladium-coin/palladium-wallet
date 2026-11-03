@@ -17,6 +17,10 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- Adding a contact now validates the address for the wallet's network and rejects duplicates
+  (case-insensitive); whitespace and line breaks in a pasted address are removed. Before, any
+  string was saved and the error only appeared at send time. Contacts already stored with an
+  invalid address still load and display.
 - The wallet now verifies the chain identity of a server right after connecting: the
   `genesis_hash` from `server.features` must match the profile and, on mainnet (which shares
   Bitcoin's genesis), the header at the highest checkpoint not above the server's tip must match

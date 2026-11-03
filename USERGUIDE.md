@@ -508,9 +508,11 @@ them is normal.
 
 A simple per-wallet address book, on its own tab:
 
-- **Add**: name + address, both required (whitespace is trimmed). Note: the address format
-  is **not validated when saving** — it is only validated when you actually send to it. Copy
-  addresses carefully.
+- **Add**: name + address, both required. The address is **validated when saving** against
+  the wallet's network: an invalid or wrong-network address, or one already in the list, is
+  refused with a message. Spaces and line breaks in a pasted address are removed. Contacts
+  saved by an older version without validation are still shown; the send form validates the
+  destination again when you use them.
 - **Remove selected**: deletes the highlighted contact. There is no edit function — remove
   and re-add.
 - Contacts are used by the **From contacts** dropdown on the Send tab.

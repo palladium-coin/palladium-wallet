@@ -291,7 +291,8 @@ public sealed class MainWindowViewModelTests : VmTestBase
         var vm = new MainWindowViewModel();
         RestoreFlow(vm, Mnemonic, null, "c");
 
-        vm.NewContactName = "Alice"; vm.NewContactAddress = "plm1qexample";
+        var alice = Address(1);
+        vm.NewContactName = "Alice"; vm.NewContactAddress = alice;
         vm.AddContactCommand.Execute(null);
         vm.NewContactName = ""; vm.NewContactAddress = "ignored";
         vm.AddContactCommand.Execute(null); // blank name → ignored
@@ -304,6 +305,77 @@ public sealed class MainWindowViewModelTests : VmTestBase
         vm.RemoveSelectedContactCommand.Execute(null);
         Assert.Empty(vm.Contacts);
         Assert.Empty(WalletStore.Load(Assert.Single(AppPaths.WalletFiles(NetKind.Mainnet))).Contacts);
+    });
+
+    private static string Address(int index) =>
+        HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet)
+            .GetReceiveAddress(index).ToString();
+
+    [Theory]
+    [InlineData("plm1qexample")]                                   // garbage
+    [InlineData("not an address")]
+    [InlineData("tplm1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx")]  // wrong network / bad checksum
+    public Task Contacts_RejectInvalidAddresses(string bad) => UiSession.Run(() =>
+    {
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "c1");
+
+        vm.NewContactName = "Bob"; vm.NewContactAddress = bad;
+        vm.AddContactCommand.Execute(null);
+
+        Assert.Empty(vm.Contacts);
+        Assert.Equal(Loc.Tr("msg.contact.address.invalid"), vm.StatusMessage);
+        Assert.Empty(WalletStore.Load(Assert.Single(AppPaths.WalletFiles(NetKind.Mainnet))).Contacts);
+    });
+
+    [Fact]
+    public Task Contacts_RejectAnAddressFromAnotherNetwork() => UiSession.Run(() =>
+    {
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "c2");
+        var regtest = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Regtest)
+            .GetReceiveAddress(0).ToString();
+
+        vm.NewContactName = "Eve"; vm.NewContactAddress = regtest;
+        vm.AddContactCommand.Execute(null);
+
+        Assert.Empty(vm.Contacts);
+        Assert.Equal(Loc.Tr("msg.contact.address.invalid"), vm.StatusMessage);
+    });
+
+    [Fact]
+    public Task Contacts_RejectDuplicatesAndCleanPastedWhitespace() => UiSession.Run(() =>
+    {
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "c3");
+        var a = Address(2);
+
+        vm.NewContactName = "  Carol "; vm.NewContactAddress = $" {a[..10]}\n{a[10..]}\r\n";
+        vm.AddContactCommand.Execute(null);
+        Assert.Equal(new ContactEntry("Carol", a), Assert.Single(vm.Contacts));
+
+        vm.NewContactName = "Carol again"; vm.NewContactAddress = a.ToUpperInvariant();
+        vm.AddContactCommand.Execute(null);
+        Assert.Single(vm.Contacts);
+        Assert.Equal(Loc.Tr("msg.contact.duplicate"), vm.StatusMessage);
+    });
+
+    [Fact]
+    public Task Contacts_AlreadyStoredWithAnInvalidAddress_StillLoadAndDisplay() => UiSession.Run(() =>
+    {
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "c4");
+        var path = Assert.Single(AppPaths.WalletFiles(NetKind.Mainnet));
+        var doc = WalletStore.Load(path);
+        doc.Contacts = [new StoredContact { Name = "Legacy", Address = "whatever" }];
+        WalletStore.Save(doc, path, null);
+        vm.CloseWalletCommand.Execute(null);
+
+        vm.WizardStartOpenCommand.Execute(null);
+        vm.OpenExistingCommand.Execute(null);
+
+        Assert.True(vm.IsWalletOpen);
+        Assert.Equal(new ContactEntry("Legacy", "whatever"), Assert.Single(vm.Contacts));
     });
 
     // ---- sync + send against the fake server ----
