@@ -100,11 +100,11 @@ flowchart LR
 - Relative Markdown links in `docs/` resolve.
 - `CLAUDE.md` and `AGENTS.md` match apart from their header block.
 
-It needs only `bash` and standard tools, so it runs on a developer machine and can
-be wired into CI later (the repository has no CI workflow today).
+It needs only `bash` and standard tools, so it runs on a developer machine and in CI
+(the `docs` job in `.github/workflows/ci.yml`, see ADR 0032).
 
 ## Possible next steps (not in place yet)
 
-- Run `docs/check-docs.sh` and a Markdown linter in a CI workflow on pull requests.
+- Add a Markdown linter to the `docs` CI job.
 - Add a link checker for external URLs.
 - Publish `docs/` as a static site if the audience outgrows GitHub's renderer.

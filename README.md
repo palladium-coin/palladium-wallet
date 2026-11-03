@@ -124,6 +124,8 @@ or run it on an emulator (see *Android emulator (developer setup)*).
 
 Tests are the **primary verification layer** — the core logic and crypto run headless, without the GUI or a real network.
 
+Every push to `main` and every pull request runs the offline suite on Ubuntu and Windows, plus a fuzz smoke and the docs checks, via GitHub Actions (`.github/workflows/ci.yml`).
+
 Run the whole suite:
 ```bash
 dotnet test

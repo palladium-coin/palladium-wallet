@@ -62,6 +62,7 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) �
   - After fixing a finding: add the crashing input to `SeedCorpus` in the fuzz project's `Program.cs` and regenerate with `--make-seeds Corpus`
 - **GUI hot reload:** `dotnet watch --project src/App.Desktop` (on WSL2/WSLg the window shows on the Windows desktop, no graphics dependencies to install)
 - **CLI:** `dotnet run --project src/Cli -- <command>` (no args → usage)
+- **CI** (`.github/workflows/ci.yml`, ADR 0032): on every push to `main` and every PR it runs the offline test suite on Ubuntu and Windows, a fuzz smoke per parser target, and `docs/check-docs.sh`. Keep `dotnet test tests/PalladiumWallet.Tests` green locally first; the Android head is deliberately not built in CI
 - **Release binaries (all 3 targets):** `./docker/build.sh [windows|linux|android|all]` — reproducible Docker builds (toolchain pinned in `docker/Dockerfile.*`, no SDK needed on host), artifacts in `dist/`, version taken from the App csproj (details in `docker/README.md`)
   - Single-file desktop publish needs `-p:IncludeNativeLibrariesForSelfExtract=true` or Avalonia's native libs (Skia/HarfBuzz/ANGLE) stay outside the exe and it silently fails to start
   - Android workload dictates the SDK API level — error XA5207 → bump `ANDROID_SDK_PLATFORM` in `Dockerfile.android`
