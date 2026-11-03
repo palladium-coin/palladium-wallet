@@ -80,4 +80,25 @@ public static class CoinAmount
         }
         return true;
     }
+
+    /// <summary>Upper bound accepted for a fee rate, in sat/vB (guards against typos).</summary>
+    public const decimal MaxFeeRate = 1000m;
+
+    /// <summary>
+    /// Parses a fee rate in sat/vB, independent of the system culture. Accepts a decimal point or
+    /// comma; rejects thousands separators, exponents, signs, zero and values above
+    /// <see cref="MaxFeeRate"/>.
+    /// </summary>
+    public static bool TryParseFeeRate(string? text, out decimal satPerVbyte)
+    {
+        satPerVbyte = 0;
+        if (text is null)
+            return false;
+        text = text.Trim().Replace(',', '.');
+        if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var rate)
+            || rate <= 0 || rate > MaxFeeRate)
+            return false;
+        satPerVbyte = rate;
+        return true;
+    }
 }

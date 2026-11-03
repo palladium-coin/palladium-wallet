@@ -44,9 +44,11 @@ public partial class MainWindowViewModel
                 DonatePreview = Loc.Tr("msg.amount.invalid");
                 return;
             }
-            if (!decimal.TryParse(SendFeeRate, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out var feeRate) || feeRate <= 0)
-                feeRate = 1m;
+            if (!CoinAmount.TryParseFeeRate(SendFeeRate, out var feeRate))
+            {
+                DonatePreview = Loc.Tr("msg.feerate.invalid");
+                return;
+            }
 
             _pendingDonate = new TransactionFactory(_account).Build(
                 _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,

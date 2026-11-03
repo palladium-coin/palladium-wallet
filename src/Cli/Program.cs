@@ -217,7 +217,9 @@ static async Task<int> Send(string[] o)
     long amount = 0;
     if (!sendAll && !CoinAmount.TryParseCoins(Opt(o, "--amount") ?? "", out amount))
         throw new WalletSpendException("--amount missing or invalid (or use --all).");
-    var feeRate = decimal.TryParse(Opt(o, "--feerate"), out var fr) ? fr : 1m;
+    var feeRate = 1m;
+    if (Opt(o, "--feerate") is { } feeText && !CoinAmount.TryParseFeeRate(feeText, out feeRate))
+        throw new WalletSpendException($"--feerate invalid (expected sat/vB in (0, {CoinAmount.MaxFeeRate}]).");
 
     // Source transactions of the UTXOs: needed for amounts and signing.
     await using var client = await Connect(o, account.Profile);

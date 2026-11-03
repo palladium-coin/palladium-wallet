@@ -382,7 +382,8 @@ wallet must be spendable (not watch-only) to actually broadcast.
 - **Fee (sat/vB)** — a single manually-entered fee rate. **Default: 1 sat/vB.** There are no
   presets and no automatic fee estimation. On the Palladium chain, blocks are rarely full,
   so 1 sat/vB normally confirms in the next few blocks; raise it if a transaction lingers in
-  the mempool. Must be a number greater than zero.
+  the mempool. Must be a number greater than zero and at most 1000; `.` or `,` is the decimal
+  separator (no thousands separators), regardless of the system language.
 - **QR scan** (Android only) — camera button; reads a plain address or a
   `palladium:` payment URI (the address part is used).
 
@@ -439,7 +440,7 @@ software of your choice, then broadcast the finalized transaction.
 
 The Help overlay includes a donation form (developer address
 `plm1qdq3gu2zvg9lyr8gxd6yln4wavc5tlp8prmvfay`) using the same prepare/confirm flow and the
-fee rate from the Send tab (falling back to 1 sat/vB if invalid). Entirely optional.
+fee rate from the Send tab (an invalid rate is reported as an error). Entirely optional.
 
 ---
 

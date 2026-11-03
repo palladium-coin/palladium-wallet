@@ -5,6 +5,67 @@ namespace PalladiumWallet.Tests.Wallet;
 
 public class CoinAmountTests
 {
+    // ---- fee rate (sat/vB): culture-independent ----
+
+    [Theory]
+    [InlineData("1", "1")]
+    [InlineData("1.5", "1.5")]
+    [InlineData("1,5", "1.5")]
+    [InlineData("0.5", "0.5")]
+    [InlineData("  2 ", "2")]
+    [InlineData("2.25", "2.25")]
+    [InlineData("1000", "1000")]
+    public void TryParseFeeRate_accepts_valid(string text, string expected)
+    {
+        Assert.True(CoinAmount.TryParseFeeRate(text, out var rate));
+        Assert.Equal(decimal.Parse(expected, System.Globalization.CultureInfo.InvariantCulture), rate);
+    }
+
+    [Theory]
+    [InlineData("1.000")] // looks like a thousands separator in it-IT/de-DE but is 1.000 → accepted as 1
+    public void TryParseFeeRate_dot_is_always_decimal(string text)
+    {
+        Assert.True(CoinAmount.TryParseFeeRate(text, out var rate));
+        Assert.Equal(1m, rate);
+    }
+
+    [Theory]
+    [InlineData("1e3")]
+    [InlineData("-1")]
+    [InlineData("+1")]
+    [InlineData("0")]
+    [InlineData("0.0")]
+    [InlineData("1000.01")]
+    [InlineData("1,000.5")]
+    [InlineData("1 000")]
+    [InlineData("abc")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TryParseFeeRate_rejects_invalid(string? text)
+    {
+        Assert.False(CoinAmount.TryParseFeeRate(text, out var rate));
+        Assert.Equal(0m, rate);
+    }
+
+    [Theory]
+    [InlineData("it-IT")]
+    [InlineData("de-DE")]
+    [InlineData("fr-FR")]
+    [InlineData("en-US")]
+    public void TryParseFeeRate_ignores_current_culture(string culture)
+    {
+        var saved = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+            Assert.True(CoinAmount.TryParseFeeRate("1.5", out var a));
+            Assert.True(CoinAmount.TryParseFeeRate("2,25", out var b));
+            Assert.Equal(1.5m, a);
+            Assert.Equal(2.25m, b);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = saved; }
+    }
+
     // ---- valid amounts: all units ----
 
     [Theory]

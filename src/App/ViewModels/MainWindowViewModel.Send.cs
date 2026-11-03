@@ -74,7 +74,7 @@ public partial class MainWindowViewModel
                 SendPreview = Loc.Tr("msg.amount.invalid");
                 return;
             }
-            if (!decimal.TryParse(SendFeeRate, out var feeRate) || feeRate <= 0)
+            if (!CoinAmount.TryParseFeeRate(SendFeeRate, out var feeRate))
             {
                 SendPreview = Loc.Tr("msg.feerate.invalid");
                 return;

@@ -9,6 +9,11 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- Fee rate parsing no longer depends on the system culture: on Italian/German systems `1.5`
+  was read as `15` sat/vB (10x the intended fee). The Send form, the Donate form and the CLI
+  `--feerate` now share `CoinAmount.TryParseFeeRate` (invariant culture, `.` or `,` as decimal
+  separator, no thousands separators, range (0, 1000] sat/vB). Donate and the CLI no longer
+  silently fall back to 1 sat/vB on an invalid value: they report an error.
 - `ElectrumClient`: after a protocol error (e.g. a malformed line from the server) the read
   loop died but the client kept reporting `IsConnected == true`, and any later request waited
   forever for a response that could never arrive. The read loop now marks the connection dead
