@@ -34,7 +34,10 @@ public abstract class VmTestBase : IDisposable
         MainWindowViewModel.UpdateCheck = _ => Task.FromResult<LatestRelease?>(null);
         // No bootstrap servers: the only reachable server is the in-process fake, so the
         // VM's connect/reconnect loops can never touch a real indexing server.
-        MainWindowViewModel.ProfileOverride = ChainProfiles.Mainnet with { BootstrapServers = [] };
+        // No checkpoints either: the fake chains use tiny heights, and with the real mainnet checkpoints
+        // every proof would have to be anchored up to height 20,000 (ADR 0040), which the fake
+        // server does not serve. Tests that care about anchoring set their own profile.
+        MainWindowViewModel.ProfileOverride = ChainProfiles.Mainnet with { BootstrapServers = [], Checkpoints = [] };
         new AppConfig { LastServerHost = _server.Host, LastServerPort = _server.Port, LastServerUseSsl = false }
             .Save(AppPaths.ConfigPath());
     }
