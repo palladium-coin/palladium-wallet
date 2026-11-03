@@ -379,11 +379,19 @@ wallet must be spendable (not watch-only) to actually broadcast.
   than 1 satoshi (0.00000001 PLM).
 - **Send all** — checkbox; disables the amount field and sends the entire spendable balance,
   **with the fee deducted from the amount** (the recipient receives balance − fee).
-- **Fee (sat/vB)** — a single manually-entered fee rate. **Default: 1 sat/vB.** There are no
-  presets and no automatic fee estimation. On the Palladium chain, blocks are rarely full,
-  so 1 sat/vB normally confirms in the next few blocks; raise it if a transaction lingers in
-  the mempool. Must be a number greater than zero and at most 1000; `.` or `,` is the decimal
-  separator (no thousands separators), regardless of the system language.
+- **Fee (sat/vB)** — the fee rate, which you can always type by hand. **Default: 1 sat/vB.**
+  Once connected, the wallet asks the server for the minimum relay fee and for estimates, and
+  shows three presets — **Fast** (~2 blocks), **Normal** (~6) and **Economy** (~24) — with the
+  numbers underneath; **Normal** is preselected unless you already typed a rate. An estimate
+  never goes below the relay fee, and an implausible one (above 1000 sat/vB) is ignored. If the
+  server gives no estimate the presets are hidden and the manual field stays at 1. A manual rate
+  below the server's relay fee is refused with a message (the node would reject it anyway).
+  The estimate comes from the server, which is not trusted: the preview always shows the
+  **absolute fee**, and warns when it is more than 1% of the amount sent. On the Palladium
+  chain, blocks are rarely full, so 1 sat/vB normally confirms in the next few blocks; raise it
+  if a transaction lingers in the mempool. Must be a number greater than zero and at most 1000;
+  `.` or `,` is the decimal separator (no thousands separators), regardless of the system
+  language.
 - **QR scan** (Android only) — camera button; reads a plain address or a
   `palladium:` payment URI (the address part is used).
 

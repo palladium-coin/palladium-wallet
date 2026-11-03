@@ -7,6 +7,16 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Added
+
+- Fee presets from the server: after connecting, the Send tab offers Fast, Normal and Economy
+  rates from `blockchain.estimatefee` (2, 6 and 24 blocks) and shows them with the relay fee;
+  Normal is preselected unless the user already typed a rate. Estimates are converted from
+  PLM/kB to sat/vB, never go below the relay fee, and implausible values are ignored; without
+  an estimate the manual field and the 1 sat/vB default remain. A manual rate below the relay
+  fee is refused before building, and a fee above 1% of the amount sent is flagged in the
+  preview. Applies to Send and Donate. See ADR 0039.
+
 ### Changed
 
 - **CLI (behaviour change):** the wallet password no longer has to be a command-line argument.

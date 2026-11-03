@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NBitcoin;
+using Avalonia.Threading;
 using PalladiumWallet.App.Localization;
 using PalladiumWallet.App.Services;
 using PalladiumWallet.Core.Chain;
@@ -24,6 +25,73 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private bool sendAll;
+
+    // ---- fee presets from the server (ADR 0039) ----
+
+    private FeeEstimates? _feeEstimates;
+    private bool _feeRateTouched;
+    private bool _settingFeeRate;
+
+    [ObservableProperty]
+    private bool hasFeeEstimates;
+
+    [ObservableProperty]
+    private string feeEstimateHint = "";
+
+    partial void OnSendFeeRateChanged(string value)
+    {
+        if (!_settingFeeRate)
+            _feeRateTouched = true;
+    }
+
+    private void SetFeeRate(string value)
+    {
+        _settingFeeRate = true;
+        try { SendFeeRate = value; }
+        finally { _settingFeeRate = false; }
+    }
+
+    private async Task RefreshFeeEstimatesAsync(ElectrumClient client)
+    {
+        try
+        {
+            var estimates = await FeePolicy.FetchAsync(client);
+            Dispatcher.UIThread.Post(() => ApplyFeeEstimates(estimates));
+        }
+        catch
+        {
+            // Optional information: a failure leaves the manual field and the 1 sat/vB default.
+        }
+    }
+
+    private void ApplyFeeEstimates(FeeEstimates estimates)
+    {
+        _feeEstimates = estimates;
+        HasFeeEstimates = estimates.HasAny;
+        FeeEstimateHint = estimates.HasAny
+            ? string.Format(Loc.Tr("send.fee.hint"),
+                estimates.Fast is { } f ? FeePolicy.Format(f) : "—",
+                estimates.Normal is { } n ? FeePolicy.Format(n) : "—",
+                estimates.Economy is { } e ? FeePolicy.Format(e) : "—",
+                estimates.Relay is { } r ? FeePolicy.Format(r) : "—")
+            : "";
+        // Preselect the normal estimate unless the user already typed something.
+        if (!_feeRateTouched && estimates.HasAny)
+            SetFeeRate(FeePolicy.Format(FeePolicy.DefaultRate(estimates)));
+    }
+
+    [RelayCommand]
+    private void UseFeePreset(string preset)
+    {
+        var rate = preset switch
+        {
+            "fast" => _feeEstimates?.Fast,
+            "economy" => _feeEstimates?.Economy,
+            _ => _feeEstimates?.Normal,
+        };
+        if (rate is { } r)
+            SetFeeRate(FeePolicy.Format(r));
+    }
 
     [ObservableProperty]
     private string sendPreview = "";
@@ -79,6 +147,12 @@ public partial class MainWindowViewModel
                 SendPreview = Loc.Tr("msg.feerate.invalid");
                 return;
             }
+            if (FeePolicy.IsBelowRelay(feeRate, _feeEstimates?.Relay))
+            {
+                SendPreview = string.Format(Loc.Tr("msg.feerate.belowrelay"),
+                    FeePolicy.Format(_feeEstimates!.Relay!.Value));
+                return;
+            }
 
             _pendingSend = new TransactionFactory(_account).Build(
                 _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
@@ -87,7 +161,9 @@ public partial class MainWindowViewModel
             SendPreview = $"txid {_pendingSend.Txid[..16]}… · " +
                 $"fee {Fmt(_pendingSend.Fee.Satoshi)} " +
                 $"({_pendingSend.Transaction.GetVirtualSize()} vB)" +
-                (_pendingSend.Signed ? "" : Loc.Tr("msg.unsigned.watchonly"));
+                (_pendingSend.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
+                HighFeeWarning(_pendingSend.Fee.Satoshi,
+                    SendAll ? _pendingSend.Transaction.TotalOut.Satoshi : amount);
             HasPendingSend = _pendingSend.Signed;
             PendingPsbtBase64 = _pendingSend.Signed ? "" : _pendingSend.Psbt.ToBase64();
         }
@@ -100,6 +176,15 @@ public partial class MainWindowViewModel
         }
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Advisory text when the absolute fee is large against the amount: the estimate comes from
+    /// an untrusted server, so the resulting fee is always shown and flagged, never just followed.
+    /// </summary>
+    private string HighFeeWarning(long feeSats, long amountSats) =>
+        FeePolicy.IsHighFee(feeSats, amountSats)
+            ? "\n" + string.Format(Loc.Tr("msg.fee.high"), FeePolicy.HighFeePercent)
+            : "";
 
     [RelayCommand]
     private async Task ConfirmSend()

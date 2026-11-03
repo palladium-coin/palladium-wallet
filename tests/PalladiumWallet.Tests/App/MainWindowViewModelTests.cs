@@ -397,6 +397,91 @@ public sealed class MainWindowViewModelTests : VmTestBase
     });
 
     [Fact]
+    public Task FeePresets_ComeFromTheServer_AndTheNormalEstimateIsPreselected() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 50_000_000);
+        _server.Handle("blockchain.relayfee", _ => 0.00001m);
+        _server.Handle("blockchain.estimatefee", p => p[0].GetInt32() switch
+        {
+            FeePolicy.FastTarget => 0.00005m,
+            FeePolicy.NormalTarget => 0.00003m,
+            _ => 0.00001m,
+        });
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "fees");
+        await Eventually(() => vm.HasFeeEstimates && !vm.IsSyncing);
+
+        Assert.Equal("3", vm.SendFeeRate);                 // normal, preselected
+        Assert.Contains("5", vm.FeeEstimateHint);
+        vm.UseFeePresetCommand.Execute("fast");
+        Assert.Equal("5", vm.SendFeeRate);
+        vm.UseFeePresetCommand.Execute("economy");
+        Assert.Equal("1", vm.SendFeeRate);
+    });
+
+    [Fact]
+    public Task FeePresets_DoNotOverrideARateTheUserAlreadyTyped() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 50_000_000);
+        _server.Handle("blockchain.relayfee", _ => 0.00001m);
+        _server.Handle("blockchain.estimatefee", _ => 0.00004m);
+        var vm = new MainWindowViewModel();
+        vm.SendFeeRate = "7";                                 // typed before the estimates arrive
+        RestoreFlow(vm, Mnemonic, null, "fees2");
+        await Eventually(() => vm.HasFeeEstimates && !vm.IsSyncing);
+
+        Assert.Equal("7", vm.SendFeeRate);
+    });
+
+    [Fact]
+    public Task WithoutServerEstimates_TheManualDefaultStays_AndNoPresetsAreShown() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 50_000_000); // the fake answers "unknown method"
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "fees3");
+        await Eventually(() => !vm.IsSyncing && vm.History.Count == 1);
+        await Task.Delay(300); // let the optional estimate request settle
+
+        Assert.False(vm.HasFeeEstimates);
+        Assert.Equal("1", vm.SendFeeRate);
+        vm.UseFeePresetCommand.Execute("fast");   // nothing to apply
+        Assert.Equal("1", vm.SendFeeRate);
+    });
+
+    [Fact]
+    public Task Send_RejectsARateBelowTheRelayFee_AndWarnsWhenTheFeeIsLarge() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 50_000_000);
+        _server.Handle("blockchain.relayfee", _ => 0.00002m);          // 2 sat/vB
+        _server.Handle("blockchain.estimatefee", _ => 0.00002m);
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "fees4");
+        await Eventually(() => vm.HasFeeEstimates && !vm.IsSyncing && vm.History.Count == 1);
+
+        vm.SendTo = account.GetReceiveAddress(7).ToString();
+        vm.SendAmount = "0.1";
+        vm.SendFeeRate = "1";                                          // below the relay fee
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+        Assert.False(vm.HasPendingSend);
+        Assert.Equal(string.Format(Loc.Tr("msg.feerate.belowrelay"), "2"), vm.SendPreview);
+
+        vm.SendFeeRate = "2";
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+        Assert.True(vm.HasPendingSend, vm.SendPreview);
+        Assert.DoesNotContain(string.Format(Loc.Tr("msg.fee.high"), 1), vm.SendPreview);
+
+        vm.SendAmount = "0.00001";                                      // 1,000 sat: the fee is >1%
+        vm.SendFeeRate = "50";
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+        Assert.True(vm.HasPendingSend, vm.SendPreview);
+        Assert.Contains(string.Format(Loc.Tr("msg.fee.high"), 1), vm.SendPreview);
+    });
+
+    [Fact]
     public Task Send_PreparesASignedTransaction_ForAFundedWallet_AndRejectsABadAmount() => UiSession.Run(async () =>
     {
         var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);

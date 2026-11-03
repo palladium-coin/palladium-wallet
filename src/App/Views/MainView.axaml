@@ -504,6 +504,16 @@
                                                      MaxWidth="120" HorizontalAlignment="Left"
                                                      FontFamily="monospace"/>
                                         </Grid>
+                                        <!-- Fee presets from the server estimate (shown once the server answered) -->
+                                        <StackPanel Spacing="4" IsVisible="{Binding HasFeeEstimates}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button Content="{Binding Loc[send.fee.fast]}" Command="{Binding UseFeePresetCommand}" CommandParameter="fast"/>
+                                                <Button Content="{Binding Loc[send.fee.normal]}" Command="{Binding UseFeePresetCommand}" CommandParameter="normal"/>
+                                                <Button Content="{Binding Loc[send.fee.economy]}" Command="{Binding UseFeePresetCommand}" CommandParameter="economy"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding FeeEstimateHint}" FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -626,6 +636,16 @@
                                         <TextBox Text="{Binding SendFeeRate}"
                                                  FontFamily="monospace" FontSize="15"
                                                  MinHeight="48" HorizontalAlignment="Stretch"/>
+                                        <!-- Fee presets from the server estimate (shown once the server answered) -->
+                                        <StackPanel Spacing="4" IsVisible="{Binding HasFeeEstimates}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button Content="{Binding Loc[send.fee.fast]}" Command="{Binding UseFeePresetCommand}" CommandParameter="fast"/>
+                                                <Button Content="{Binding Loc[send.fee.normal]}" Command="{Binding UseFeePresetCommand}" CommandParameter="normal"/>
+                                                <Button Content="{Binding Loc[send.fee.economy]}" Command="{Binding UseFeePresetCommand}" CommandParameter="economy"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding FeeEstimateHint}" FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                        </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>

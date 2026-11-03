@@ -42,6 +42,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0036 | [Verify the chain identity of a server right after connecting](0036-verify-chain-identity-on-connect.md) | SPV | Accepted |
 | 0037 | [Derive an address private key only when it is revealed](0037-derive-address-private-keys-on-reveal.md) | Security | Accepted |
 | 0038 | [CLI password sources and explicit plaintext storage](0038-cli-password-sources-and-explicit-plaintext.md) | Distribution | Accepted |
+| 0039 | [Server fee estimates, relay floor and a high-fee warning](0039-server-fee-estimates-and-relay-floor.md) | Wallet | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

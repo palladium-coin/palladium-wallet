@@ -35,6 +35,7 @@ The indexing server (ElectrumX-compatible, port 50001/50002) is a **semi-trusted
 - Lie about unconfirmed (mempool) transactions — the wallet shows mempool transactions as unconfirmed and non-spendable
 - Refuse to relay a broadcast transaction
 - Delay reporting of new blocks
+- Suggest misleading fee estimates or relay fee (the wallet ignores implausible values, never goes below the relay fee, and always shows the absolute fee, flagging one above 1% of the amount — ADR 0039)
 
 It cannot (given correct Merkle verification):
 

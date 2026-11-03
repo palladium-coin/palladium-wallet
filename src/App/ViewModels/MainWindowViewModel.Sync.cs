@@ -261,6 +261,8 @@ public partial class MainWindowViewModel
                 }
                 if (lastError is not null)
                     throw lastError;
+                if (_client is { } fresh)
+                    _ = RefreshFeeEstimatesAsync(fresh);
             }
 
             if (_account is null || _doc is null)

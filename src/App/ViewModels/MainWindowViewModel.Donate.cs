@@ -49,6 +49,12 @@ public partial class MainWindowViewModel
                 DonatePreview = Loc.Tr("msg.feerate.invalid");
                 return;
             }
+            if (FeePolicy.IsBelowRelay(feeRate, _feeEstimates?.Relay))
+            {
+                DonatePreview = string.Format(Loc.Tr("msg.feerate.belowrelay"),
+                    FeePolicy.Format(_feeEstimates!.Relay!.Value));
+                return;
+            }
 
             _pendingDonate = new TransactionFactory(_account).Build(
                 _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
@@ -57,7 +63,8 @@ public partial class MainWindowViewModel
             DonatePreview = $"txid {_pendingDonate.Txid[..16]}… · " +
                 $"fee {Fmt(_pendingDonate.Fee.Satoshi)} " +
                 $"({_pendingDonate.Transaction.GetVirtualSize()} vB)" +
-                (_pendingDonate.Signed ? "" : " · watch-only");
+                (_pendingDonate.Signed ? "" : " · watch-only") +
+                HighFeeWarning(_pendingDonate.Fee.Satoshi, amount);
             HasPendingDonate = _pendingDonate.Signed;
         }
         catch (Exception ex)
