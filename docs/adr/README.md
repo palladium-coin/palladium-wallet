@@ -10,6 +10,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0004 | [Centralize all chain constants in a network profile](0004-centralized-network-profile.md) | Chain | Accepted |
 | 0005 | [Use NBitcoin for protocol primitives, hand-write only the rest](0005-nbitcoin-for-protocol-primitives.md) | Crypto | Accepted |
 | 0006 | [Anchor headers to hardcoded checkpoints and skip PoW validation](0006-spv-checkpoint-anchoring-without-pow.md) | SPV | Accepted |
+| 0037 | [Derive an address private key only when it is revealed](0037-derive-address-private-keys-on-reveal.md) | Security | Accepted |
 | 0007 | [Verify a Merkle proof for every confirmed transaction](0007-mandatory-merkle-verification.md) | SPV | Accepted |
 | 0008 | [Progressive verification: show early, spend only after proof](0008-progressive-verification-sync.md) | SPV | Accepted |
 | 0009 | [Hand-written Electrum JSON-RPC client with pipelining and an in-flight cap](0009-custom-electrum-client.md) | Network | Accepted |

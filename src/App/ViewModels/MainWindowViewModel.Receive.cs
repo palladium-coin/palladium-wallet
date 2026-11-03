@@ -77,6 +77,11 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private bool isAddressPrivKeyRevealed;
 
+    // WIF of the address in the open sheet, derived only after the reveal gate and dropped as
+    // soon as the key is hidden or the sheet closes. Never stored in rows or in AddressInfo.
+    [ObservableProperty]
+    private string revealedPrivKey = "";
+
     // ---- private key password prompt ----
 
     [ObservableProperty]
@@ -90,8 +95,21 @@ public partial class MainWindowViewModel
 
     partial void OnAddressInfoChanged(AddressInfo? value)
     {
-        IsAddressPrivKeyRevealed = false;
+        HidePrivKeyInternal();
         ClosePrivKeyPromptInternal();
+    }
+
+    private void HidePrivKeyInternal()
+    {
+        IsAddressPrivKeyRevealed = false;
+        RevealedPrivKey = "";
+    }
+
+    private void RevealPrivKeyInternal()
+    {
+        if (AddressInfo is not { HasPrivKey: true } info) return;
+        RevealedPrivKey = KeyWif(info.IsChange, info.Index);
+        IsAddressPrivKeyRevealed = RevealedPrivKey.Length > 0;
     }
 
     private void ClosePrivKeyPromptInternal()
@@ -102,7 +120,8 @@ public partial class MainWindowViewModel
     }
 
     public void ShowAddressInfo(AddressRow row) =>
-        AddressInfo = new AddressInfo(Loc, row.Indirizzo, row.DerivPath, row.PubKey, row.PrivKey);
+        AddressInfo = new AddressInfo(Loc, row.Indirizzo, row.DerivPath, row.PubKey,
+            row.IsChange, row.Indice, row.HasPrivKey);
 
     [RelayCommand]
     private void CloseAddressInfo()
@@ -118,7 +137,7 @@ public partial class MainWindowViewModel
         if (string.IsNullOrEmpty(_password))
         {
             // No encryption: reveal directly
-            IsAddressPrivKeyRevealed = true;
+            RevealPrivKeyInternal();
         }
         else
         {
@@ -137,7 +156,7 @@ public partial class MainWindowViewModel
             PrivKeyPromptError = Loc.Tr("msg.wrongpassword");
             return;
         }
-        IsAddressPrivKeyRevealed = true;
+        RevealPrivKeyInternal();
         ClosePrivKeyPromptInternal();
     }
 
@@ -145,10 +164,7 @@ public partial class MainWindowViewModel
     private void CancelPrivKeyPrompt() => ClosePrivKeyPromptInternal();
 
     [RelayCommand]
-    private void HideAddressPrivKey()
-    {
-        IsAddressPrivKeyRevealed = false;
-    }
+    private void HideAddressPrivKey() => HidePrivKeyInternal();
 
     // ---- transaction detail overlay ----
 
@@ -265,8 +281,8 @@ public partial class MainWindowViewModel
                     _account.GetReceiveAddress(i).ToString(), "—", "—",
                     false,
                     _account.GetPublicKey(false, i)?.ToHex() ?? "",
-                    KeyWif(false, i),
-                    $"m/{_doc!.AccountPath}/0/{i}"));
+                    $"m/{_doc!.AccountPath}/0/{i}",
+                    !_account.IsWatchOnly));
             return;
         }
         // Not "Confirmed - Immature - PendingVerification": those two can overlap (an
@@ -306,7 +322,7 @@ public partial class MainWindowViewModel
                 a.TxCount > 0 ? a.TxCount.ToString() : "—",
                 a.IsChange,
                 _account.GetPublicKey(a.IsChange, a.Index)?.ToHex() ?? "",
-                KeyWif(a.IsChange, a.Index),
-                $"m/{_doc!.AccountPath}/{(a.IsChange ? 1 : 0)}/{a.Index}"));
+                $"m/{_doc!.AccountPath}/{(a.IsChange ? 1 : 0)}/{a.Index}",
+                !_account.IsWatchOnly));
     }
 }

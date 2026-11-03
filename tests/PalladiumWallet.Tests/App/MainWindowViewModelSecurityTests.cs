@@ -70,11 +70,20 @@ public sealed class MainWindowViewModelSecurityTests : VmTestBase
 
         var row = vm.Addresses.First(a => !a.IsChange && a.Indice == 0);
         Assert.True(row.HasPrivKey);
+        var wif = account.GetPrivateKey(false, 0)!.GetWif(PalladiumNetworks.For(NetKind.Mainnet)).ToString();
+
+        // No row holds a private key before the reveal (reflection over every string property).
+        Assert.All(vm.Addresses, r => Assert.DoesNotContain(wif, StringValues(r)));
+        Assert.DoesNotContain(typeof(AddressRow).GetProperties(), p => p.Name.Contains("PrivKey") && p.PropertyType == typeof(string));
+
         vm.ShowAddressInfo(row);
+        Assert.DoesNotContain(wif, StringValues(vm.AddressInfo!));
+        Assert.Equal("", vm.RevealedPrivKey);
 
         vm.RequestPrivKeyRevealCommand.Execute(null);
         Assert.True(vm.IsPrivKeyPromptOpen);
         Assert.False(vm.IsAddressPrivKeyRevealed);
+        Assert.Equal("", vm.RevealedPrivKey);
 
         vm.PrivKeyPromptPassword = "wrong";
         vm.ConfirmPrivKeyPasswordCommand.Execute(null);
@@ -85,11 +94,47 @@ public sealed class MainWindowViewModelSecurityTests : VmTestBase
         vm.ConfirmPrivKeyPasswordCommand.Execute(null);
         Assert.True(vm.IsAddressPrivKeyRevealed);
         Assert.False(vm.IsPrivKeyPromptOpen);
+        Assert.Equal(wif, vm.RevealedPrivKey);
+        Assert.DoesNotContain(wif, StringValues(vm.AddressInfo!)); // still not stored in the info
+        Assert.All(vm.Addresses, r => Assert.DoesNotContain(wif, StringValues(r)));
 
+        vm.HideAddressPrivKeyCommand.Execute(null);   // hiding drops the key
+        Assert.False(vm.IsAddressPrivKeyRevealed);
+        Assert.Equal("", vm.RevealedPrivKey);
+
+        vm.RequestPrivKeyRevealCommand.Execute(null); // reveal again, then close the sheet
+        vm.PrivKeyPromptPassword = "pw";
+        vm.ConfirmPrivKeyPasswordCommand.Execute(null);
+        Assert.Equal(wif, vm.RevealedPrivKey);
         vm.CloseAddressInfoCommand.Execute(null);     // closing the sheet re-hides everything
+        Assert.Equal("", vm.RevealedPrivKey);
         vm.ShowAddressInfo(row);
         Assert.False(vm.IsAddressPrivKeyRevealed);
     });
+
+    [Fact]
+    public Task ClosingTheWallet_DropsARevealedPrivateKey() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 1_000_000);
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "pk2");
+        await Eventually(() => !vm.IsSyncing && vm.Addresses.Count > 0);
+
+        vm.ShowAddressInfo(vm.Addresses.First(a => !a.IsChange && a.Indice == 0));
+        vm.RequestPrivKeyRevealCommand.Execute(null);   // no password: revealed directly
+        Assert.NotEqual("", vm.RevealedPrivKey);
+
+        vm.CloseWalletCommand.Execute(null);
+        Assert.Equal("", vm.RevealedPrivKey);
+        Assert.False(vm.IsAddressPrivKeyRevealed);
+        Assert.Null(vm.AddressInfo);
+    });
+
+    private static IEnumerable<string> StringValues(object o) =>
+        o.GetType().GetProperties()
+            .Where(p => p.PropertyType == typeof(string) && p.GetIndexParameters().Length == 0)
+            .Select(p => (string?)p.GetValue(o) ?? "");
 
     [Fact]
     public Task WatchOnlyAddressRows_NeverCarryAPrivateKey() => UiSession.Run(async () =>

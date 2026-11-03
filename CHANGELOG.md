@@ -7,6 +7,14 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Security
+
+- Private keys are no longer precomputed for every address in the UI. Address rows and the
+  address detail sheet carry only public data and derivation coordinates; the WIF is derived
+  when the user reveals it (after the password) and dropped when hidden, when the sheet closes
+  or when the wallet closes. Before, the WIF of every listed address sat in UI-bound strings for
+  the whole session.
+
 ### Fixed
 
 - The wallet now verifies the chain identity of a server right after connecting: the

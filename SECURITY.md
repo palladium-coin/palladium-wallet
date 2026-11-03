@@ -67,6 +67,7 @@ a sync, never a partial one, so no unverified data survives a restart.
 
 - The BIP39 mnemonic and derived private keys exist only in process memory after unlock
 - Private keys are never written to disk, logged, or sent over the network
+- The address list and the address detail sheet hold no private key: the WIF of an address is derived only when the user reveals it (after the wallet password, if the wallet is encrypted) and is dropped when it is hidden, when the sheet closes or when the wallet closes (ADR 0037). The key is a managed string and cannot be zeroed, so it remains in process memory until the garbage collector reclaims it
 - The wallet file stores the encrypted seed (with password) or the encrypted/plaintext `WalletDocument` — the document contains the account xpub and sync cache, not the raw seed when watch-only
 - Watch-only wallets (`restore-xpub`, or `restore-address` for pure address imports) hold no private keys and cannot sign transactions; `TransactionFactory` only calls `AddKeys`/signs when the account reports a private key, so an address-only import can never produce a signed transaction, only an exportable unsigned PSBT
 

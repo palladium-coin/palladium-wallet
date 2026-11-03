@@ -1019,7 +1019,7 @@
                         <!-- Revealed: key text + hide button -->
                         <StackPanel IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsAddressPrivKeyRevealed}"
                                     Spacing="6">
-                            <SelectableTextBlock Text="{Binding PrivKey}"
+                            <SelectableTextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RevealedPrivKey}"
                                                  FontFamily="monospace" FontSize="12"
                                                  Foreground="{DynamicResource DangerBrush}"
                                                  TextWrapping="Wrap"/>

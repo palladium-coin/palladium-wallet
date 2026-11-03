@@ -19,21 +19,18 @@ namespace PalladiumWallet.App.ViewModels;
 /// <summary>Transaction history row for the view.</summary>
 public sealed record HistoryRow(string Conferma, string Importo, string Txid, bool Verified = true);
 
-/// <summary>Address view row with pre-computed keys and derivation path.</summary>
+/// <summary>
+/// Address view row: public data and derivation path only. The private key is never held here;
+/// it is derived on demand when the user reveals it (see <c>RevealedPrivKey</c>).
+/// </summary>
 public sealed record AddressRow(
     string Tipo, int Indice, string Indirizzo, string Saldo, string NumTx,
-    bool IsChange = false, string PubKey = "", string PrivKey = "", string DerivPath = "")
-{
-    public bool HasPrivKey => !string.IsNullOrEmpty(PrivKey);
-}
+    bool IsChange = false, string PubKey = "", string DerivPath = "", bool HasPrivKey = false);
 
-/// <summary>Full address data passed to the address detail overlay.</summary>
+/// <summary>Address data passed to the detail overlay: derivation coordinates, never the key.</summary>
 public sealed record AddressInfo(
     Loc Loc,
-    string Address, string DerivPath, string PubKey, string PrivKey)
-{
-    public bool HasPrivKey => !string.IsNullOrEmpty(PrivKey);
-}
+    string Address, string DerivPath, string PubKey, bool IsChange, int Index, bool HasPrivKey);
 
 /// <summary>Address book contact: name + blockchain address.</summary>
 public sealed record ContactEntry(string Name, string Address);
@@ -286,6 +283,7 @@ public partial class MainWindowViewModel : ViewModelBase
         SelectedContactInList = null;
         SendToContact = null;
         SelectedAddressRow = null;
+        AddressInfo = null; // also drops a revealed private key
         IsWalletOpen = false;
         IsConnected = false;
         ConnectionStatus = Loc.Tr("conn.none");
