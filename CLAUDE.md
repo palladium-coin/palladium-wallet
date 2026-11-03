@@ -33,6 +33,7 @@ src/App/          shared Avalonia UI library (App, Views, ViewModels, Loc, Asset
 src/App.Desktop/  desktop head (WinExe): Program.cs, app.manifest, .ico → runnable
 src/App.Android/  Android head (net10.0-android): MainApplication/MainActivity → apk
 src/Cli/          CLI on the same Core            tests/   xUnit
+docs/             docs-as-code process + ADRs (one per feature), checked by docs/check-docs.sh
 docker/           reproducible release builds (build.sh + pinned Dockerfiles) → dist/
 ```
 
@@ -101,5 +102,8 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) �
 
 - **Cross-implementation tests:** compare addresses, txids, and PSBTs against a reference wallet (golden vectors). A different address or txid is a blocking bug.
 - **Security:** seed and private keys never in plaintext on disk/logs/network; every server response validated with Merkle + checkpoints; watch-only truly read-only. `SECURITY.md` is the published threat model (SPV trust boundaries, encryption parameters, key handling) — any change to crypto, SPV validation, or key/seed handling must keep it accurate in the same commit.
+- **Docs stay in sync (docs-as-code):** whenever a feature is added or an existing one changes, update the documentation in the same commit — `docs/` (see `docs/docs-as-code.md`), plus `README.md`, `USERGUIDE.md`, `SECURITY.md` and `CHANGELOG.md` where affected.
+  - Every new feature gets an ADR in `docs/adr/` (from `docs/adr/template.md`, listed in `docs/adr/README.md`); a changed decision gets a new ADR that supersedes the old one, never a rewrite of an Accepted ADR
+  - Run `./docs/check-docs.sh` before committing; it must pass (ADR numbering/structure, index, cited code paths, links, CLAUDE.md/AGENTS.md sync)
 - **Releases:** `./update-version.sh` (interactive) updates `<Version>` in the App csproj (single source), mirrors `ApplicationDisplayVersion` in the Android head, increments `ApplicationVersion` (Android versionCode, **must strictly increase** or users can't update in place), and stubs a `CHANGELOG.md` entry
   - Fill in the changelog entry before/with the tag — it's the technical record of what shipped, not optional bookkeeping — then commit and tag manually
