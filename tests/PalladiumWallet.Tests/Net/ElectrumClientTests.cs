@@ -148,6 +148,54 @@ public class ElectrumClientTests
     }
 
     [Fact]
+    public async Task A_reply_just_below_the_line_limit_arrives_intact()
+    {
+        var big = new string('x', 60_000); // line = 60 KB + JSON envelope, below the 64 KB cap
+        await using var server = new FakeElectrumServer();
+        server.Handle("blockchain.transaction.get", _ => big);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, maxLineBytes: 64 * 1024);
+
+        Assert.Equal(big, await client.GetTransactionAsync("00").WaitAsync(Timeout));
+        Assert.True(client.IsConnected);
+    }
+
+    [Fact]
+    public async Task A_terminated_line_above_the_limit_kills_the_connection()
+    {
+        var big = new string('x', 100_000);
+        await using var server = new FakeElectrumServer();
+        server.Handle("blockchain.transaction.get", _ => big);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, maxLineBytes: 64 * 1024);
+        var disconnected = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += ex => disconnected.TrySetResult(ex);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => client.GetTransactionAsync("00").WaitAsync(Timeout));
+        Assert.IsType<InvalidDataException>(await disconnected.Task.WaitAsync(Timeout));
+        Assert.False(client.IsConnected);
+        await Assert.ThrowsAsync<IOException>(() => client.GetTransactionAsync("00").WaitAsync(Timeout));
+    }
+
+    [Fact]
+    public async Task An_unterminated_line_above_the_limit_fails_before_any_newline_arrives()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => FakeElectrumServer.NoResponse);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, maxLineBytes: 64 * 1024);
+        var disconnected = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += ex => disconnected.TrySetResult(ex);
+
+        var pending = client.BannerAsync();
+        await server.SendUnterminatedAsync(new string('x', 100_000)); // never followed by '\n'
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => pending.WaitAsync(Timeout));
+        Assert.IsType<InvalidDataException>(await disconnected.Task.WaitAsync(Timeout));
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
     public async Task A_request_without_an_answer_fails_with_TimeoutException()
     {
         await using var server = new FakeElectrumServer();

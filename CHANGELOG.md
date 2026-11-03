@@ -9,6 +9,10 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- `ElectrumClient`: a single server reply is now capped at 16 MiB (`maxLineBytes` in
+  `ConnectAsync`). A hostile server could stream an endless line with no newline and exhaust the
+  client's memory; the connection now fails with `InvalidDataException` as soon as the cap is
+  exceeded.
 - `ElectrumClient`: every request is now bounded (30 s, 10 s for the handshake; configurable in
   `ConnectAsync`). A server that stops answering without closing the socket made a running sync
   wait forever; now the request fails with `TimeoutException`, the connection is marked dead

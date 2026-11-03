@@ -79,6 +79,19 @@ public sealed class FakeElectrumServer : IAsyncDisposable
             await WriteLineAsync(stream, writeLock, bytes);
     }
 
+    /// <summary>Sends raw bytes with no trailing newline (an unterminated, still-growing line).</summary>
+    public async Task SendUnterminatedAsync(string text)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(text);
+        foreach (var (stream, writeLock, _) in _clients)
+        {
+            await writeLock.WaitAsync();
+            try { await stream.WriteAsync(bytes); await stream.FlushAsync(); }
+            catch (Exception) { }
+            finally { writeLock.Release(); }
+        }
+    }
+
     /// <summary>Abruptly closes every accepted connection (tests the client's failure paths).</summary>
     public void DropClients()
     {

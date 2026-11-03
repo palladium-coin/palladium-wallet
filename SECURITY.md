@@ -41,6 +41,10 @@ It cannot (given correct Merkle verification):
 - Fabricate a confirmed transaction with a valid Merkle proof
 - Forge a payment to a wrong address
 
+**Network resource limits.** Server input is bounded so a hostile server cannot hang or kill the
+client: every request has a timeout (30 s; 10 s for the handshake; a timeout drops the connection)
+and a single reply line is capped at 16 MiB (`Core/Net/ElectrumClient.cs`, ADR 0034 and 0035).
+
 **Progressive verification (mobile-friendly sync).** On a wallet with many historical
 transactions, `WalletSynchronizer` no longer blocks the whole sync on every Merkle proof:
 balance and history are shown as soon as transaction downloads finish (`PartialResult`,

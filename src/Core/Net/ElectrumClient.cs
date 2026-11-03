@@ -52,6 +52,16 @@ public sealed class ElectrumClient : IAsyncDisposable
     public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
     public static readonly TimeSpan DefaultHandshakeTimeout = TimeSpan.FromSeconds(10);
     private readonly TimeSpan _requestTimeout;
+
+    // Cap on a single newline-delimited reply. Without it a hostile or broken server could
+    // stream an endless line and grow the read buffer until the process dies (fatal on
+    // Android). The default is far above the largest legitimate replies (header batches of a
+    // few hundred KB, a large transaction up to ~2 MB of hex, a very active address history
+    // of a few MB). It is checked as the buffer grows, before a newline arrives; on excess the
+    // read loop fails with InvalidDataException, which kills the connection like any
+    // protocol error (pending requests fail, Disconnected is raised).
+    public const int DefaultMaxLineBytes = 16 * 1024 * 1024;
+    private readonly int _maxLineBytes;
     private readonly SemaphoreSlim _inFlight;
 
     private long _nextId;
@@ -65,9 +75,10 @@ public sealed class ElectrumClient : IAsyncDisposable
     public event Action<Exception?>? Disconnected;
 
     private ElectrumClient(TcpClient tcp, Stream stream, string host, int port, bool useSsl,
-        int maxInFlight, TimeSpan requestTimeout)
+        int maxInFlight, TimeSpan requestTimeout, int maxLineBytes)
     {
         _requestTimeout = requestTimeout;
+        _maxLineBytes = maxLineBytes;
         _tcp = tcp;
         _stream = stream;
         Host = host;
@@ -81,7 +92,7 @@ public sealed class ElectrumClient : IAsyncDisposable
     public static async Task<ElectrumClient> ConnectAsync(string host, int port, bool useSsl,
         CertificatePinStore? pins = null, CancellationToken ct = default,
         int maxInFlight = DefaultMaxInFlight, TimeSpan? requestTimeout = null,
-        TimeSpan? handshakeTimeout = null)
+        TimeSpan? handshakeTimeout = null, int maxLineBytes = DefaultMaxLineBytes)
     {
         var tcp = new TcpClient { NoDelay = true };
         try
@@ -111,7 +122,7 @@ public sealed class ElectrumClient : IAsyncDisposable
             }
 
             var client = new ElectrumClient(tcp, stream, host, port, useSsl, maxInFlight,
-                requestTimeout ?? DefaultRequestTimeout);
+                requestTimeout ?? DefaultRequestTimeout, maxLineBytes);
             await client.RequestCoreAsync(handshakeTimeout ?? DefaultHandshakeTimeout,
                 "server.version", ct, [ClientName, ProtocolVersion]);
             return client;
@@ -229,8 +240,15 @@ public sealed class ElectrumClient : IAsyncDisposable
                 try
                 {
                     while (TrySliceLine(ref buffer, out var line))
+                    {
+                        if (line.Length > _maxLineBytes)
+                            throw TooLong();
                         if (!line.IsEmpty)
                             DispatchLine(line);
+                    }
+                    // What is left has no newline yet: it is the start of a line still arriving.
+                    if (buffer.Length > _maxLineBytes)
+                        throw TooLong();
                 }
                 finally
                 {
@@ -258,6 +276,9 @@ public sealed class ElectrumClient : IAsyncDisposable
             Disconnected?.Invoke(failure);
         }
     }
+
+    private InvalidDataException TooLong() =>
+        new($"Server reply from {Host}:{Port} exceeds {_maxLineBytes} bytes without a newline.");
 
     private static bool TrySliceLine(ref ReadOnlySequence<byte> buffer,
         out ReadOnlySequence<byte> line)
