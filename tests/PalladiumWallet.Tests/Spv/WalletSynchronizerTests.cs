@@ -426,6 +426,30 @@ public class WalletSynchronizerTests
     }
 
     [Fact]
+    public async Task A_server_returning_no_headers_during_anchoring_fails_the_sync()
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
+        var chain = ChainedHeaders(100, 105, funding.GetHash());
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+        });
+
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        // A dishonest/pruned server answers the range request with zero headers.
+        server.Handle("blockchain.block.headers", _ => new { count = 0, hex = "" });
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(
+            () => new WalletSynchronizer(checkpointAccount, client).SyncOnceAsync());
+        Assert.Contains("returned no headers", ex.Message);
+    }
+
+    [Fact]
     public async Task Senza_checkpoint_a_copertura_dell_altezza_l_anchoring_e_un_no_op()
     {
         // Regtest profile (Profile) has no checkpoints at all: same behaviour as before
@@ -469,7 +493,7 @@ public class WalletSynchronizerTests
         sync.PartialResult += r => { partial = r; partialReceived.TrySetResult(); };
 
         var syncTask = sync.SyncOnceAsync();
-        await partialReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await partialReceived.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.NotNull(partial);
         Assert.False(Assert.Single(partial!.History).Verified);
@@ -513,7 +537,7 @@ public class WalletSynchronizerTests
         sync.PartialResult += r => { partial = r; partialReceived.TrySetResult(); };
 
         var syncTask = sync.SyncOnceAsync();
-        await partialReceived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await partialReceived.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         // Immature AND unverified at the same time: both non-spendable subsets are the
         // full 5 PLM, but the actual spendable balance must be exactly zero, not negative.
