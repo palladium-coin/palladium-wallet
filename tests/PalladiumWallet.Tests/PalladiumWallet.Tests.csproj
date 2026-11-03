@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="12.0.4" />
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="CsCheck" Version="4.7.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
@@ -25,6 +26,8 @@
     <ProjectReference Include="..\..\src\Core\PalladiumWallet.Core.csproj" />
     <ProjectReference Include="..\PalladiumWallet.Fuzz\PalladiumWallet.Fuzz.csproj" />
     <ProjectReference Include="..\PalladiumWallet.ServerProbe\PalladiumWallet.ServerProbe.csproj" />
+    <ProjectReference Include="..\..\src\App\PalladiumWallet.App.csproj" />
+    <ProjectReference Include="..\..\src\Cli\PalladiumWallet.Cli.csproj" />
   </ItemGroup>
 
 </Project>

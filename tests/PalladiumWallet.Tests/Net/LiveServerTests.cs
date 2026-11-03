@@ -13,7 +13,7 @@ namespace PalladiumWallet.Tests.Net;
 ///
 /// Example: PALLADIUM_TEST_SERVERS=1.2.3.4:50002 PALLADIUM_TEST_SSL=1 dotnet test --filter LiveServer
 /// </summary>
-[Collection("Console")] // the probe writes to Console, which is process-global
+[Collection("AppPaths")] // serialized with other tests touching process-wide state (Console, AppPaths)
 public class LiveServerTests
 {
     [Fact]

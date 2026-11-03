@@ -27,4 +27,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Core\PalladiumWallet.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PalladiumWallet.Tests" />
+  </ItemGroup>
 </Project>

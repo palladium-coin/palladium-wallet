@@ -130,7 +130,10 @@ public partial class MainWindowViewModel : ViewModelBase
     // ---- helpers ----
 
     private NetKind Net => NetKind.Mainnet;
-    private ChainProfile Profile => ChainProfiles.For(Net);
+    /// <summary>Test seam: lets tests drop the real bootstrap servers so nothing reaches the internet.</summary>
+    internal static ChainProfile? ProfileOverride { get; set; }
+
+    private ChainProfile Profile => ProfileOverride ?? ChainProfiles.For(Net);
     private ServerRegistry Registry => new(Profile, AppPaths.ServersPath(Net));
 
     private string Fmt(long sats, bool withLabel = true) =>

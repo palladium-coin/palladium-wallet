@@ -20,13 +20,17 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void CloseUpdateAvailable() => IsUpdateAvailableOpen = false;
 
+    /// <summary>Test seam: replaces the real GitHub check so tests never touch the network.</summary>
+    internal static System.Func<string, Task<LatestRelease?>> UpdateCheck { get; set; } =
+        version => UpdateChecker.CheckAsync(version);
+
     /// <summary>
     /// Fire-and-forget check run once at startup. Best-effort: any failure or an
     /// up-to-date app silently does nothing (see <see cref="UpdateChecker"/>).
     /// </summary>
     private async Task CheckForUpdatesAsync()
     {
-        var latest = await UpdateChecker.CheckAsync(AppVersion);
+        var latest = await UpdateCheck(AppVersion);
         if (latest is null) return;
 
         UpdateReleaseUrl = latest.HtmlUrl;
