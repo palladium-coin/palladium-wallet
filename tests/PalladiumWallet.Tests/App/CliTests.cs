@@ -170,6 +170,7 @@ public sealed class CliTests : IDisposable
         }
 
         await using var server = new FakeElectrumServer();
+        server.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Regtest.GenesisHash });
         server.Handle("blockchain.headers.subscribe", _ => new { height = 300, hex = Header(uint256.One, 300) });
         server.Handle("blockchain.scripthash.subscribe", _ => null);
         server.Handle("blockchain.scripthash.get_history", p =>
@@ -197,5 +198,19 @@ public sealed class CliTests : IDisposable
         Assert.Contains(tx.Outputs, o => o.Value == Money.Satoshis(5_000_000) && o.ScriptPubKey == account.GetReceiveAddress(9).ScriptPubKey);
         Assert.Equal(txid, tx.Inputs[0].PrevOut.Hash);
         Assert.Equal(0, server.CallCount("blockchain.transaction.broadcast")); // nothing broadcast without --broadcast
+    }
+
+    [Fact]
+    public async Task Sync_refuses_a_server_on_another_chain()
+    {
+        await using var server = new FakeElectrumServer(); // default features: mainnet genesis
+        await Cli("restore", Mnemonic, "--net", "regtest", "--file", WalletFile());
+
+        var (exit, _, err) = await Cli("sync", "--server", $"{server.Host}:{server.Port}",
+            "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("not on the expected chain", err);
+        Assert.Equal(0, server.CallCount("blockchain.headers.subscribe")); // rejected before syncing
     }
 }

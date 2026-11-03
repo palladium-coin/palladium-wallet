@@ -467,6 +467,15 @@ public sealed class Loc
             "Das TLS-Zertifikat von {0} hat sich gegenüber dem gespeicherten geändert. Wenn der Server das Zertifikat erneuert hat, setzen Sie die SSL-Zertifikate zurück.",
             "{0} 的 TLS 证书与已保存的证书不同。如果服务器更新了证书，请重置 SSL 证书。"],
 
+        ["msg.chain.wrong"]      = [
+            "Il server {0} non è sulla catena Palladium (genesi o checkpoint diversi). Scegli un altro server.",
+            "The server {0} is not on the Palladium chain (different genesis or checkpoint). Choose another server.",
+            "El servidor {0} no está en la cadena Palladium (génesis o punto de control distintos). Elige otro servidor.",
+            "Le serveur {0} n'est pas sur la chaîne Palladium (genèse ou point de contrôle différent). Choisissez un autre serveur.",
+            "O servidor {0} não está na cadeia Palladium (gênese ou checkpoint diferente). Escolha outro servidor.",
+            "Der Server {0} befindet sich nicht auf der Palladium-Chain (anderer Genesis-Block oder Checkpoint). Wählen Sie einen anderen Server.",
+            "服务器 {0} 不在 Palladium 链上（创世块或检查点不同）。请选择其他服务器。"],
+
         // Contacts
         ["contacts.name"]         = ["Nome",                                                              "Name",                         "Nombre",                               "Nom",                                      "Nome",                                     "Name",                                          "姓名"],
         ["contacts.address"]      = ["Indirizzo",                                                         "Address",                      "Dirección",                            "Adresse",                                  "Endereço",                                 "Adresse",                                       "地址"],

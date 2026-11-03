@@ -101,11 +101,15 @@ async Task<(bool Ok, int? Height)> Probe((string Host, int Port, bool Ssl) s)
             var r = await c.RequestAsync("server.features", ct);
             var genesis = r.TryGetProperty("genesis_hash", out var g) ? g.GetString() : null;
             var hashFn = r.TryGetProperty("hash_function", out var hf) ? hf.GetString() : null;
-            if (genesis != profile.GenesisHash)
-                throw new Exception($"genesis_hash {genesis} != expected {profile.GenesisHash} (wrong chain)");
             if (hashFn != "sha256") throw new Exception($"hash_function '{hashFn}' (expected sha256)");
             var pruning = r.TryGetProperty("pruning", out var pr) && pr.ValueKind == JsonValueKind.Number;
             return (0, $"genesis ok, pruning={(pruning ? pr.ToString() : "none")}", pruning);
+        });
+
+        await Step("chain identity", async ct =>
+        {
+            await c.VerifyChainAsync(profile, ct);
+            return (0, "genesis and checkpoint match the profile", false);
         });
 
         var tipInfo = await Step("headers.subscribe", async ct =>

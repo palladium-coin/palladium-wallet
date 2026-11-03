@@ -28,7 +28,8 @@ try
     };
 }
 catch (Exception ex) when (ex is WalletSpendException or WrongPasswordException
-    or CertificatePinMismatchException or ElectrumServerException or SpvVerificationException)
+    or CertificatePinMismatchException or ElectrumServerException or SpvVerificationException
+    or WrongChainException)
 {
     Console.Error.WriteLine($"Error: {ex.Message}");
     return 1;
@@ -363,7 +364,14 @@ static async Task<ElectrumClient> Connect(string[] o, ChainProfile profile)
 
     var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(profile.Kind));
     Console.WriteLine($"Connecting to {host}:{port}{(useSsl ? " (TLS)" : "")}…");
-    return await ElectrumClient.ConnectAsync(host, port, useSsl, pins);
+    var client = await ElectrumClient.ConnectAsync(host, port, useSsl, pins);
+    try { await client.VerifyChainAsync(profile); }
+    catch
+    {
+        await client.DisposeAsync();
+        throw;
+    }
+    return client;
 }
 
 static string? Opt(string[] options, string name)

@@ -41,6 +41,8 @@ It cannot (given correct Merkle verification):
 - Fabricate a confirmed transaction with a valid Merkle proof
 - Forge a payment to a wrong address
 
+**Chain identity.** Right after the handshake the wallet checks that the server is on the Palladium chain (`Core/Spv/ChainVerifier.cs`, ADR 0036): `genesis_hash` from `server.features` must match the profile, and the header at the highest checkpoint not above the server's tip must hash to the hardcoded checkpoint. Mainnet shares Bitcoin's genesis, so the checkpoint header is what actually distinguishes it; testnet/regtest (no checkpoints) rely on the genesis alone. A server whose tip is below the first checkpoint is accepted on the genesis check alone.
+
 **Network resource limits.** Server input is bounded so a hostile server cannot hang or kill the
 client: every request has a timeout (30 s; 10 s for the handshake; a timeout drops the connection)
 and a single reply line is capped at 16 MiB (`Core/Net/ElectrumClient.cs`, ADR 0034 and 0035).

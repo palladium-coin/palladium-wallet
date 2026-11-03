@@ -9,6 +9,11 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- The wallet now verifies the chain identity of a server right after connecting: the
+  `genesis_hash` from `server.features` must match the profile and, on mainnet (which shares
+  Bitcoin's genesis), the header at the highest checkpoint not above the server's tip must match
+  the hardcoded one. A server on another chain is refused with an explicit message and the next
+  known server is tried. Applies to the GUI, peer discovery, the CLI and the server probe.
 - `ElectrumClient`: a single server reply is now capped at 16 MiB (`maxLineBytes` in
   `ConnectAsync`). A hostile server could stream an endless line with no newline and exhaust the
   client's memory; the connection now fails with `InvalidDataException` as soon as the cap is

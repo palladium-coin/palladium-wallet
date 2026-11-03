@@ -215,7 +215,14 @@ public partial class MainWindowViewModel
                     try
                     {
                         var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
-                        _client = await ElectrumClient.ConnectAsync(h, p, UseSsl, pins, ct);
+                        var connected = await ElectrumClient.ConnectAsync(h, p, UseSsl, pins, ct);
+                        try { await connected.VerifyChainAsync(Profile, ct); }
+                        catch
+                        {
+                            await connected.DisposeAsync();
+                            throw;
+                        }
+                        _client = connected;
                         _client.NotificationReceived += OnServerNotification;
                         _client.Disconnected += _ => Dispatcher.UIThread.Post(() =>
                         {
@@ -428,7 +435,14 @@ public partial class MainWindowViewModel
             try
             {
                 var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
-                temp = await ElectrumClient.ConnectAsync(h, p, UseSsl, pins);
+                var fresh = await ElectrumClient.ConnectAsync(h, p, UseSsl, pins);
+                try { await fresh.VerifyChainAsync(Profile); }
+                catch
+                {
+                    await fresh.DisposeAsync();
+                    throw;
+                }
+                temp = fresh;
                 lastError = null;
                 break;
             }
@@ -480,6 +494,8 @@ public partial class MainWindowViewModel
     {
         CertificatePinMismatchException cert =>
             string.Format(Loc.Tr("msg.cert.mismatch"), $"{cert.Host}:{cert.Port}"),
+        WrongChainException chain =>
+            string.Format(Loc.Tr("msg.chain.wrong"), $"{chain.Host}:{chain.Port}"),
         _ => ex.Message,
     };
 

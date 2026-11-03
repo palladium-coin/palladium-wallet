@@ -44,6 +44,12 @@ public sealed class FakeElectrumServer : IAsyncDisposable
         _listener = new TcpListener(IPAddress.Loopback, port);
         _listener.Start();
         Handle("server.version", _ => new[] { "FakeElectrumX 1.0", "1.4" });
+        // Reports the mainnet genesis, as a real server does; override to simulate another chain.
+        Handle("server.features", _ => new
+        {
+            genesis_hash = PalladiumWallet.Core.Chain.ChainProfiles.Mainnet.GenesisHash,
+            hash_function = "sha256",
+        });
         _acceptLoop = Task.Run(AcceptLoopAsync);
     }
 
