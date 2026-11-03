@@ -10,7 +10,7 @@ Unlike generic wallets adapted to many coins, Palladium Wallet is designed aroun
 - **Security**: seed and private keys encrypted on disk (AES-GCM, PBKDF2-SHA512), never in plaintext in logs or on the wire; every server response is validated with Merkle proofs + checkpoints.
 - **HD wallet** (BIP39/BIP32), SegWit/wrapped/legacy addresses, watch-only from xpub or from plain addresses (no key material at all).
 - **PSBT-centric**: signing flows go through PSBT (offline / air-gapped); watch-only wallets export an unsigned PSBT for offline signing. Multisig script kinds are defined in the network profile but not yet implemented (planned, see `Core/Crypto/DerivationPaths.cs`).
-- **Multi-network**: mainnet, testnet, regtest.
+- **Multi-network**: mainnet, testnet, regtest in the core and the CLI (`--net`); the GUI works on mainnet only. Testnet and regtest ship without bootstrap servers or checkpoints, so pass `--server host:port`.
 - **Cross-platform**: desktop (Windows/Linux) and Android share one Avalonia UI; a **CLI** runs on the same core.
 - **Multilingual**: Italian, English, Spanish, French, Portuguese, German, Chinese (Simplified).
 

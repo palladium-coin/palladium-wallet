@@ -7,6 +7,11 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Documentation
+
+- README: the multi-network claim now states that the GUI is mainnet-only and that testnet/regtest
+  (CLI only) need an explicit `--server`.
+
 ### Added
 
 - Fee presets from the server: after connecting, the Send tab offers Fast, Normal and Economy
