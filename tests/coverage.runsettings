@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used by CI and dotnet test with the settings file tests/coverage.runsettings and the XPlat Code Coverage collector.
+     Excludes the test tooling itself (fuzz harness, server probe, the test assembly) so the
+     figures describe product code only: Core, App and Cli. -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[PalladiumWallet.Fuzz]*,[PalladiumWallet.ServerProbe]*,[PalladiumWallet.Tests]*,[Avalonia*]*</Exclude>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

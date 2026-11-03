@@ -47,9 +47,19 @@ jobs:
       - name: Test
         run: >
           dotnet test tests/PalladiumWallet.Tests --no-build -c Release
+          --settings tests/coverage.runsettings
           --logger "trx;LogFileName=test-results.trx"
           --collect:"XPlat Code Coverage"
           --results-directory TestResults
+
+      # Coverage gate (Ubuntu only, one report is enough): fails the job if Core drops below the
+      # thresholds. App and Cli are reported but not gated yet.
+      - name: Coverage gate
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          report=$(ls TestResults/*/coverage.cobertura.xml | head -1)
+          python3 tests/check-coverage.py "$report" PalladiumWallet.Core:95:88 PalladiumWallet.App PalladiumWallet.Cli
 
       - name: Upload test results
         if: always()

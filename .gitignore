@@ -24,6 +24,7 @@ packages/
 TestResults/
 coverage/
 coverage.*
+!tests/coverage.runsettings
 *.coverage
 *.coveragexml
 *.trx
