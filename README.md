@@ -141,9 +141,15 @@ Run only the tests in one project:
 dotnet test tests/PalladiumWallet.Tests
 ```
 
-Measure code coverage (the [coverlet](https://github.com/coverlet-coverage/coverlet) collector is already referenced; the report is a Cobertura XML under `TestResults/`):
+Measure code coverage (the [coverlet](https://github.com/coverlet-coverage/coverlet) collector is already referenced; the report is a Cobertura XML under `TestResults/`). `tests/coverage.runsettings` excludes the test tooling, and `tests/check-coverage.py` applies the same gate as CI:
 ```bash
-dotnet test tests/PalladiumWallet.Tests --collect:"XPlat Code Coverage"
+dotnet test tests/PalladiumWallet.Tests --settings tests/coverage.runsettings --collect:"XPlat Code Coverage"
+python3 tests/check-coverage.py TestResults/*/coverage.cobertura.xml PalladiumWallet.Core:95:88
+```
+
+Run the tests against a real indexing server (opt-in, skipped when the variable is unset):
+```bash
+PALLADIUM_TEST_SERVERS=host:50002 PALLADIUM_TEST_SSL=1 dotnet test --filter LiveServer
 ```
 
 > Cross-implementation tests compare addresses, txids and PSBTs against reference golden vectors: a different address or txid is a blocking bug.
@@ -159,6 +165,7 @@ The tests mirror the `Core` layout (`tests/PalladiumWallet.Tests/<area>/`):
 | `Spv/` | Scripthash (vectors computed independently in Python), Merkle proofs (Bitcoin block 100000 + random trees), header parsing and PoW target validation, and the full **`WalletSynchronizer`**: gap-limit scanning, UTXO/history reconstruction, unconfirmed/immature balances, busy-retry, disk-cache reuse — including the paths where a lying server fails Merkle verification or serves a header chain that does not anchor to a hardcoded checkpoint, and the sync must abort |
 | `Net/` | JSON-RPC transport (pipelining, error mapping, notifications, disconnection, cancellation, oversized responses), typed protocol wrappers, peer discovery/persistence, TLS trust-on-first-use pinning end-to-end (pin, match, mismatch, reset), the update check end-to-end via a stubbed HTTP transport (newer/equal/older tags, HTTP errors, malformed JSON, offline — all best-effort to null) |
 | `Storage/` | AES-GCM encryption (roundtrip, tampering, fresh salt/nonce), wallet document schema/versioning, atomic saves, single-instance lock, data-path resolution with its full precedence chain (override → portable → pointer file → default) |
+| `App/` | Headless ViewModel tests (Avalonia.Headless): wizard flows, password and file-lock handling, seed and private-key reveal gating, contacts, settings, sync and send against the fake server; in-process end-to-end CLI tests; localization consistency (7 languages, placeholders, keys used in sources exist) |
 | `Wallet/` | Transaction building and signing (spendability rules, coinbase maturity, dust change, multi-UTXO selection, all standard destination types, watch-only PSBT flow, a golden txid for the PSBT signing path, standardness-policy rejection of absurd fees), transaction detail assembly (fees, mine/theirs attribution, RBF, coinbase), amount parsing/formatting, corrupted-wallet-file rejection |
 
 Network-facing code is tested against an **in-process fake ElectrumX server**

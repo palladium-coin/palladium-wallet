@@ -5,6 +5,29 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
+## [Unreleased]
+
+### Fixed
+
+- `ElectrumClient`: after a protocol error (e.g. a malformed line from the server) the read
+  loop died but the client kept reporting `IsConnected == true`, and any later request waited
+  forever for a response that could never arrive. The read loop now marks the connection dead
+  before failing the pending requests, and `RequestAsync` fails fast with `IOException` on a
+  dead connection.
+
+### Testing
+
+- Headless ViewModel tests (Avalonia.Headless, no display): wizard flows, password/lock handling,
+  seed and private-key reveal gating, contacts, settings, sync and send against the fake server.
+- In-process end-to-end CLI tests (create/restore/info/sync/send against the fake server).
+- Localization consistency tests (7 languages, placeholders, keys used in sources exist).
+- Error-path tests for `Core` (empty header range during anchoring, send-all limits, `SyncCache`
+  roundtrip, derivation edge cases, corrupted config), concurrency tests (in-flight cap, disposal
+  under load, wallet-lock contention).
+- Coverage settings (`tests/coverage.runsettings`) and a coverage gate in CI.
+- Test seams: `MainWindowViewModel.UpdateCheck` and `MainWindowViewModel.ProfileOverride`
+  (internal) so ViewModel tests never reach GitHub or a real indexing server.
+
 ## [1.1.0] — 2026-07-19
 
 Adds a pure address-only watch-only mode (Core + CLI + App wizard + Send

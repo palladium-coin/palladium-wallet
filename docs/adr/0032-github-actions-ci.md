@@ -15,6 +15,7 @@ The suite (unit, property-based, fuzz-corpus replay, in-process fake-server test
 - **test**: restore, build (Release) and `dotnet test` of `tests/PalladiumWallet.Tests` on `ubuntu-latest` and `windows-latest`, uploading the TRX and coverage results as artifacts. Only the test project and its references are built, because the Android head needs a workload and SDK that CI does not provision.
 - **fuzz-smoke**: one job per parser target, running `--random 20000` mutations; any escaping exception fails the job.
 - **docs**: `docs/check-docs.sh`.
+- A **coverage gate** on the Ubuntu test job fails the run if `Core` drops below the thresholds in the workflow (see 0033).
 
 The pipeline is offline: `LiveServerTests` does nothing without `PALLADIUM_TEST_SERVERS`, so no third-party indexing server is contacted. Coverage-guided fuzzing (afl++) and release builds stay manual.
 
@@ -30,4 +31,4 @@ The pipeline is offline: `LiveServerTests` does nothing without `PALLADIUM_TEST_
 - `.github/workflows/ci.yml`
 - `docs/check-docs.sh`
 - `tests/PalladiumWallet.Fuzz/Program.cs`
-- Related: 0025, 0026, 0027
+- Related: 0025, 0026, 0027, 0033

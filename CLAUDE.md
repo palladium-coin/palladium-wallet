@@ -50,7 +50,8 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) �
 - **Test** (headless, primary verification layer): `dotnet test`
   - Single test: `dotnet test --filter "FullyQualifiedName~TestName"`
   - Property-based tests (CsCheck, `PropertyTests.cs`) run in the same command, ~30s
-  - Coverage: `dotnet test tests/PalladiumWallet.Tests --collect:"XPlat Code Coverage"` (coverlet, Cobertura XML)
+  - Coverage: `dotnet test tests/PalladiumWallet.Tests --settings tests/coverage.runsettings --collect:"XPlat Code Coverage"` (coverlet, Cobertura XML); CI gates `Core` with `tests/check-coverage.py` (95% lines / 88% branches)
+  - ViewModel tests are headless (`Avalonia.Headless` via `UiSession`, xunit 2) and CLI tests invoke the real entry point in-process: tests under `tests/PalladiumWallet.Tests/App/` that touch process-wide state (`AppPaths`, `Loc`, `Console`, `MainWindowViewModel.UpdateCheck`/`ProfileOverride`) go in xUnit collection `"AppPaths"`; never let a test reach GitHub or a real indexing server
   - Test tree mirrors `src/Core` (`Chain/ Crypto/ Net/ Spv/ Storage/ Wallet/`) — put new tests in the folder matching the code under test
   - Network/SPV code (`ElectrumClient`, `WalletSynchronizer`, `TransactionInspector`, TOFU pinning): test against the in-process fake server `tests/PalladiumWallet.Tests/Net/FakeElectrumServer.cs` (loopback TCP + optional TLS, per-method handlers, call counters) — extend that, don't mock the client (it isn't an interface, by design)
   - Two `internal` test seams (via `InternalsVisibleTo`) sandbox the remaining externals: `UpdateChecker.CheckAsync` takes an optional `HttpMessageHandler` (never hit GitHub from a test); `AppPaths.BootstrapDirOverride`/`PortableBaseOverride`/`DefaultRootOverride` redirect the machine-global path locations (tests using them share xUnit collection `"AppPaths"` because that state is static)
