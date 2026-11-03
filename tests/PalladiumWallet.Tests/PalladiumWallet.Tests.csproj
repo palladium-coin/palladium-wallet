@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\PalladiumWallet.Core.csproj" />
     <ProjectReference Include="..\PalladiumWallet.Fuzz\PalladiumWallet.Fuzz.csproj" />
+    <ProjectReference Include="..\PalladiumWallet.ServerProbe\PalladiumWallet.ServerProbe.csproj" />
   </ItemGroup>
 
 </Project>

@@ -93,6 +93,12 @@ settings.local.json
 # Local agent/tooling metadata
 .agents/
 .codex/
+.claude/
+
+# Android packages and local SDK config
+*.apk
+*.aab
+local.properties
 
 # Fuzzing artifacts (tests/PalladiumWallet.Fuzz)
 findings/
