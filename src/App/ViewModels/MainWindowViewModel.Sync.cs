@@ -281,7 +281,7 @@ public partial class MainWindowViewModel
                     _doc.Cache?.NextReceiveIndex ?? 0,
                     _doc.Cache?.NextChangeIndex ?? 0,
                     net,
-                    _doc.Cache?.AnchoredUpTo);
+                    _doc.Cache?.AnchoredDownTo);
                 _synchronizer.Progress += msg => Dispatcher.UIThread.Post(() => StatusMessage = msg);
                 // Progressive verification (§7.4): the wallet becomes usable as soon as
                 // transaction downloads finish, without waiting for every historical Merkle
@@ -299,18 +299,18 @@ public partial class MainWindowViewModel
                 // Off the UI thread: sync does heavy CPU work (LINQ over thousands of
                 // cached txs/UTXOs) and blocking JSON/disk I/O between awaits, negligible
                 // on desktop but enough to freeze the UI (ANR) on slower mobile hardware.
-                var (result, rawHex, verifiedAt, blockHeaders, anchoredUpTo) = await Task.Run(async () =>
+                var (result, rawHex, verifiedAt, blockHeaders, anchoredDownTo) = await Task.Run(async () =>
                 {
                     var r = await _synchronizer.SyncOnceAsync(ct);
                     var caches = _synchronizer.ExportCaches(PalladiumNetworks.For(_account.Profile.Kind));
-                    return (r, caches.RawTxHex, caches.VerifiedAt, caches.BlockHeaders, caches.AnchoredUpTo);
+                    return (r, caches.RawTxHex, caches.VerifiedAt, caches.BlockHeaders, caches.AnchoredDownTo);
                 }, ct);
                 _lastTransactions = result.Transactions;
 
                 var cache = new SyncCache
                 {
                     RawTxHex = rawHex, VerifiedAt = verifiedAt, BlockHeaders = blockHeaders,
-                    AnchoredUpTo = anchoredUpTo,
+                    AnchoredDownTo = anchoredDownTo,
                 };
                 FillDisplayFields(cache, result);
                 _doc.Cache = cache;
@@ -532,13 +532,13 @@ public partial class MainWindowViewModel
         try
         {
             var net = PalladiumNetworks.For(_account.Profile.Kind);
-            var (rawHex, verifiedAt, blockHeaders, anchoredUpTo) = _synchronizer.ExportCaches(net);
+            var (rawHex, verifiedAt, blockHeaders, anchoredDownTo) = _synchronizer.ExportCaches(net);
             if (rawHex.Count == 0 && verifiedAt.Count == 0)
                 return;
             (_doc.Cache ??= new SyncCache()).RawTxHex = rawHex;
             _doc.Cache.VerifiedAt = verifiedAt;
             _doc.Cache.BlockHeaders = blockHeaders;
-            _doc.Cache.AnchoredUpTo = anchoredUpTo;
+            _doc.Cache.AnchoredDownTo = anchoredDownTo;
             WalletStore.Save(_doc, _walletPath, _password);
         }
         catch { /* non-fatal: the next full save will recover */ }

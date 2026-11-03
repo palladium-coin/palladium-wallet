@@ -1,6 +1,6 @@
 # 0006. Anchor headers to hardcoded checkpoints and skip PoW validation
 
-- **Status:** Accepted
+- **Status:** Accepted (the anchoring direction is superseded by [0040](0040-anchor-headers-up-to-a-checkpoint.md))
 - **Area:** SPV
 - **Recorded:** 2026-11-03 (retroactive: reconstructed from code, comments and changelog)
 

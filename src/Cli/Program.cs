@@ -168,10 +168,10 @@ static async Task<int> Sync(string[] o)
         doc.Cache?.NextReceiveIndex ?? 0,
         doc.Cache?.NextChangeIndex ?? 0,
         net,
-        doc.Cache?.AnchoredUpTo);
+        doc.Cache?.AnchoredDownTo);
     var result = await sync.SyncOnceAsync();
 
-    var (rawHex, verifiedAt, blockHeaders, anchoredUpTo) = sync.ExportCaches(net);
+    var (rawHex, verifiedAt, blockHeaders, anchoredDownTo) = sync.ExportCaches(net);
     doc.Cache = new SyncCache
     {
         TipHeight = result.TipHeight,
@@ -188,7 +188,7 @@ static async Task<int> Sync(string[] o)
         RawTxHex = rawHex,
         VerifiedAt = verifiedAt,
         BlockHeaders = blockHeaders,
-        AnchoredUpTo = anchoredUpTo,
+        AnchoredDownTo = anchoredDownTo,
     };
     WalletStore.Save(doc, path, CliPassword.Current);
 

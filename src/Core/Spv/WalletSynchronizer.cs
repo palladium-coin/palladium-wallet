@@ -88,11 +88,13 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     private readonly ConcurrentDictionary<string, int> _verifiedAtHeight = new();
     private readonly ConcurrentDictionary<int, Task<string>> _headerFetches = new();
 
-    // checkpoint height -> highest height already proven to hash-chain back to it.
-    // Persisted across sessions (see ExportCaches/PreloadCaches): without it, every restart
-    // re-walks and re-verifies the whole header chain from the checkpoint even though the
-    // header bytes themselves are cached, which dominates reconnect time on large wallets.
-    private readonly ConcurrentDictionary<int, int> _anchoredUpTo = new();
+    // checkpoint height -> lowest height already proven to hash-chain UP to that checkpoint.
+    // Each anchored header must reach a hardcoded hash above it: SHA-256 preimage resistance
+    // is what makes it unforgeable (the opposite direction, from a checkpoint up to the header,
+    // proves nothing when PoW is skipped, since anyone can build such a chain). Persisted across
+    // sessions (see ExportCaches/PreloadCaches): without it, every restart re-walks and
+    // re-verifies the header chain even though the header bytes themselves are cached.
+    private readonly ConcurrentDictionary<int, int> _anchoredDownTo = new();
 
     // Serializes header-range downloads: concurrent AnchorToCheckpointAsync calls (one per tx
     // being verified) would otherwise race on overlapping ranges and issue duplicate range
@@ -121,7 +123,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         int knownReceiveIndex,
         int knownChangeIndex,
         Network network,
-        Dictionary<int, int>? anchoredUpTo = null)
+        Dictionary<int, int>? anchoredDownTo = null)
     {
         foreach (var (txid, hex) in rawTxHex)
         {
@@ -130,21 +132,27 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             // filter), so every preloaded entry is safe to mark confirmed too.
             _confirmedTxids.TryAdd(txid, 0);
         }
-        foreach (var (txid, height) in verifiedAt)
-            if (!_verifiedAtHeight.ContainsKey(txid))
-                _verifiedAtHeight[txid] = height;
+        // A cache written before the anchoring direction was fixed (ADR 0040) has no
+        // anchoredDownTo: its "verified" claims rested on a forgeable check, so they are not
+        // trusted and every proof is re-verified (the cached headers are reused, not refetched).
+        if (anchoredDownTo is not null)
+            foreach (var (txid, height) in verifiedAt)
+                if (!_verifiedAtHeight.ContainsKey(txid))
+                    _verifiedAtHeight[txid] = height;
         if (blockHeaders is not null)
             foreach (var (height, hex) in blockHeaders)
                 _headerFetches.TryAdd(height, Task.FromResult(hex));
-        // Only trust a preloaded anchor up to a height whose header is also cached: if the
+        // Only trust a preloaded anchor down to a height whose header is also cached: if the
         // header cache was cleared/corrupted independently, re-deriving the chain-of-hashes
         // check on next use (AnchorToCheckpointAsync re-fetches what's missing) is safer than
         // trusting a stale "already validated" claim against headers that may no longer match.
-        if (anchoredUpTo is not null)
-            foreach (var (checkpointHeight, upToHeight) in anchoredUpTo)
-                if (_headerFetches.ContainsKey(upToHeight))
-                    _anchoredUpTo.AddOrUpdate(checkpointHeight, upToHeight,
-                        (_, existing) => Math.Max(existing, upToHeight));
+        if (anchoredDownTo is not null)
+            foreach (var (checkpointHeight, downToHeight) in anchoredDownTo)
+                if (downToHeight <= checkpointHeight
+                    && _headerFetches.ContainsKey(downToHeight)
+                    && _headerFetches.ContainsKey(checkpointHeight))
+                    _anchoredDownTo.AddOrUpdate(checkpointHeight, downToHeight,
+                        (_, existing) => Math.Min(existing, downToHeight));
         _knownReceiveIndex = knownReceiveIndex;
         _knownChangeIndex  = knownChangeIndex;
     }
@@ -157,7 +165,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     public (Dictionary<string, string> RawTxHex,
             Dictionary<string, int> VerifiedAt,
             Dictionary<int, string> BlockHeaders,
-            Dictionary<int, int> AnchoredUpTo)
+            Dictionary<int, int> AnchoredDownTo)
         ExportCaches(Network network)
     {
         var rawHex = _confirmedTxids.Keys
@@ -172,7 +180,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
                 headers[height] = task.Result;
 
         return (rawHex, new Dictionary<string, int>(_verifiedAtHeight), headers,
-            new Dictionary<int, int>(_anchoredUpTo));
+            new Dictionary<int, int>(_anchoredDownTo));
     }
 
     public async Task<SyncResult> SyncOnceAsync(CancellationToken ct = default)
@@ -444,32 +452,40 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     private async Task AnchorToCheckpointAsync(int height, CancellationToken ct)
     {
         var profile = account.Profile;
-        Checkpoint? checkpoint = null;
+        // The checkpoint ABOVE the height (lowest one at or above it): the header must hash-chain
+        // up to it. Above the last checkpoint there is nothing to anchor to — a documented limit,
+        // narrowed by adding a recent checkpoint at every release (SECURITY.md).
+        Checkpoint? upper = null;
         foreach (var c in profile.Checkpoints)
-            if (c.Height <= height && (checkpoint is not { } best || c.Height > best.Height))
-                checkpoint = c;
-        if (checkpoint is not { } cp)
+            if (c.Height >= height && (upper is not { } best || c.Height < best.Height))
+                upper = c;
+        if (upper is not { } cp)
             return;
 
-        if (_anchoredUpTo.TryGetValue(cp.Height, out var anchoredTo) && anchoredTo >= height)
+        _anchoredDownTo.TryGetValue(cp.Height, out var anchoredFrom);
+        var alreadyAnchored = _anchoredDownTo.ContainsKey(cp.Height);
+        if (alreadyAnchored && anchoredFrom <= height)
             return;
 
-        await FetchHeaderRangeAsync(cp.Height, height, ct);
+        // Headers [height .. top]: top is the checkpoint itself, or the lowest height already
+        // proven to reach it (its header is trusted, so only the new segment is walked).
+        var top = alreadyAnchored ? anchoredFrom : cp.Height;
+        await FetchHeaderRangeAsync(height, top, ct);
 
-        var headers = Enumerable.Range(cp.Height, height - cp.Height + 1)
+        var headers = Enumerable.Range(height, top - height + 1)
             .Select(h => BlockHeaderInfo.Parse(_headerFetches[h].Result))
             .ToArray();
 
-        if (!headers[0].MatchesCheckpoint(cp))
+        if (!alreadyAnchored && !headers[^1].MatchesCheckpoint(cp))
             throw new SpvVerificationException(
                 $"Header at checkpoint height {cp.Height} does not match the hardcoded hash: server is not trustworthy.");
 
         for (var i = 1; i < headers.Length; i++)
             if (!headers[i].IsValidChild(headers[i - 1].Hash, profile))
                 throw new SpvVerificationException(
-                    $"Broken header chain at height {cp.Height + i}: server is not trustworthy.");
+                    $"Broken header chain at height {height + i}: server is not trustworthy.");
 
-        _anchoredUpTo.AddOrUpdate(cp.Height, height, (_, existing) => Math.Max(existing, height));
+        _anchoredDownTo.AddOrUpdate(cp.Height, height, (_, existing) => Math.Min(existing, height));
     }
 
     /// <summary>

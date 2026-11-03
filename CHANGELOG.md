@@ -29,6 +29,17 @@ release and covers the full history from the initial commit.
 
 ### Security
 
+- **SPV header anchoring fixed (important).** The chain of headers used to be walked *from* the
+  nearest checkpoint below a transaction's height *up to* it. With proof of work skipped
+  (LWMA), that proves nothing: a malicious server could fabricate a header for the block of a
+  fake transaction and chain fake headers after a real checkpoint, and every link would pass.
+  The anchor now goes the other way: the header must hash-chain *up to* the nearest checkpoint
+  at or above its height, whose hash is hardcoded, which cannot be forged. This also covers
+  blocks below the first checkpoint (heights < 20,000), which were previously unanchored. Blocks
+  above the newest checkpoint still have nothing to anchor to (only the Merkle proof is
+  checked): add a recent checkpoint at each release. A wallet cache from an older version is
+  re-verified once (its "verified" claims are not trusted); headers and transactions are
+  reused. See ADR 0040.
 - Private keys are no longer precomputed for every address in the UI. Address rows and the
   address detail sheet carry only public data and derivation coordinates; the WIF is derived
   when the user reveals it (after the password) and dropped when hidden, when the sheet closes

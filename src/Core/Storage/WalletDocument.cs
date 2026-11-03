@@ -139,12 +139,12 @@ public sealed class SyncCache
     public Dictionary<int, string>? BlockHeaders { get; set; }
 
     /// <summary>
-    /// Checkpoint height → highest height already proven to hash-chain back to it (§7.3).
-    /// Avoids re-walking and re-verifying the whole header chain from the checkpoint on
-    /// every launch: the chain-of-hashes check already done for a height doesn't need
-    /// redoing once headers themselves are cached.
+    /// Checkpoint height → lowest height already proven to hash-chain up to it (§7.3, ADR 0040).
+    /// Avoids re-walking and re-verifying the header chain on every launch once the headers
+    /// themselves are cached. A cache without this field predates the fix of the anchoring
+    /// direction: its verified-proof claims are not trusted and get re-verified.
     /// </summary>
-    public Dictionary<int, int>? AnchoredUpTo { get; set; }
+    public Dictionary<int, int>? AnchoredDownTo { get; set; }
 }
 
 /// <summary>Scanned address with its own balance and transaction count (address view).</summary>

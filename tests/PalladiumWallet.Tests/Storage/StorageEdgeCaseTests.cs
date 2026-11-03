@@ -25,7 +25,7 @@ public class StorageEdgeCaseTests
                 RawTxHex = new() { ["aa"] = "0102" },
                 VerifiedAt = new() { ["aa"] = 10 },
                 BlockHeaders = new() { [10] = "00" },
-                AnchoredUpTo = new() { [100] = 150 },
+                AnchoredDownTo = new() { [100] = 150 },
             },
         };
         var path = Path.Combine(Path.GetTempPath(), $"plm-cache-{Guid.NewGuid()}.json");
@@ -43,7 +43,7 @@ public class StorageEdgeCaseTests
             Assert.Equal("0102", c.RawTxHex!["aa"]);
             Assert.Equal(10, c.VerifiedAt!["aa"]);
             Assert.Equal("00", c.BlockHeaders![10]);
-            Assert.Equal(150, c.AnchoredUpTo![100]);
+            Assert.Equal(150, c.AnchoredDownTo![100]);
         }
         finally { File.Delete(path); }
     }

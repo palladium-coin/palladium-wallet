@@ -578,9 +578,11 @@ or servers instead of resetting.
 Each sync: gets the chain tip → scans your receive and change address chains (gap limit
 20) → downloads your transactions → **verifies a Merkle proof for every confirmed
 transaction** against its block header → rebuilds your UTXO set and balances locally.
-On mainnet, each block header used for a proof is also chained back (via its previous-block
-hash) to the nearest built-in checkpoint, so a server cannot substitute a fabricated header
-for a real one. Verified data is cached in the wallet file, so later syncs only fetch what
+On mainnet, each block header used for a proof is also chained up (via the previous-block
+hashes) to the nearest built-in checkpoint above it, which must match exactly, so a server
+cannot substitute a fabricated header for a real one. The blocks mined after the newest
+checkpoint (shipped with each release) cannot be anchored this way: for those only the Merkle
+proof is checked, which is why updating the wallet regularly matters. Verified data is cached in the wallet file, so later syncs only fetch what
 is new — even after a restart. If a proof or the checkpoint chain does not check out, the
 sync **aborts** with an explicit "server is not trustworthy" error rather than showing you
 unverified data; switch servers.
@@ -593,7 +595,7 @@ resumes from the cache instead of restarting.
 transaction requires its own Merkle-proof round trip to the indexing server
 (`blockchain.transaction.get_merkle`, one request per transaction — the Electrum-style
 protocol has no batched form of this call), plus, on mainnet, chaining the covering block
-header back to the nearest hardcoded checkpoint. Sync time therefore scales with the number
+header up to the nearest hardcoded checkpoint above it. Sync time therefore scales with the number
 of confirmed transactions in the wallet's history, not with wall-clock time since creation.
 On **Android**, the first sync is typically slower still than on desktop for the same
 wallet: mobile networks add higher round-trip latency and lower sustained throughput than a
@@ -601,7 +603,9 @@ desktop's wired/Wi-Fi connection, and every proof round trip pays that latency i
 Every subsequent sync is fast: verified proofs, raw transaction bytes, downloaded block
 headers, and the checkpoint hash-chain anchoring state are all persisted into the wallet
 file's cache, so a resumed or later sync only fetches and verifies what changed since the
-last one — even across an app restart.
+last one — even across an app restart. After updating from a version older than the
+checkpoint-direction fix (ADR 0040), the first sync re-verifies every cached proof once
+(the cached headers and transactions are reused).
 
 **Do not use this wallet as a mining payout address.** Pool or solo mining payouts typically
 arrive as many small, frequent transactions, and — because of the per-transaction Merkle
@@ -854,7 +858,7 @@ Reset SSL certificates* — see
 | *Wrong password.* | The password does not decrypt the file (or the file was tampered with — the two are indistinguishable by design). | Retry; check keyboard layout/caps lock. If truly lost, restore from seed ([15.2](#152-restoring-step-by-step)). |
 | *Wallet already open in another instance of the application.* | Another running process holds this wallet's lock. | Close the other instance (GUI or CLI). |
 | *The TLS certificate of host:port has changed…* | Certificate pin mismatch — renewal or interception. | Read [12.2](#122-tls-certificate-pinning-tofu--read-before-fixing-a-certificate-error) **before** resetting certificates. |
-| Sync aborts, "server is not trustworthy" | A Merkle proof failed, or (mainnet) a block header did not chain back to a known checkpoint. | Switch to another server. Your local data is intact; the wallet refused the bad data. |
+| Sync aborts, "server is not trustworthy" | A Merkle proof failed, or (mainnet) a block header did not chain up to a known checkpoint. | Switch to another server. Your local data is intact; the wallet refused the bad data. |
 | *The server host:port is not on the Palladium chain (different genesis or checkpoint)…* | The server answered, but serves another chain (or a fork) than the wallet expects. Nothing was synced from it. | Pick another server; the wallet moves on to the next known one on its own. See [12.3](#123-what-synchronization-actually-does). |
 | *Insufficient funds* with a non-zero balance | Funds are unconfirmed, under 6 confirmations, or immature coinbase; or the fee doesn't fit. | See [8.4](#84-why-insufficient-funds-can-appear-despite-a-visible-balance). Wait, or use Send all. |
 | Restored wallet shows zero balance | Wrong passphrase, wrong script type, or funds beyond the gap limit. | See [15.2](#152-restoring-step-by-step) — the coins are not lost. |

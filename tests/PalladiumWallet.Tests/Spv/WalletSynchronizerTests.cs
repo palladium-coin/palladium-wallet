@@ -314,13 +314,14 @@ public class WalletSynchronizerTests
     {
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
-        var chain = ChainedHeaders(100, 105, funding.GetHash());
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var chain = ChainedHeaders(100, 105, funding.GetHash(), roots: new() { [100] = funding.GetHash() });
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
+        // The checkpoint sits ABOVE the tx (105): the header at 100 must hash-chain up to it.
         var checkpointProfile = Profile with
         {
-            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
         };
         var checkpointAccount = Account(checkpointProfile);
 
@@ -331,7 +332,7 @@ public class WalletSynchronizerTests
 
         Assert.Equal(1_000_000, result.ConfirmedSats);
         // Anchoring runs before the header lookup, so the range call (blockchain.block.headers)
-        // covering 100..105 back to the checkpoint already includes the tx's own header —
+        // covering 100..105 up to the checkpoint already includes the tx's own header —
         // no separate single-header call needed.
         Assert.Equal(0, server.CallCount("blockchain.block.header"));
         Assert.Equal(1, server.CallCount("blockchain.block.headers"));
@@ -342,21 +343,21 @@ public class WalletSynchronizerTests
     {
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 103);
 
-        // Second tx (at height 103) known upfront so the chain can commit to it,
+        // Second tx (at height 105) known upfront so the chain can commit to it,
         // but announced by the server only after the first sync.
         var tx2 = Net.CreateTransaction();
         tx2.Inputs.Add(new TxIn(new OutPoint(uint256.One, 1)));
         tx2.Outputs.Add(Money.Satoshis(500_000), account.GetReceiveAddress(1));
 
         var chain = ChainedHeaders(100, 105, funding.GetHash(),
-            roots: new() { [103] = tx2.GetHash() });
+            roots: new() { [103] = funding.GetHash(), [105] = tx2.GetHash() });
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
         var checkpointProfile = Profile with
         {
-            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
         };
         var checkpointAccount = Account(checkpointProfile);
 
@@ -364,11 +365,11 @@ public class WalletSynchronizerTests
         await using var _ = server; await using var __ = client;
 
         var sync = new WalletSynchronizer(checkpointAccount, client);
-        await sync.SyncOnceAsync(); // walks and memoizes the anchor up to 105
+        await sync.SyncOnceAsync(); // walks 103..105 up to the checkpoint and memoizes it
 
-        // 103 <= the memoized 105: anchoring must early-return without re-walking,
-        // so the header/range call counts stay at those of the first walk (103 is cached).
-        scenario.Register(tx2, 103, checkpointAccount.GetReceiveAddress(1));
+        // 105 lies inside the memoized [103, 105]: anchoring must early-return without
+        // re-walking, so the header/range call counts stay at those of the first walk.
+        scenario.Register(tx2, 105, checkpointAccount.GetReceiveAddress(1));
         var result = await sync.SyncOnceAsync();
 
         Assert.Equal(1_500_000, result.ConfirmedSats);
@@ -377,18 +378,143 @@ public class WalletSynchronizerTests
     }
 
     [Fact]
+    public async Task Extending_the_anchor_downwards_only_walks_the_new_segment()
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var high = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 104);
+        var tx2 = Net.CreateTransaction();
+        tx2.Inputs.Add(new TxIn(new OutPoint(uint256.One, 1)));
+        tx2.Outputs.Add(Money.Satoshis(500_000), account.GetReceiveAddress(1));
+        var chain = ChainedHeaders(100, 105, high.GetHash(),
+            roots: new() { [104] = high.GetHash(), [101] = tx2.GetHash() });
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
+        });
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var sync = new WalletSynchronizer(checkpointAccount, client);
+        await sync.SyncOnceAsync();                                   // anchors [104, 105]
+        scenario.Register(tx2, 101, checkpointAccount.GetReceiveAddress(1));
+        var result = await sync.SyncOnceAsync();                      // extends to [101, 105]
+
+        Assert.Equal(1_500_000, result.ConfirmedSats);
+        Assert.Equal(2, server.CallCount("blockchain.block.headers")); // 104..105, then 101..103
+        Assert.Equal(0, server.CallCount("blockchain.block.header"));
+    }
+
+    [Fact]
+    public async Task A_server_that_forges_a_consistent_chain_to_the_checkpoint_is_detected()
+    {
+        // The attack the anchoring must stop: the server invents the header of the tx's block and
+        // chains fake headers after it, all with valid prev-hash links. Linking "from a checkpoint
+        // upward" would accept this; linking "up to a checkpoint" cannot, because the chain does
+        // not end at the real hardcoded hash.
+        var account = Account();
+        var scenario = new Scenario();
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+
+        var honest = ChainedHeaders(100, 105, uint256.One);     // the real chain (tx not in it)
+        var forged = ChainedHeaders(100, 105, funding.GetHash(),
+            roots: new() { [100] = funding.GetHash() });         // fabricated, self-consistent
+        foreach (var (h, hex) in forged) scenario.Headers[h] = hex;
+
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(honest[105]).Hash.ToString(), 0x1d00ffff)],
+        });
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(
+            () => new WalletSynchronizer(checkpointAccount, client).SyncOnceAsync());
+        Assert.Contains("checkpoint height 105", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_tx_above_the_last_checkpoint_has_nothing_to_anchor_to()
+    {
+        // Documented limit (SECURITY.md): only the Merkle proof is checked there.
+        var account = Account();
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(100, uint256.One.ToString(), 0x1d00ffff)],
+        });
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var result = await new WalletSynchronizer(checkpointAccount, client).SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+        Assert.Equal(0, server.CallCount("blockchain.block.headers"));
+    }
+
+    [Fact]
+    public async Task A_tx_below_the_first_checkpoint_is_anchored_to_it()
+    {
+        // L-01: heights under the first checkpoint used to have no anchor at all.
+        var account = Account();
+        var scenario = new Scenario();
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 10);
+        var chain = ChainedHeaders(10, 100, funding.GetHash(), roots: new() { [10] = funding.GetHash() });
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+        });
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var result = await new WalletSynchronizer(checkpointAccount, client).SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+        Assert.True(server.CallCount("blockchain.block.headers") >= 1);
+    }
+
+    [Fact]
+    public async Task A_cache_without_the_anchor_state_is_not_trusted_for_verified_proofs()
+    {
+        // A cache written before the anchoring direction was fixed has no AnchoredDownTo: its
+        // "verified" claims are dropped and every proof is checked again.
+        var account = Account();
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        var first = new WalletSynchronizer(account, client);
+        var result1 = await first.SyncOnceAsync();
+        var (rawTx, verifiedAt, headers, _) = first.ExportCaches(Net);
+        Assert.NotEmpty(verifiedAt);
+
+        server.ResetCallCounts();
+        var second = new WalletSynchronizer(account, client);
+        second.PreloadCaches(rawTx, verifiedAt, headers,
+            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchoredDownTo: null);
+        var result2 = await second.SyncOnceAsync();
+
+        Assert.Equal(result1.ConfirmedSats, result2.ConfirmedSats);
+        Assert.Equal(1, server.CallCount("blockchain.transaction.get_merkle")); // re-verified
+        Assert.Equal(0, server.CallCount("blockchain.transaction.get"));        // raw tx still reused
+    }
+
+    [Fact]
     public async Task Un_checkpoint_con_hash_sbagliato_fa_fallire_la_sync()
     {
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
-        var chain = ChainedHeaders(100, 105, funding.GetHash());
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var chain = ChainedHeaders(100, 105, funding.GetHash(), roots: new() { [100] = funding.GetHash() });
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
         var checkpointProfile = Profile with
         {
             // Wrong hash at the checkpoint height: the real chain does not match it.
-            Checkpoints = [new Checkpoint(100, uint256.One.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, uint256.One.ToString(), 0x1d00ffff)],
         };
         var checkpointAccount = Account(checkpointProfile);
 
@@ -397,7 +523,7 @@ public class WalletSynchronizerTests
 
         var ex = await Assert.ThrowsAsync<SpvVerificationException>(
             () => new WalletSynchronizer(checkpointAccount, client).SyncOnceAsync());
-        Assert.Contains("checkpoint height 100", ex.Message);
+        Assert.Contains("checkpoint height 105", ex.Message);
     }
 
     [Fact]
@@ -405,15 +531,15 @@ public class WalletSynchronizerTests
     {
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
-        var chain = ChainedHeaders(100, 105, funding.GetHash());
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var chain = ChainedHeaders(100, 105, funding.GetHash(), roots: new() { [100] = funding.GetHash() });
         // Tamper with block 103: it no longer points at block 102's real hash.
         chain[103] = Scenario.SingleTxHeaderHex(uint256.One, 103, prevHash: uint256.One);
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
         var checkpointProfile = Profile with
         {
-            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
         };
         var checkpointAccount = Account(checkpointProfile);
 
@@ -430,13 +556,13 @@ public class WalletSynchronizerTests
     {
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
-        var chain = ChainedHeaders(100, 105, funding.GetHash());
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var chain = ChainedHeaders(100, 105, funding.GetHash(), roots: new() { [100] = funding.GetHash() });
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
         var checkpointAccount = Account(Profile with
         {
-            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
         });
 
         var (server, client) = await StartAsync(scenario);
@@ -619,7 +745,7 @@ public class WalletSynchronizerTests
 
         var first = new WalletSynchronizer(account, client);
         var result1 = await first.SyncOnceAsync();
-        var (rawTx, verifiedAt, headers, anchoredUpTo) = first.ExportCaches(Net);
+        var (rawTx, verifiedAt, headers, anchoredDownTo) = first.ExportCaches(Net);
 
         Assert.Single(rawTx);      // the confirmed tx is exported
         Assert.Single(verifiedAt); // with its verified height
@@ -629,7 +755,7 @@ public class WalletSynchronizerTests
         server.ResetCallCounts();
         var second = new WalletSynchronizer(account, client);
         second.PreloadCaches(rawTx, verifiedAt, headers,
-            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchoredUpTo);
+            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchoredDownTo);
         var result2 = await second.SyncOnceAsync();
 
         Assert.Equal(result1.ConfirmedSats, result2.ConfirmedSats);
@@ -643,23 +769,23 @@ public class WalletSynchronizerTests
     {
         // Same scenario as "Un_range_gia_ancorato_non_viene_ricamminato_al_sync_successivo", but
         // across two separate WalletSynchronizer instances (simulating an app restart) with
-        // AnchoredUpTo round-tripped through ExportCaches/PreloadCaches like a real save/reload —
+        // AnchoredDownTo round-tripped through ExportCaches/PreloadCaches like a real save/reload —
         // the in-memory-only memoization that test covers wouldn't survive that on its own.
         var account = Account();
         var scenario = new Scenario();
-        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 105);
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 103);
 
         var tx2 = Net.CreateTransaction();
         tx2.Inputs.Add(new TxIn(new OutPoint(uint256.One, 1)));
         tx2.Outputs.Add(Money.Satoshis(500_000), account.GetReceiveAddress(1));
 
         var chain = ChainedHeaders(100, 105, funding.GetHash(),
-            roots: new() { [103] = tx2.GetHash() });
+            roots: new() { [103] = funding.GetHash(), [105] = tx2.GetHash() });
         foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
 
         var checkpointProfile = Profile with
         {
-            Checkpoints = [new Checkpoint(100, BlockHeaderInfo.Parse(chain[100]).Hash.ToString(), 0x1d00ffff)],
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
         };
         var checkpointAccount = Account(checkpointProfile);
 
@@ -667,20 +793,20 @@ public class WalletSynchronizerTests
         await using var _ = server; await using var __ = client;
 
         var first = new WalletSynchronizer(checkpointAccount, client);
-        var result1 = await first.SyncOnceAsync(); // walks and memoizes the anchor up to 105
-        var (rawTx, verifiedAt, headers, anchoredUpTo) = first.ExportCaches(Net);
-        Assert.NotEmpty(anchoredUpTo);
+        var result1 = await first.SyncOnceAsync(); // walks 103..105 and memoizes the anchor
+        var (rawTx, verifiedAt, headers, anchoredDownTo) = first.ExportCaches(Net);
+        Assert.NotEmpty(anchoredDownTo);
 
         // Fresh synchroniser (new launch) preloaded from the exported caches, then a new tx at
-        // height 103 — within the already-anchored range — is announced.
-        scenario.Register(tx2, 103, checkpointAccount.GetReceiveAddress(1));
+        // height 105 — within the already-anchored range — is announced.
+        scenario.Register(tx2, 105, checkpointAccount.GetReceiveAddress(1));
         server.ResetCallCounts();
         var second = new WalletSynchronizer(checkpointAccount, client);
         second.PreloadCaches(rawTx, verifiedAt, headers,
-            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchoredUpTo);
+            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchoredDownTo);
         var result2 = await second.SyncOnceAsync();
 
-        // 103 <= the persisted anchor of 105: no header-range re-walk despite this being a
+        // 105 lies in the persisted anchored range [103, 105]: no header-range re-walk despite this being a
         // brand-new synchroniser instance that never anchored anything itself.
         Assert.Equal(1_500_000, result2.ConfirmedSats);
         Assert.Equal(0, server.CallCount("blockchain.block.header"));

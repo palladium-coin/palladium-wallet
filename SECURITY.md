@@ -6,7 +6,7 @@ Palladium Wallet is a self-custody SPV wallet. It is designed to protect funds a
 
 - Theft of the wallet file at rest (AES-256-GCM encryption with PBKDF2-HMAC-SHA512)
 - Memory snooping of private keys after unlock (keys are held only in process memory, never written to disk in plaintext unless the user explicitly disables encryption)
-- Fraudulent transaction injection by a malicious server (every confirmed transaction is verified with a Merkle proof against SPV-validated block headers anchored to hardcoded checkpoints)
+- Fraudulent transaction injection by a malicious server (every confirmed transaction is verified with a Merkle proof against a block header that hash-chains up to a hardcoded checkpoint; the blocks above the newest checkpoint are the known exception, see the SPV trust model)
 
 It does **not** protect against:
 
@@ -21,7 +21,7 @@ It does **not** protect against:
 
 This wallet is an SPV client, not a full node. It validates:
 
-- Block headers: `SkipPowValidation` is enabled because LWMA difficulty cannot be recomputed client-side, so proof of work is never checked. Instead, every header used for a Merkle proof is hash-chain-linked (prev-hash) back to the nearest hardcoded checkpoint at or below its height, and that checkpoint's hash must match exactly (`Core/Chain/ChainProfiles.cs`, enforced in `Core/Spv/WalletSynchronizer.AnchorToCheckpointAsync`). Currently populated for mainnet only (every 20,000 blocks); testnet/regtest have no checkpoints yet, so headers there are trusted at face value
+- Block headers: `SkipPowValidation` is enabled because LWMA difficulty cannot be recomputed client-side, so proof of work is never checked. Instead, every header used for a Merkle proof is hash-chain-linked (prev-hash) **up to the nearest hardcoded checkpoint at or above its height**, and the header at that checkpoint height must hash to the checkpoint exactly (`Core/Chain/ChainProfiles.cs`, enforced in `Core/Spv/WalletSynchronizer.AnchorToCheckpointAsync`, ADR 0040). The direction matters: with PoW skipped, a chain built *from* a checkpoint *up to* a header proves nothing, because anyone can fabricate such a chain; a chain ending in a known hash cannot be forged without inverting SHA-256. Mainnet checkpoints run every 20,000 blocks from 20,000 (so even the oldest blocks are covered) and are extended at each release. **Known limit:** a transaction in a block *above the highest checkpoint* has no checkpoint to anchor to, so only its Merkle proof against the header the server supplied is checked there; the window is the blocks mined since the last release. Testnet/regtest have no checkpoints yet, so headers there are trusted at face value
 - Transaction inclusion in a confirmed block (Merkle branch proof, mandatory for every confirmed transaction — see `Core/Spv/MerkleProof.cs`)
 
 It does **not** validate:
