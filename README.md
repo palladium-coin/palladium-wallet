@@ -46,7 +46,7 @@ For desktop and the CLI you only need the **.NET 10 SDK**. The core and crypto a
    (alternatively, the installer from <https://dotnet.microsoft.com/download/dotnet/10.0>)
 2. Clone the repository and restore dependencies:
    ```powershell
-   git clone <repo-URL>
+   git clone https://github.com/palladium-coin/palladium-wallet.git
    cd PalladiumWallet
    dotnet restore
    ```
@@ -61,7 +61,7 @@ For desktop and the CLI you only need the **.NET 10 SDK**. The core and crypto a
    (add the two `export` lines to your `~/.bashrc` to make them permanent)
 2. Clone and restore:
    ```bash
-   git clone <repo-URL>
+   git clone https://github.com/palladium-coin/palladium-wallet.git
    cd PalladiumWallet
    dotnet restore
    ```

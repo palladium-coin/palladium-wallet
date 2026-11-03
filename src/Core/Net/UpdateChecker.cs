@@ -17,7 +17,7 @@ public sealed record LatestRelease(string Tag, string HtmlUrl);
 /// </summary>
 public static class UpdateChecker
 {
-    private const string ReleasesApiUrl = "https://api.github.com/repos/davide3011/PalladiumWallet/releases/latest";
+    private const string ReleasesApiUrl = "https://api.github.com/repos/palladium-coin/palladium-wallet/releases/latest";
 
     private sealed class GitHubReleaseResponse
     {
@@ -54,7 +54,7 @@ public static class UpdateChecker
                 return null;
             if (remote <= local) return null;
 
-            return new LatestRelease(tag, release.HtmlUrl ?? $"https://github.com/davide3011/PalladiumWallet/releases/tag/{tag}");
+            return new LatestRelease(tag, release.HtmlUrl ?? $"https://github.com/palladium-coin/palladium-wallet/releases/tag/{tag}");
         }
         catch
         {

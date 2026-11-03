@@ -149,7 +149,7 @@ public partial class MainView : UserControl
 
     private async void OnOpenBugReportClick(object? sender, RoutedEventArgs e)
     {
-        const string issueUrl = "https://github.com/davide3011/PalladiumWallet/issues/new?template=bug_report.yml";
+        const string issueUrl = "https://github.com/palladium-coin/palladium-wallet/issues/new?template=bug_report.yml";
         var launcher = TopLevel.GetTopLevel(this)?.Launcher;
         if (launcher is not null)
             await launcher.LaunchUriAsync(new Uri(issueUrl));
@@ -157,7 +157,7 @@ public partial class MainView : UserControl
 
     private async void OnOpenUserGuideClick(object? sender, RoutedEventArgs e)
     {
-        const string userGuideUrl = "https://github.com/davide3011/PalladiumWallet/blob/main/USERGUIDE.md";
+        const string userGuideUrl = "https://github.com/palladium-coin/palladium-wallet/blob/main/USERGUIDE.md";
         var launcher = TopLevel.GetTopLevel(this)?.Launcher;
         if (launcher is not null)
             await launcher.LaunchUriAsync(new Uri(userGuideUrl));
