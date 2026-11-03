@@ -99,6 +99,40 @@ public class ElectrumClientTests
     }
 
     [Fact]
+    public async Task A_malformed_line_from_the_server_fails_pending_requests_and_reports_the_error()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => FakeElectrumServer.NoResponse);
+
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+
+        var disconnected = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += ex => disconnected.TrySetResult(ex);
+
+        var pending = client.BannerAsync();
+        await server.SendRawAsync("this is not json");
+
+        await Assert.ThrowsAnyAsync<Exception>(() => pending.WaitAsync(Timeout));
+        Assert.NotNull(await disconnected.Task.WaitAsync(Timeout)); // failure, not a clean close
+        Assert.False(client.IsConnected);
+    }
+
+    [Fact]
+    public async Task Requests_after_the_connection_died_fail_fast_instead_of_hanging()
+    {
+        await using var server = new FakeElectrumServer();
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += _ => disconnected.TrySetResult();
+        await server.SendRawAsync("garbage"); // kills the read loop
+        await disconnected.Task.WaitAsync(Timeout);
+
+        // The read loop is gone: nobody would ever complete this request.
+        await Assert.ThrowsAnyAsync<IOException>(() => client.RequestAsync("server.ping").WaitAsync(Timeout));
+    }
+
+    [Fact]
     public async Task Una_risposta_molto_grande_arriva_integra()
     {
         // A payload far beyond the PipeReader's segment size forces the

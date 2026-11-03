@@ -120,6 +120,15 @@ public sealed class ElectrumClient : IAsyncDisposable
             var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pending[id] = tcs;
 
+            // The read loop cancels _cts before failing the pending requests, so a request that
+            // registers after that point lands here instead of waiting for a response that can
+            // never arrive (the loop is gone).
+            if (_cts.IsCancellationRequested)
+            {
+                _pending.TryRemove(id, out _);
+                throw new IOException("Connection to the server closed.");
+            }
+
             var payload = JsonSerializer.SerializeToUtf8Bytes(new
             {
                 jsonrpc = "2.0",
@@ -212,6 +221,9 @@ public sealed class ElectrumClient : IAsyncDisposable
         finally
         {
             await pipe.CompleteAsync();
+            // Mark the connection dead first (IsConnected, RequestAsync, write loop) so nothing
+            // can register a request after the pending ones are failed below.
+            try { _cts.Cancel(); } catch (ObjectDisposedException) { }
             foreach (var (_, tcs) in _pending)
                 tcs.TrySetException(failure ?? new IOException("Connection to the server closed."));
             _pending.Clear();

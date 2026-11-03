@@ -71,6 +71,14 @@ public sealed class FakeElectrumServer : IAsyncDisposable
             await WriteLineAsync(stream, writeLock, line);
     }
 
+    /// <summary>Sends an arbitrary (possibly malformed) line to every connected client.</summary>
+    public async Task SendRawAsync(string line)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(line);
+        foreach (var (stream, writeLock, _) in _clients)
+            await WriteLineAsync(stream, writeLock, bytes);
+    }
+
     /// <summary>Abruptly closes every accepted connection (tests the client's failure paths).</summary>
     public void DropClients()
     {
