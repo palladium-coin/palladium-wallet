@@ -397,6 +397,40 @@ public sealed class MainWindowViewModelTests : VmTestBase
     });
 
     [Fact]
+    public Task HistoryRows_AboveTheNewestCheckpoint_AreFlaggedAsUnanchored() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 2_500_000);   // confirmed at height 100
+        // The fake serves the same header for every height: use its hash as a checkpoint at 50.
+        string headerHash;
+        await using (var c = await ElectrumClient.ConnectAsync(_server.Host, _server.Port, useSsl: false))
+            headerHash = BlockHeaderInfo.Parse(await c.GetBlockHeaderAsync(50)).Hash.ToString();
+        MainWindowViewModel.ProfileOverride = ChainProfiles.Mainnet with
+        {
+            BootstrapServers = [],
+            Checkpoints = [new Checkpoint(50, headerHash, 0x1d00ffff)],
+        };
+        var vm = new MainWindowViewModel();
+        RestoreFlow(vm, Mnemonic, null, "unanch");
+        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1);
+
+        Assert.True(vm.History[0].Verified);          // the Merkle proof checks out
+        Assert.True(vm.History[0].Unanchored);        // but height 100 is above the checkpoint at 50
+    });
+
+    [Fact]
+    public Task HistoryRows_CoveredByACheckpoint_AreNotFlagged() => UiSession.Run(async () =>
+    {
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 2_500_000);
+        var vm = new MainWindowViewModel();                        // default test profile: no checkpoints
+        RestoreFlow(vm, Mnemonic, null, "anch");
+        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1);
+
+        Assert.False(vm.History[0].Unanchored);
+    });
+
+    [Fact]
     public Task FeePresets_ComeFromTheServer_AndTheNormalEstimateIsPreselected() => UiSession.Run(async () =>
     {
         var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);

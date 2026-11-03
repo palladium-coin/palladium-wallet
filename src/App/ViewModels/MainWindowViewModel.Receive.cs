@@ -240,6 +240,7 @@ public partial class MainWindowViewModel
         var transactions = _lastTransactions;
         var loc = _loc;
         var unit = _config.Unit;
+        var unanchored = Profile.IsAboveNewestCheckpoint(height);
 
         try
         {
@@ -247,7 +248,7 @@ public partial class MainWindowViewModel
             {
                 var details = await TransactionInspector.FetchAsync(
                     client, network, txid, tipHeight, height, owned, delta, verified, transactions, ct);
-                return new TransactionDetailsViewModel(details, loc, unit);
+                return new TransactionDetailsViewModel(details, loc, unit, unanchored);
             }, ct);
         }
         catch (OperationCanceledException)
@@ -310,7 +311,8 @@ public partial class MainWindowViewModel
                 tx.Height > 0 ? tx.Height.ToString() : "mempool",
                 (tx.DeltaSats >= 0 ? "+" : "") + Fmt(tx.DeltaSats, withLabel: false),
                 tx.Txid,
-                tx.Verified));
+                tx.Verified,
+                Profile.IsAboveNewestCheckpoint(tx.Height)));
 
         Addresses.Clear();
         foreach (var a in cache.Addresses)

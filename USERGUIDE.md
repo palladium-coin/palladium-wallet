@@ -582,7 +582,10 @@ On mainnet, each block header used for a proof is also chained up (via the previ
 hashes) to the nearest built-in checkpoint above it, which must match exactly, so a server
 cannot substitute a fabricated header for a real one. The blocks mined after the newest
 checkpoint (shipped with each release) cannot be anchored this way: for those only the Merkle
-proof is checked, which is why updating the wallet regularly matters. Verified data is cached in the wallet file, so later syncs only fetch what
+proof is checked, which is why updating the wallet regularly matters. Such transactions carry an
+orange **"not anchored"** label in the History tab and in the transaction detail (hover it for
+the explanation); it disappears once you update to a release whose newest checkpoint covers
+that block. The label is informational: the transaction is still Merkle-verified. Verified data is cached in the wallet file, so later syncs only fetch what
 is new — even after a restart. If a proof or the checkpoint chain does not check out, the
 sync **aborts** with an explicit "server is not trustworthy" error rather than showing you
 unverified data; switch servers.
@@ -858,6 +861,7 @@ Reset SSL certificates* — see
 | *Wrong password.* | The password does not decrypt the file (or the file was tampered with — the two are indistinguishable by design). | Retry; check keyboard layout/caps lock. If truly lost, restore from seed ([15.2](#152-restoring-step-by-step)). |
 | *Wallet already open in another instance of the application.* | Another running process holds this wallet's lock. | Close the other instance (GUI or CLI). |
 | *The TLS certificate of host:port has changed…* | Certificate pin mismatch — renewal or interception. | Read [12.2](#122-tls-certificate-pinning-tofu--read-before-fixing-a-certificate-error) **before** resetting certificates. |
+| History shows an orange *"not anchored"* next to a transaction | The block is newer than the newest checkpoint built into this version, so its header cannot be chained to a hardcoded hash; only the Merkle proof backs it. | Normal for the most recent blocks. Update the wallet to a newer release to anchor them; for large amounts, wait until it is no longer flagged. |
 | Sync aborts, "server is not trustworthy" | A Merkle proof failed, or (mainnet) a block header did not chain up to a known checkpoint. | Switch to another server. Your local data is intact; the wallet refused the bad data. |
 | *The server host:port is not on the Palladium chain (different genesis or checkpoint)…* | The server answered, but serves another chain (or a fork) than the wallet expects. Nothing was synced from it. | Pick another server; the wallet moves on to the next known one on its own. See [12.3](#123-what-synchronization-actually-does). |
 | *Insufficient funds* with a non-zero balance | Funds are unconfirmed, under 6 confirmations, or immature coinbase; or the fee doesn't fit. | See [8.4](#84-why-insufficient-funds-can-appear-despite-a-visible-balance). Wait, or use Send all. |

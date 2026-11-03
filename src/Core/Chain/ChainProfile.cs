@@ -140,4 +140,13 @@ public sealed record ChainProfile
 
     /// <summary>Hardcoded checkpoints, updated at every release (§7.3).</summary>
     public required IReadOnlyList<Checkpoint> Checkpoints { get; init; }
+
+    /// <summary>
+    /// True for a block above the newest checkpoint of a profile that has checkpoints: its header
+    /// cannot be anchored (ADR 0040), so only the server-supplied header and the Merkle proof back
+    /// it. False for confirmed history the anchoring covers, and for profiles without any
+    /// checkpoint (testnet/regtest), where nothing is anchored by design and the notion does not apply.
+    /// </summary>
+    public bool IsAboveNewestCheckpoint(int height) =>
+        height > 0 && Checkpoints.Count > 0 && height > Checkpoints.Max(c => c.Height);
 }

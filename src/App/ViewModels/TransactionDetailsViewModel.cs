@@ -21,14 +21,14 @@ public sealed class TransactionDetailsViewModel
 
     public Loc Loc { get; }
 
-    public TransactionDetailsViewModel(TransactionDetails d, Loc loc, string unit)
+    public TransactionDetailsViewModel(TransactionDetails d, Loc loc, string unit, bool unanchored = false)
     {
         Loc = loc;
         _unit = unit;
 
         Txid = d.Txid;
         IsCoinbase = d.IsCoinbase;
-        StatusText = BuildStatus(d, loc);
+        StatusText = BuildStatus(d, loc) + (unanchored ? $" — {loc["history.unanchored"]}" : "");
         DateText = d.BlockTime is { } t
             ? t.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
             : loc["tx.mempool"];

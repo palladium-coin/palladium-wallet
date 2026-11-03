@@ -402,6 +402,10 @@
                                             <TextBlock Grid.Column="3" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
                                                        Foreground="#FCD34D" FontSize="11" Margin="6,0,0,0"
                                                        IsVisible="{Binding !Verified}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unanchored]}"
+                                                       Foreground="#FB923C" FontSize="11" Margin="6,0,0,0"
+                                                       ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unanchored.tip]}"
+                                                       IsVisible="{Binding Unanchored}"/>
                                         </Grid>
                                         <!-- Mobile: vertical card -->
                                         <StackPanel Spacing="2"
@@ -414,6 +418,9 @@
                                             <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
                                                        Foreground="#FCD34D" FontSize="11"
                                                        IsVisible="{Binding !Verified}"/>
+                                            <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unanchored]}"
+                                                       Foreground="#FB923C" FontSize="11"
+                                                       IsVisible="{Binding Unanchored}"/>
                                         </StackPanel>
                                     </Panel>
                                 </DataTemplate>

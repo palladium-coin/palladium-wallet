@@ -116,4 +116,23 @@ public class ChainProfileTests
         data[3] = (byte)header;
         return Encoders.Base58Check.EncodeData(data);
     }
+
+    [Theory]
+    [InlineData(0, false)]        // unconfirmed
+    [InlineData(1, false)]
+    [InlineData(100, false)]      // at the newest checkpoint: still anchored
+    [InlineData(101, true)]
+    [InlineData(5_000_000, true)]
+    public void IsAboveNewestCheckpoint_flags_only_heights_the_anchoring_cannot_cover(int height, bool expected)
+    {
+        var profile = ChainProfiles.Mainnet with
+        {
+            Checkpoints = [new Checkpoint(50, "00", 0), new Checkpoint(100, "00", 0)],
+        };
+        Assert.Equal(expected, profile.IsAboveNewestCheckpoint(height));
+    }
+
+    [Fact]
+    public void A_profile_without_checkpoints_never_reports_an_unanchored_height() =>
+        Assert.False((ChainProfiles.Mainnet with { Checkpoints = [] }).IsAboveNewestCheckpoint(1_000_000));
 }

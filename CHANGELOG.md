@@ -14,6 +14,11 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- History rows and the transaction detail now flag a confirmed transaction in a block above the
+  newest hardcoded checkpoint as **not anchored** (orange label with an explanatory tooltip).
+  Such a block cannot be chained to a checkpoint (ADR 0040), so only the Merkle proof against the
+  server's header backs it; the flag makes the reduced guarantee visible. Not shown on
+  testnet/regtest, which have no checkpoints. See ADR 0041.
 - Fee presets from the server: after connecting, the Send tab offers Fast, Normal and Economy
   rates from `blockchain.estimatefee` (2, 6 and 24 blocks) and shows them with the relay fee;
   Normal is preselected unless the user already typed a rate. Estimates are converted from
