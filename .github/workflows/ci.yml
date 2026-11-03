@@ -51,6 +51,7 @@ jobs:
           --logger "trx;LogFileName=test-results.trx"
           --collect:"XPlat Code Coverage"
           --results-directory TestResults
+          --blame-hang-timeout 5m --blame-hang-dump-type none
 
       # Coverage gate (Ubuntu only, one report is enough): fails the job if Core drops below the
       # thresholds. App and Cli are reported but not gated yet.

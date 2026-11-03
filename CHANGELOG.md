@@ -5,15 +5,29 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
-## [Unreleased]
+## [1.2.0] — 2026-11-03
+
+Hardens SPV verification (header anchoring fix, recent-block witness cross-check, chain identity
+check on connect), makes the network layer fail fast on dead or hostile servers, adds server fee
+presets and safer CLI password handling, and fixes a Windows-visible sync race. Also adds a
+linux-arm64 build target, CI on GitHub Actions and a much larger automated test suite.
 
 ### Documentation
+
+- Docs-as-code process: `docs/` with one ADR per feature, checked by `docs/check-docs.sh`;
+  the extended test strategy is documented.
 
 - README: the multi-network claim now states that the GUI is mainnet-only and that testnet/regtest
   (CLI only) need an explicit `--server`.
 
 ### Added
 
+- `linux-arm64` reproducible desktop build target (`./docker/build.sh linux-arm64`), cross-published
+  from the x64 image, for Raspberry Pi and other 64-bit ARM boards.
+- CI on GitHub Actions (ADR 0032): offline test suite on Ubuntu and Windows, fuzz smoke per parser
+  target and docs checks, on every push to `main` and every PR.
+- `tests/PalladiumWallet.ServerProbe`: read-only conformance/health check for real
+  Electrum/Fulcrum/ElectrumX servers, also runnable from `dotnet test` via environment variables.
 - Recent blocks (above the newest checkpoint, which cannot be anchored) are now cross-checked with
   a second server: the header at the same height must be identical. The witness is taken only from
   the hardcoded bootstrap servers, one extra pinned connection opened on demand. A disagreement at
@@ -64,6 +78,12 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- **Sync result overwritten by a stale partial snapshot.** At the end of a sync the final verified
+  snapshot was applied only after `await`ing the wallet save; a partial (not yet verified)
+  snapshot still queued on the UI thread could run during that await, replace the cache and be
+  displayed instead, leaving transactions shown as unverified after a completed sync. The run is
+  now finalised and applied before the save. Deterministically visible on Windows, where the save
+  really yields.
 - Adding a contact now validates the address for the wallet's network and rejects duplicates
   (case-insensitive); whitespace and line breaks in a pasted address are removed. Before, any
   string was saved and the error only appeared at send time. Contacts already stored with an
@@ -101,7 +121,9 @@ release and covers the full history from the initial commit.
 - Error-path tests for `Core` (empty header range during anchoring, send-all limits, `SyncCache`
   roundtrip, derivation edge cases, corrupted config), concurrency tests (in-flight cap, disposal
   under load, wallet-lock contention).
-- Coverage settings (`tests/coverage.runsettings`) and a coverage gate in CI.
+- Coverage settings (`tests/coverage.runsettings`) and a coverage gate in CI (`Core`: 95% lines /
+  88% branches); thread pool minimum raised in tests to avoid starvation; async UI test bodies are
+  now driven to completion (they previously passed vacuously).
 - Test seams: `MainWindowViewModel.UpdateCheck` and `MainWindowViewModel.ProfileOverride`
   (internal) so ViewModel tests never reach GitHub or a real indexing server.
 
