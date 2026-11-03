@@ -45,6 +45,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0039 | [Server fee estimates, relay floor and a high-fee warning](0039-server-fee-estimates-and-relay-floor.md) | Wallet | Accepted |
 | 0040 | [Anchor headers up to a checkpoint above them](0040-anchor-headers-up-to-a-checkpoint.md) | SPV | Accepted |
 | 0041 | [Flag transactions above the newest checkpoint as not anchored](0041-flag-transactions-above-the-newest-checkpoint.md) | SPV | Accepted |
+| 0042 | [Cross-check recent headers with a witness server; no bounded-PoW check](0042-cross-check-recent-headers-with-a-witness-server.md) | SPV | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

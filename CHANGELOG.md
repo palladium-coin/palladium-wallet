@@ -14,6 +14,12 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- Recent blocks (above the newest checkpoint, which cannot be anchored) are now cross-checked with
+  a second server: the header at the same height must be identical. The witness is taken only from
+  the hardcoded bootstrap servers, one extra pinned connection opened on demand. A disagreement at
+  3+ blocks of depth aborts the sync; a shallower one leaves the proof unverified until the next
+  sync (possible reorganisation); with no reachable witness behaviour is unchanged. A bounded
+  proof-of-work check was evaluated and rejected (see ADR 0042).
 - History rows and the transaction detail now flag a confirmed transaction in a block above the
   newest hardcoded checkpoint as **not anchored** (orange label with an explanatory tooltip).
   Such a block cannot be chained to a checkpoint (ADR 0040), so only the Merkle proof against the

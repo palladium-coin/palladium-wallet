@@ -585,7 +585,7 @@ checkpoint (shipped with each release) cannot be anchored this way: for those on
 proof is checked, which is why updating the wallet regularly matters. Such transactions carry an
 orange **"not anchored"** label in the History tab and in the transaction detail (hover it for
 the explanation); it disappears once you update to a release whose newest checkpoint covers
-that block. The label is informational: the transaction is still Merkle-verified. Verified data is cached in the wallet file, so later syncs only fetch what
+that block. The label is informational: the transaction is still Merkle-verified, and its block header is also compared with a second built-in server when one is reachable (if they disagree about a block that is a few blocks deep the sync stops with a "server is not trustworthy" error; for a very recent block the transaction just stays "verifying" until the next sync). Verified data is cached in the wallet file, so later syncs only fetch what
 is new — even after a restart. If a proof or the checkpoint chain does not check out, the
 sync **aborts** with an explicit "server is not trustworthy" error rather than showing you
 unverified data; switch servers.

@@ -267,6 +267,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _walletLock?.Dispose();
         _walletLock = null;
         _ = _client?.DisposeAsync().AsTask();
+        DisposeWitnesses();
         _client = null;
         _synchronizer = null;
         _autoReconnect = false;

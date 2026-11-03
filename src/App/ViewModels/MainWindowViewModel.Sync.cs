@@ -271,6 +271,8 @@ public partial class MainWindowViewModel
             if (_synchronizer is null)
             {
                 _synchronizer = new WalletSynchronizer(_account, _client!, _doc.GapLimit);
+                var primary = _client!;
+                _synchronizer.WitnessProvider = _ => ConnectWitnessesAsync(primary);
                 // Reload from disk cache: avoids re-downloading already known transactions
                 // (essential for wallets with thousands of historical txs — prevents -101).
                 var net = PalladiumNetworks.For(_account.Profile.Kind);
@@ -544,8 +546,35 @@ public partial class MainWindowViewModel
         catch { /* non-fatal: the next full save will recover */ }
     }
 
+    // Witness servers for cross-checking recent headers (ADR 0042): opened lazily by the
+    // synchronizer, only from the hardcoded bootstrap list, and closed with the primary connection.
+    private readonly List<ElectrumClient> _witnesses = [];
+
+    private async Task<IReadOnlyList<ElectrumClient>> ConnectWitnessesAsync(ElectrumClient primary)
+    {
+        var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
+        var list = await WitnessConnector.ConnectAsync(Profile, Profile.BootstrapServers,
+            primary.Host, primary.Port, UseSsl, pins);
+        lock (_witnesses)
+            _witnesses.AddRange(list);
+        return list;
+    }
+
+    private void DisposeWitnesses()
+    {
+        ElectrumClient[] toClose;
+        lock (_witnesses)
+        {
+            toClose = [.. _witnesses];
+            _witnesses.Clear();
+        }
+        foreach (var w in toClose)
+            _ = w.DisposeAsync().AsTask();
+    }
+
     private async Task DisconnectAsync()
     {
+        DisposeWitnesses();
         if (_client is { } client)
         {
             _client = null;

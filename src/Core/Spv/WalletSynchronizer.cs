@@ -64,6 +64,24 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     public event Action<string>? Progress;
 
     /// <summary>
+    /// Supplies the witness servers used to cross-check headers of blocks above the newest
+    /// checkpoint, which cannot be anchored (ADR 0042). Called at most once, lazily, the first
+    /// time such a header is needed; null or an empty result means no cross-check.
+    /// </summary>
+    public Func<CancellationToken, Task<IReadOnlyList<ElectrumClient>>>? WitnessProvider { get; set; }
+
+    /// <summary>
+    /// Below this depth (tip − height) a disagreement between servers is treated as a possible
+    /// reorganisation in progress, not as a forgery: the proof is left unverified until the next sync.
+    /// </summary>
+    public const int CrossCheckMinDepth = 3;
+
+    private readonly object _witnessLock = new();
+    private Task<IReadOnlyList<ElectrumClient>>? _witnesses;
+    private readonly ConcurrentDictionary<int, Task> _crossChecks = new();
+    private int _tipHeight;
+
+    /// <summary>
     /// Fires with a fresh, self-consistent snapshot as soon as transaction downloads finish
     /// (Merkle proofs may still be pending — see <see cref="CachedTx.Verified"/>/
     /// <see cref="CachedUtxo.Verified"/>) and again periodically as background verification
@@ -186,6 +204,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     public async Task<SyncResult> SyncOnceAsync(CancellationToken ct = default)
     {
         var tip = await client.SubscribeHeadersAsync(ct);
+        _tipHeight = tip.Height;
         Progress?.Invoke($"chain tip: {tip.Height}");
 
         // 1-2. Address scanning.
@@ -295,7 +314,13 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             // halves round-trips for this stage on mainnet, where it matters most on
             // high-latency mobile links. Falls back to an individual fetch when no
             // checkpoint covers this height (testnet/regtest today).
-            await AnchorToCheckpointAsync(height, ct);
+            try { await AnchorToCheckpointAsync(height, ct); }
+            catch (CrossCheckInconclusiveException)
+            {
+                // A recent block on which the servers disagree: maybe a reorganisation in progress.
+                // Leave this proof unverified (not spendable) and decide again at the next sync.
+                return;
+            }
             var headerHex = await _headerFetches.GetOrAdd(height, h => client.GetBlockHeaderAsync(h, ct));
             var header    = BlockHeaderInfo.Parse(headerHex);
             var proof     = await proofTask;
@@ -460,7 +485,10 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             if (c.Height >= height && (upper is not { } best || c.Height < best.Height))
                 upper = c;
         if (upper is not { } cp)
+        {
+            await CrossCheckAsync(height, ct);
             return;
+        }
 
         _anchoredDownTo.TryGetValue(cp.Height, out var anchoredFrom);
         var alreadyAnchored = _anchoredDownTo.ContainsKey(cp.Height);
@@ -486,6 +514,60 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
                     $"Broken header chain at height {height + i}: server is not trustworthy.");
 
         _anchoredDownTo.AddOrUpdate(cp.Height, height, (_, existing) => Math.Min(existing, height));
+    }
+
+    /// <summary>
+    /// For a block above the newest checkpoint: ask the witness servers for the same header and
+    /// require the same bytes (ADR 0042). A witness that is unreachable or does not know the
+    /// block is skipped; no witness at all leaves only the Merkle proof, as before. A
+    /// disagreement at a safe depth is a forgery or a fork: the sync aborts. At a shallow depth it
+    /// may be a reorganisation, so it is only inconclusive.
+    /// </summary>
+    private async Task CrossCheckAsync(int height, CancellationToken ct)
+    {
+        if (WitnessProvider is null)
+            return;
+        var check = _crossChecks.GetOrAdd(height, h => CrossCheckCoreAsync(h, ct));
+        try
+        {
+            await check;
+        }
+        catch (Exception ex) when (ex is CrossCheckInconclusiveException or OperationCanceledException)
+        {
+            _crossChecks.TryRemove(height, out _); // retry at the next sync / with another token
+            throw;
+        }
+    }
+
+    private async Task CrossCheckCoreAsync(int height, CancellationToken ct)
+    {
+        Task<IReadOnlyList<ElectrumClient>> witnessesTask;
+        lock (_witnessLock)
+            witnessesTask = _witnesses ??= WitnessProvider!(CancellationToken.None);
+        var witnesses = await witnessesTask;
+        if (witnesses.Count == 0)
+            return;
+
+        var ours = await _headerFetches.GetOrAdd(height, h => client.GetBlockHeaderAsync(h, ct));
+        foreach (var witness in witnesses)
+        {
+            string theirs;
+            try
+            {
+                theirs = await witness.GetBlockHeaderAsync(height, ct);
+            }
+            catch (Exception ex) when (ex is ElectrumServerException or IOException or TimeoutException
+                                           or InvalidOperationException or ObjectDisposedException)
+            {
+                continue; // this witness cannot say: skip it
+            }
+            if (string.Equals(theirs, ours, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (_tipHeight - height < CrossCheckMinDepth)
+                throw new CrossCheckInconclusiveException();
+            throw new SpvVerificationException(
+                $"Servers disagree about the header at height {height}: server is not trustworthy.");
+        }
     }
 
     /// <summary>
@@ -649,3 +731,6 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
 
 /// <summary>SPV verification failed: server data contradicts the proofs (§17).</summary>
 public sealed class SpvVerificationException(string message) : Exception(message);
+
+/// <summary>A recent header on which two servers disagree: retry later, do not mark the proof verified.</summary>
+internal sealed class CrossCheckInconclusiveException : Exception;

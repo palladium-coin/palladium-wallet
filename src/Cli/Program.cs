@@ -159,6 +159,13 @@ static async Task<int> Sync(string[] o)
     await using var client = await Connect(o, account.Profile);
 
     var sync = new WalletSynchronizer(account, client, doc.GapLimit);
+    IReadOnlyList<ElectrumClient> witnesses = [];
+    sync.WitnessProvider = async ct =>
+    {
+        var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(account.Profile.Kind));
+        return witnesses = await WitnessConnector.ConnectAsync(account.Profile,
+            account.Profile.BootstrapServers, client.Host, client.Port, client.UseSsl, pins, ct: ct);
+    };
     sync.Progress += msg => Console.WriteLine($"  {msg}");
     var net = PalladiumNetworks.For(account.Profile.Kind);
     sync.PreloadCaches(
@@ -169,7 +176,13 @@ static async Task<int> Sync(string[] o)
         doc.Cache?.NextChangeIndex ?? 0,
         net,
         doc.Cache?.AnchoredDownTo);
-    var result = await sync.SyncOnceAsync();
+    SyncResult result;
+    try { result = await sync.SyncOnceAsync(); }
+    finally
+    {
+        foreach (var w in witnesses)
+            await w.DisposeAsync();
+    }
 
     var (rawHex, verifiedAt, blockHeaders, anchoredDownTo) = sync.ExportCaches(net);
     doc.Cache = new SyncCache

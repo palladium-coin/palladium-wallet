@@ -852,4 +852,206 @@ public class WalletSynchronizerTests
         Assert.Equal(1, server.CallCount("blockchain.scripthash.get_history"));
         Assert.Equal(1, result.NextReceiveIndex);
     }
+
+    // ---- cross-check of recent headers against a witness server (ADR 0042) ----
+
+    private static ChainProfile ProfileWithCheckpointAt100() => Profile with
+    {
+        // Newest checkpoint at 100: a tx at height 150 has nothing to anchor to.
+        Checkpoints = [new Checkpoint(100, uint256.One.ToString(), 0x1d00ffff)],
+    };
+
+    /// <summary>A witness server answering blockchain.block.header with <paramref name="headerAt150"/>.</summary>
+    private static async Task<(FakeElectrumServer Server, ElectrumClient Client)> StartWitnessAsync(
+        Func<int, string> headerAt)
+    {
+        var server = new FakeElectrumServer();
+        server.Handle("blockchain.block.header", p => headerAt(p[0].GetInt32()));
+        var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+        return (server, client);
+    }
+
+    private static Task<IReadOnlyList<ElectrumClient>> Witnesses(params ElectrumClient[] clients) =>
+        Task.FromResult<IReadOnlyList<ElectrumClient>>(clients);
+
+    [Fact]
+    public async Task A_witness_that_agrees_lets_a_recent_proof_verify()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(_ => scenario.Headers[150]);
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+
+        var sync = new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.SpendableSats);
+        Assert.Equal(0, result.PendingVerificationSats);
+        Assert.Equal(1, witness.CallCount("blockchain.block.header"));
+    }
+
+    [Fact]
+    public async Task A_witness_that_disagrees_at_a_safe_depth_fails_the_sync()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario(); // tip 200, tx at 150: depth 50
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        var other = Scenario.SingleTxHeaderHex(uint256.One, 150); // a different header at 150
+        var (witness, witnessClient) = await StartWitnessAsync(_ => other);
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+
+        var sync = new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(() => sync.SyncOnceAsync());
+        Assert.Contains("disagree about the header at height 150", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_disagreement_at_a_shallow_depth_leaves_the_proof_unverified_without_failing()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario { TipHeight = 151 }; // tx at 150: depth 1, could be a reorg
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(_ => Scenario.SingleTxHeaderHex(uint256.One, 150));
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+
+        var sync = new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(0, result.SpendableSats);                 // not spendable
+        Assert.Equal(1_000_000, result.ConfirmedSats);         // but still reported
+        Assert.False(Assert.Single(result.History).Verified);  // and not marked verified (no caching)
+        Assert.Empty(sync.ExportCaches(Net).VerifiedAt);
+
+        // The witness now agrees (the servers converged): the next sync verifies it.
+        witness.Handle("blockchain.block.header", _ => scenario.Headers[150]);
+        var again = await sync.SyncOnceAsync();
+        Assert.Equal(0, again.PendingVerificationSats);
+        Assert.True(Assert.Single(again.History).Verified);
+    }
+
+    [Fact]
+    public async Task A_witness_that_does_not_know_the_block_or_is_gone_is_skipped()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(_ => throw new FakeElectrumError(-1, "no such block"));
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness;
+
+        var behind = await new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) }
+            .SyncOnceAsync();
+        Assert.Equal(1_000_000, behind.SpendableSats);
+
+        await witnessClient.DisposeAsync(); // a dead witness connection
+        var gone = await new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) }
+            .SyncOnceAsync();
+        Assert.Equal(1_000_000, gone.SpendableSats);
+    }
+
+    [Fact]
+    public async Task Without_witnesses_the_behaviour_is_unchanged()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var none = await new WalletSynchronizer(account, client).SyncOnceAsync();
+        var empty = await new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses() }.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, none.SpendableSats);
+        Assert.Equal(1_000_000, empty.SpendableSats);
+    }
+
+    [Fact]
+    public async Task Heights_covered_by_a_checkpoint_are_not_cross_checked()
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var chain = ChainedHeaders(100, 105, funding.GetHash(), roots: new() { [100] = funding.GetHash() });
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+        var checkpointAccount = Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(105, BlockHeaderInfo.Parse(chain[105]).Hash.ToString(), 0x1d00ffff)],
+        });
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(_ => "00");
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+
+        var sync = new WalletSynchronizer(checkpointAccount, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+        Assert.Equal(0, witness.CallCount("blockchain.block.header"));
+    }
+
+    [Fact]
+    public async Task The_witness_is_asked_once_per_height_and_the_provider_once_per_synchronizer()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        scenario.Pay(account.GetReceiveAddress(1), 500_000, height: 160);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(h => scenario.Headers[h]);
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+        var providerCalls = 0;
+
+        var sync = new WalletSynchronizer(account, client)
+        {
+            WitnessProvider = _ => { Interlocked.Increment(ref providerCalls); return Witnesses(witnessClient); },
+        };
+        var result = await sync.SyncOnceAsync();
+        await sync.SyncOnceAsync();
+
+        Assert.Equal(1_500_000, result.SpendableSats);
+        Assert.Equal(2, witness.CallCount("blockchain.block.header")); // heights 150 and 160, once each
+        Assert.Equal(1, providerCalls);
+    }
+
+    [Fact]
+    public async Task WitnessConnector_skips_the_primary_and_wrong_chain_servers_and_respects_the_maximum()
+    {
+        await using var primary = new FakeElectrumServer();
+        await using var wrongChain = new FakeElectrumServer();
+        wrongChain.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Testnet.GenesisHash });
+        await using var good1 = new FakeElectrumServer();
+        await using var good2 = new FakeElectrumServer();
+        foreach (var f in new[] { primary, good1, good2 }) // the chain check reads the tip
+            f.Handle("blockchain.headers.subscribe", _ => new { height = 10, hex = new string('0', 160) });
+        var candidates = new[] { primary, wrongChain, good1, good2 }
+            .Select(f => new ServerEndpoint(f.Host, f.Port, f.Port)).ToArray();
+        // an unreachable candidate in front too
+        candidates = [new ServerEndpoint("127.0.0.1", 1, 1), .. candidates];
+        var profile = ChainProfiles.Mainnet with { Checkpoints = [] };
+
+        var witnesses = await WitnessConnector.ConnectAsync(profile, candidates,
+            primary.Host, primary.Port, useSsl: false, pins: null, max: 1);
+        try
+        {
+            var w = Assert.Single(witnesses);
+            Assert.Equal(good1.Port, w.Port); // not the primary, not the wrong chain, not the dead port
+            Assert.Equal(0, good2.CallCount("server.version")); // stopped at the maximum
+        }
+        finally { foreach (var w in witnesses) await w.DisposeAsync(); }
+
+        var two = await WitnessConnector.ConnectAsync(profile, candidates,
+            primary.Host, primary.Port, useSsl: false, pins: null, max: 5);
+        try { Assert.Equal([good1.Port, good2.Port], two.Select(c => c.Port).ToArray()); }
+        finally { foreach (var w in two) await w.DisposeAsync(); }
+    }
 }
