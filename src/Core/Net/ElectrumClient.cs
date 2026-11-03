@@ -41,6 +41,17 @@ public sealed class ElectrumClient : IAsyncDisposable
     // concurrent requests before throttling — no single constant is right for
     // every server, so callers may raise/lower it instead of recompiling.
     public const int DefaultMaxInFlight = 32;
+
+    // Every request is bounded: a server that stops answering without closing the socket
+    // (half-open TCP, Android doze, a stalled or hostile server) would otherwise leave the
+    // caller waiting forever. The timer starts once the request holds an in-flight slot, so
+    // queueing behind the cap does not count. On expiry the request fails with
+    // TimeoutException and the whole connection is marked dead (pending requests fail,
+    // Disconnected is raised): after a missed answer the socket cannot be trusted, and a
+    // late reply is dropped because the request is no longer pending.
+    public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan DefaultHandshakeTimeout = TimeSpan.FromSeconds(10);
+    private readonly TimeSpan _requestTimeout;
     private readonly SemaphoreSlim _inFlight;
 
     private long _nextId;
@@ -54,8 +65,9 @@ public sealed class ElectrumClient : IAsyncDisposable
     public event Action<Exception?>? Disconnected;
 
     private ElectrumClient(TcpClient tcp, Stream stream, string host, int port, bool useSsl,
-        int maxInFlight)
+        int maxInFlight, TimeSpan requestTimeout)
     {
+        _requestTimeout = requestTimeout;
         _tcp = tcp;
         _stream = stream;
         Host = host;
@@ -68,7 +80,8 @@ public sealed class ElectrumClient : IAsyncDisposable
 
     public static async Task<ElectrumClient> ConnectAsync(string host, int port, bool useSsl,
         CertificatePinStore? pins = null, CancellationToken ct = default,
-        int maxInFlight = DefaultMaxInFlight)
+        int maxInFlight = DefaultMaxInFlight, TimeSpan? requestTimeout = null,
+        TimeSpan? handshakeTimeout = null)
     {
         var tcp = new TcpClient { NoDelay = true };
         try
@@ -97,8 +110,10 @@ public sealed class ElectrumClient : IAsyncDisposable
                 stream = ssl;
             }
 
-            var client = new ElectrumClient(tcp, stream, host, port, useSsl, maxInFlight);
-            await client.RequestAsync("server.version", ct, ClientName, ProtocolVersion);
+            var client = new ElectrumClient(tcp, stream, host, port, useSsl, maxInFlight,
+                requestTimeout ?? DefaultRequestTimeout);
+            await client.RequestCoreAsync(handshakeTimeout ?? DefaultHandshakeTimeout,
+                "server.version", ct, [ClientName, ProtocolVersion]);
             return client;
         }
         catch
@@ -108,8 +123,12 @@ public sealed class ElectrumClient : IAsyncDisposable
         }
     }
 
-    public async Task<JsonElement> RequestAsync(string method, CancellationToken ct = default,
-        params object?[] parameters)
+    public Task<JsonElement> RequestAsync(string method, CancellationToken ct = default,
+        params object?[] parameters) =>
+        RequestCoreAsync(_requestTimeout, method, ct, parameters);
+
+    private async Task<JsonElement> RequestCoreAsync(TimeSpan timeout, string method,
+        CancellationToken ct, object?[] parameters)
     {
         // Gate before going in-flight: beyond MaxInFlight pending requests
         // we wait for a response to free a slot, instead of flooding the server.
@@ -143,6 +162,15 @@ public sealed class ElectrumClient : IAsyncDisposable
             {
                 _pending.TryRemove(id, out _);
                 tcs.TrySetCanceled(ct);
+            });
+
+            using var timeoutCts = new CancellationTokenSource(timeout);
+            await using var timeoutRegistration = timeoutCts.Token.Register(() =>
+            {
+                if (!_pending.TryRemove(id, out _)) return;
+                tcs.TrySetException(new TimeoutException(
+                    $"No response to '{method}' from {Host}:{Port} within {timeout.TotalSeconds:0.#}s."));
+                try { _cts.Cancel(); } catch (ObjectDisposedException) { }
             });
             return await tcs.Task;
         }

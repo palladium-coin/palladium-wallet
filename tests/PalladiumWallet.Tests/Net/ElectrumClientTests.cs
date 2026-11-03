@@ -148,6 +148,86 @@ public class ElectrumClientTests
     }
 
     [Fact]
+    public async Task A_request_without_an_answer_fails_with_TimeoutException()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => FakeElectrumServer.NoResponse);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, requestTimeout: TimeSpan.FromMilliseconds(300));
+
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() => client.BannerAsync().WaitAsync(Timeout));
+        Assert.Contains("server.banner", ex.Message);
+    }
+
+    [Fact]
+    public async Task After_a_timeout_the_client_is_disconnected_and_later_requests_fail_fast()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => FakeElectrumServer.NoResponse);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, requestTimeout: TimeSpan.FromMilliseconds(300));
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += _ => disconnected.TrySetResult();
+
+        await Assert.ThrowsAsync<TimeoutException>(() => client.BannerAsync().WaitAsync(Timeout));
+        await disconnected.Task.WaitAsync(Timeout);
+
+        Assert.False(client.IsConnected);
+        await Assert.ThrowsAsync<IOException>(() => client.BannerAsync().WaitAsync(Timeout));
+    }
+
+    [Fact]
+    public async Task A_timeout_fails_the_other_pending_requests_too()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => FakeElectrumServer.NoResponse);
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, requestTimeout: TimeSpan.FromMilliseconds(300));
+
+        var a = client.BannerAsync();
+        var b = client.BannerAsync();
+        await Assert.ThrowsAnyAsync<Exception>(() => a.WaitAsync(Timeout));
+        await Assert.ThrowsAnyAsync<Exception>(() => b.WaitAsync(Timeout));
+    }
+
+    [Fact]
+    public async Task A_slow_answer_within_the_timeout_still_succeeds()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => { Thread.Sleep(200); return "hello"; });
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, requestTimeout: TimeSpan.FromSeconds(10));
+
+        Assert.Equal("hello", await client.BannerAsync().WaitAsync(Timeout));
+        Assert.True(client.IsConnected);
+    }
+
+    [Fact]
+    public async Task A_handshake_that_never_completes_times_out()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.version", _ => FakeElectrumServer.NoResponse);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => ElectrumClient.ConnectAsync(
+            server.Host, server.Port, useSsl: false,
+            handshakeTimeout: TimeSpan.FromMilliseconds(300)).WaitAsync(Timeout));
+    }
+
+    [Fact]
+    public async Task Waiting_for_an_in_flight_slot_does_not_count_towards_the_timeout()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => { Thread.Sleep(250); return "ok"; });
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port,
+            useSsl: false, maxInFlight: 1, requestTimeout: TimeSpan.FromMilliseconds(600));
+
+        // Three serial requests of ~250 ms each: the last one waits ~500 ms for the slot.
+        var all = await Task.WhenAll(client.BannerAsync(), client.BannerAsync(), client.BannerAsync())
+            .WaitAsync(Timeout);
+        Assert.All(all, b => Assert.Equal("ok", b));
+    }
+
+    [Fact]
     public async Task La_cancellazione_del_token_annulla_la_richiesta_pendente()
     {
         await using var server = new FakeElectrumServer();

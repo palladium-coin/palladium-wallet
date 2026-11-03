@@ -9,6 +9,10 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- `ElectrumClient`: every request is now bounded (30 s, 10 s for the handshake; configurable in
+  `ConnectAsync`). A server that stops answering without closing the socket made a running sync
+  wait forever; now the request fails with `TimeoutException`, the connection is marked dead
+  (`Disconnected` is raised, pending and later requests fail fast) and the app reconnects.
 - Fee rate parsing no longer depends on the system culture: on Italian/German systems `1.5`
   was read as `15` sat/vB (10x the intended fee). The Send form, the Donate form and the CLI
   `--feerate` now share `CoinAmount.TryParseFeeRate` (invariant culture, `.` or `,` as decimal

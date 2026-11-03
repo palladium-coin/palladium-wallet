@@ -37,6 +37,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0031 | [Explicitly defer multisig, Lightning, Tor and hardware wallets](0031-defer-multisig-lightning-and-hardware-wallets.md) | Scope | Accepted |
 | 0032 | [Run tests, fuzz smoke and docs checks in GitHub Actions](0032-github-actions-ci.md) | Testing | Accepted |
 | 0033 | [Test the UI layer and CLI headlessly, gate coverage](0033-test-strategy-beyond-core.md) | Testing | Accepted |
+| 0034 | [Bound every network request with a timeout](0034-bound-every-network-request.md) | Network | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.
