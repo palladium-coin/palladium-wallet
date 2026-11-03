@@ -138,7 +138,7 @@ a sync cache (balances, history, verified proofs).
 - If you set a password, the file is encrypted with **AES-256-GCM**; the key is derived with
   **PBKDF2-HMAC-SHA512, 600,000 iterations, random 16-byte salt** (fresh salt and nonce on
   every save). Tampering with the file is detected before decryption.
-- If you **decline encryption** (the wizard checkbox, or omitting `--password` in the CLI),
+- If you **decline encryption** (the wizard checkbox, or `--no-encryption` in the CLI),
   **the seed is stored in plaintext on disk**. The wizard warns you explicitly. Only do this
   on a disk you fully trust (e.g. an encrypted volume).
 - There are **no password strength requirements and no attempt limits**. An empty password is
@@ -741,8 +741,19 @@ binary); with no arguments it prints usage.
 **Shared conventions.** Default wallet file:
 `~/.palladium-wallet/<network>/wallets/default.wallet.json` — override with `--file PATH`.
 Default network mainnet — override with `--net testnet|regtest` (the CLI is the only way to
-use test networks). `--password P` both decrypts an existing file and encrypts on save;
-**omitting it on `create`/`restore` writes the seed in plaintext** (a warning is printed).
+use test networks).
+
+**Wallet password.** `create`/`restore*` ask for a password and encrypt the file; encrypted
+wallets need it for `info`/`sync`/`send`. Supply it, in order of preference, with:
+`--password-env NAME` (read from an environment variable), `--password-stdin` (first line of
+stdin), or nothing — in a terminal you are prompted (no echo, with a confirmation when
+creating); with no terminal the command fails instead of hanging. `--password P` still works
+but is unsafe (it stays in the shell history and the process list) and prints a warning.
+Only **one** of the three options may be given. A new wallet is stored **unencrypted only
+with the explicit `--no-encryption`** (a warning is printed); forgetting the password no
+longer produces a plaintext wallet. Examples:
+`printf '%s\n' "$PW" | dotnet run --project src/Cli -- restore "<words>" --password-stdin`,
+`PLM_PW=… dotnet run --project src/Cli -- info --password-env PLM_PW`.
 `--kind legacy|wrapped|segwit` selects the script type (default Native SegWit — note that
 only the literal values `legacy` and `wrapped` switch away from the default). Errors print
 to stderr and set exit code 1.
@@ -755,7 +766,7 @@ newseed  [--words 24]
 Prints a fresh mnemonic (12 words unless `--words 24`) and writes nothing to disk.
 
 ```
-create   [--words 24] [--kind K] [--net N] [--passphrase W] [--password P] [--file PATH] [--path m/...]
+create   [--words 24] [--kind K] [--net N] [--passphrase W] [--no-encryption] [--file PATH] [--path m/...]
 ```
 Generates a mnemonic, prints it once, saves the wallet, prints the file path and the first
 receive address. `--path` overrides the derivation path (advanced; you must remember it to
@@ -767,13 +778,13 @@ restore  "<mnemonic>" [same options as create]
 Restores from an existing mnemonic (quoted, words space-separated).
 
 ```
-restore-xpub <slip132-key> [--net N] [--password P] [--file PATH]
+restore-xpub <slip132-key> [--net N] [--no-encryption] [--file PATH]
 ```
 Creates a **watch-only** wallet from an xpub/ypub/zpub; the script type is inferred from
 the key prefix.
 
 ```
-info     [--net N] [--password P] [--file PATH] [--addresses]
+info     [--net N] [--file PATH] [--addresses]
 ```
 Prints the wallet's identity and, if it has ever synced, the balance breakdown (spendable /
 maturing / pending), tip height, transaction count and next receive address.
@@ -789,7 +800,7 @@ before restoring.
 ### Network commands
 
 ```
-sync     [--server host[:port]] [--ssl] [--net N] [--password P] [--file PATH]
+sync     [--server host[:port]] [--ssl] [--net N] [--file PATH]
 ```
 Connects (default: the first known server; port defaults to 50001, or 50002 with `--ssl`),
 synchronizes with full Merkle verification, persists the cache into the wallet file, and
@@ -798,7 +809,7 @@ marked as unverified.
 
 ```
 send     --to ADDRESS (--amount X | --all) [--feerate R] [--broadcast]
-         [--server ...] [--ssl] [--net N] [--password P] [--file PATH]
+         [--server ...] [--ssl] [--net N] [--file PATH]
 ```
 Builds a transaction from the synced cache (`sync` must have been run first). `--amount` is
 in **PLM**; `--all` sends everything minus the fee. `--feerate` is in sat/vB, **default 1**.

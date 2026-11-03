@@ -10,7 +10,6 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0004 | [Centralize all chain constants in a network profile](0004-centralized-network-profile.md) | Chain | Accepted |
 | 0005 | [Use NBitcoin for protocol primitives, hand-write only the rest](0005-nbitcoin-for-protocol-primitives.md) | Crypto | Accepted |
 | 0006 | [Anchor headers to hardcoded checkpoints and skip PoW validation](0006-spv-checkpoint-anchoring-without-pow.md) | SPV | Accepted |
-| 0037 | [Derive an address private key only when it is revealed](0037-derive-address-private-keys-on-reveal.md) | Security | Accepted |
 | 0007 | [Verify a Merkle proof for every confirmed transaction](0007-mandatory-merkle-verification.md) | SPV | Accepted |
 | 0008 | [Progressive verification: show early, spend only after proof](0008-progressive-verification-sync.md) | SPV | Accepted |
 | 0009 | [Hand-written Electrum JSON-RPC client with pipelining and an in-flight cap](0009-custom-electrum-client.md) | Network | Accepted |
@@ -41,6 +40,8 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0034 | [Bound every network request with a timeout](0034-bound-every-network-request.md) | Network | Accepted |
 | 0035 | [Cap the length of a server line](0035-cap-server-line-length.md) | Network | Accepted |
 | 0036 | [Verify the chain identity of a server right after connecting](0036-verify-chain-identity-on-connect.md) | SPV | Accepted |
+| 0037 | [Derive an address private key only when it is revealed](0037-derive-address-private-keys-on-reveal.md) | Security | Accepted |
+| 0038 | [CLI password sources and explicit plaintext storage](0038-cli-password-sources-and-explicit-plaintext.md) | Distribution | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

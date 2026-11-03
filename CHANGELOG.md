@@ -7,6 +7,16 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **CLI (behaviour change):** the wallet password no longer has to be a command-line argument.
+  It can come from `--password-env NAME`, `--password-stdin`, or a no-echo terminal prompt
+  (with a confirmation when creating); with no terminal and no password the command fails
+  instead of hanging. `--password P` still works but prints a warning on stderr (shell history,
+  process list). Plaintext storage is now an explicit opt-in: `create`/`restore*` without a
+  password and without `--no-encryption` fail, where before they silently wrote the seed
+  unencrypted. Scripts that relied on omitting `--password` must add `--no-encryption`.
+
 ### Security
 
 - Private keys are no longer precomputed for every address in the UI. Address rows and the

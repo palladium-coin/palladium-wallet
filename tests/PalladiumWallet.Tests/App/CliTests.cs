@@ -36,20 +36,22 @@ public sealed class CliTests : IDisposable
 
     private string WalletFile(string name = "w.json") => Path.Combine(_dir, name);
 
-    private static async Task<(int Exit, string Out, string Err)> Cli(params string[] args)
+    private static Task<(int Exit, string Out, string Err)> Cli(params string[] args) => CliWithStdin(null, args);
+
+    private static async Task<(int Exit, string Out, string Err)> CliWithStdin(string? stdin, params string[] args)
     {
         var entry = Assembly.Load("PalladiumWallet.Cli").EntryPoint
             ?? throw new InvalidOperationException("CLI has no entry point.");
-        var (oldOut, oldErr) = (Console.Out, Console.Error);
+        var (oldOut, oldErr, oldIn) = (Console.Out, Console.Error, Console.In);
         var (o, e) = (new StringWriter(), new StringWriter());
-        Console.SetOut(o); Console.SetError(e);
+        Console.SetOut(o); Console.SetError(e); Console.SetIn(new StringReader(stdin ?? ""));
         try
         {
             // The top-level-statements entry point is a synchronous Main(string[]) → int wrapper.
             var exit = await Task.Run(() => (int)entry.Invoke(null, [args])!);
             return (exit, o.ToString(), e.ToString());
         }
-        finally { Console.SetOut(oldOut); Console.SetError(oldErr); }
+        finally { Console.SetOut(oldOut); Console.SetError(oldErr); Console.SetIn(oldIn); }
     }
 
     [Fact]
@@ -86,7 +88,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task Restore_WithAnInvalidMnemonic_FailsWithoutWritingAFile()
     {
-        var (exit, _, err) = await Cli("restore", "abandon abandon abandon", "--file", WalletFile());
+        var (exit, _, err) = await Cli("restore", "abandon abandon abandon", "--no-encryption", "--file", WalletFile());
         Assert.Equal(1, exit);
         Assert.Contains("Invalid mnemonic", err);
         Assert.False(File.Exists(WalletFile()));
@@ -112,7 +114,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task Create_ShowsTheMnemonicOnce_AndWritesTheWallet()
     {
-        var (exit, output, _) = await Cli("create", "--net", "regtest", "--file", WalletFile());
+        var (exit, output, _) = await Cli("create", "--net", "regtest", "--no-encryption", "--file", WalletFile());
         Assert.Equal(0, exit);
         Assert.Contains("New mnemonic", output);
         Assert.True(File.Exists(WalletFile()));
@@ -124,15 +126,15 @@ public sealed class CliTests : IDisposable
         Assert.True(Bip39.TryParse(Mnemonic, out var m));
         var account = HdAccount.FromMnemonic(m!, null, ScriptKind.NativeSegwit, ChainProfiles.Regtest);
 
-        var (e1, _, _) = await Cli("restore-xpub", account.ToSlip132(), "--net", "regtest", "--file", WalletFile("x.json"));
+        var (e1, _, _) = await Cli("restore-xpub", account.ToSlip132(), "--net", "regtest", "--no-encryption", "--file", WalletFile("x.json"));
         Assert.Equal(0, e1);
         Assert.Contains("watch-only: True", (await Cli("info", "--net", "regtest", "--file", WalletFile("x.json"))).Out);
 
-        var (e2, _, _) = await Cli("restore-address", account.GetReceiveAddress(0).ToString(), "--net", "regtest", "--file", WalletFile("a.json"));
+        var (e2, _, _) = await Cli("restore-address", account.GetReceiveAddress(0).ToString(), "--net", "regtest", "--no-encryption", "--file", WalletFile("a.json"));
         Assert.Equal(0, e2);
         Assert.Contains("watch-only: True", (await Cli("info", "--net", "regtest", "--file", WalletFile("a.json"))).Out);
 
-        var (e3, _, err3) = await Cli("restore-xpub", "garbage", "--net", "regtest", "--file", WalletFile("bad.json"));
+        var (e3, _, err3) = await Cli("restore-xpub", "garbage", "--net", "regtest", "--no-encryption", "--file", WalletFile("bad.json"));
         Assert.Equal(1, e3);
         Assert.Contains("not recognised", err3);
     }
@@ -140,7 +142,7 @@ public sealed class CliTests : IDisposable
     [Fact]
     public async Task Send_BeforeAnySync_AsksToSyncFirst()
     {
-        await Cli("restore", Mnemonic, "--net", "regtest", "--file", WalletFile());
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
         var (exit, _, err) = await Cli("send", "--to", "x", "--all", "--net", "regtest", "--file", WalletFile());
         Assert.Equal(1, exit);
         Assert.Contains("run 'sync' first", err);
@@ -179,7 +181,7 @@ public sealed class CliTests : IDisposable
         server.Handle("blockchain.transaction.get_merkle", _ => new { block_height = 100, pos = 0, merkle = Array.Empty<string>() });
         server.Handle("blockchain.block.header", _ => Header(txid, 100));
 
-        await Cli("restore", Mnemonic, "--net", "regtest", "--file", WalletFile());
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
         var serverArg = $"{server.Host}:{server.Port}";
 
         var (syncExit, syncOut, _) = await Cli("sync", "--server", serverArg, "--net", "regtest", "--file", WalletFile());
@@ -204,7 +206,7 @@ public sealed class CliTests : IDisposable
     public async Task Sync_refuses_a_server_on_another_chain()
     {
         await using var server = new FakeElectrumServer(); // default features: mainnet genesis
-        await Cli("restore", Mnemonic, "--net", "regtest", "--file", WalletFile());
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
 
         var (exit, _, err) = await Cli("sync", "--server", $"{server.Host}:{server.Port}",
             "--net", "regtest", "--file", WalletFile());
@@ -212,5 +214,145 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, exit);
         Assert.Contains("not on the expected chain", err);
         Assert.Equal(0, server.CallCount("blockchain.headers.subscribe")); // rejected before syncing
+    }
+
+    // ---- wallet password handling (ADR 0038) ----
+
+    [Fact]
+    public async Task Create_WithoutAPasswordOrNoEncryption_FailsInsteadOfStoringPlaintext()
+    {
+        var (exit, _, err) = await Cli("restore", Mnemonic, "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("A password is required", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Fact]
+    public async Task NoEncryption_StoresPlaintextAndWarns()
+    {
+        var (exit, _, err) = await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        Assert.Contains("unencrypted", err);
+        Assert.False(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
+    }
+
+    [Fact]
+    public async Task NoEncryption_CannotBeCombinedWithAPassword()
+    {
+        var (exit, _, err) = await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption",
+            "--password-stdin", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("cannot be combined", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Fact]
+    public async Task PasswordStdin_EncryptsAndThenOpensTheWallet()
+    {
+        var (e1, _, _) = await CliWithStdin("s3cret\n", "restore", Mnemonic, "--net", "regtest",
+            "--password-stdin", "--file", WalletFile());
+        Assert.Equal(0, e1);
+        var text = File.ReadAllText(WalletFile());
+        Assert.True(EncryptedFile.IsEncrypted(text));
+        Assert.DoesNotContain("abandon", text);
+
+        var (e2, info, _) = await CliWithStdin("s3cret\n", "info", "--net", "regtest",
+            "--password-stdin", "--file", WalletFile());
+        Assert.Equal(0, e2);
+        Assert.Contains("network:  regtest", info);
+    }
+
+    [Fact]
+    public async Task PasswordEnv_EncryptsAndThenOpensTheWallet()
+    {
+        const string name = "PLM_TEST_WALLET_PW";
+        Environment.SetEnvironmentVariable(name, "from-env");
+        try
+        {
+            var (e1, _, err1) = await Cli("restore", Mnemonic, "--net", "regtest", "--password-env", name,
+                "--file", WalletFile());
+            Assert.Equal(0, e1);
+            Assert.DoesNotContain("--password is visible", err1);   // no warning for the safe route
+            Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
+
+            var (e2, _, _) = await Cli("info", "--net", "regtest", "--password-env", name, "--file", WalletFile());
+            Assert.Equal(0, e2);
+        }
+        finally { Environment.SetEnvironmentVariable(name, null); }
+    }
+
+    [Fact]
+    public async Task PasswordEnv_UnsetOrEmpty_IsAnError()
+    {
+        var (exit, _, err) = await Cli("restore", Mnemonic, "--net", "regtest",
+            "--password-env", "PLM_TEST_SURELY_UNSET", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("PLM_TEST_SURELY_UNSET", err);
+    }
+
+    [Fact]
+    public async Task EncryptedWallet_WithNoPasswordAndNoTerminal_FailsWithAClearError()
+    {
+        await CliWithStdin("pw\n", "restore", Mnemonic, "--net", "regtest", "--password-stdin", "--file", WalletFile());
+
+        var (exit, _, err) = await Cli("info", "--net", "regtest", "--file", WalletFile()); // no TTY: never prompts or hangs
+
+        Assert.Equal(1, exit);
+        Assert.Contains("encrypted", err);
+        Assert.Contains("--password-env", err);
+    }
+
+    [Fact]
+    public async Task EncryptedWallet_WithTheWrongPasswordFails()
+    {
+        await CliWithStdin("pw\n", "restore", Mnemonic, "--net", "regtest", "--password-stdin", "--file", WalletFile());
+
+        var (exit, _, err) = await CliWithStdin("nope\n", "info", "--net", "regtest", "--password-stdin", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.NotEmpty(err);
+    }
+
+    [Fact]
+    public async Task PasswordFlag_StillWorksButWarnsAndNeverEchoesThePassword()
+    {
+        var (exit, output, err) = await Cli("restore", Mnemonic, "--net", "regtest", "--password", "hunter2",
+            "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        Assert.Contains("--password is visible", err);
+        Assert.DoesNotContain("hunter2", output + err);
+        Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
+    }
+
+    [Fact]
+    public async Task MoreThanOnePasswordSource_IsRejected()
+    {
+        var (exit, _, err) = await Cli("restore", Mnemonic, "--net", "regtest", "--password", "a",
+            "--password-stdin", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("only one", err);
+    }
+
+    [Fact]
+    public async Task Sync_OfAnEncryptedWallet_SavesItBackEncrypted()
+    {
+        await CliWithStdin("pw\n", "restore", Mnemonic, "--net", "regtest", "--password-stdin", "--file", WalletFile());
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Regtest.GenesisHash });
+        server.Handle("blockchain.headers.subscribe", _ => new { height = 5, hex = new string('0', 160) });
+        server.Handle("blockchain.scripthash.subscribe", _ => null);
+        server.Handle("blockchain.scripthash.get_history", _ => Array.Empty<object>());
+
+        var (exit, _, _) = await CliWithStdin("pw\n", "sync", "--server", $"{server.Host}:{server.Port}",
+            "--net", "regtest", "--password-stdin", "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
     }
 }

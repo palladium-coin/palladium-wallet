@@ -92,7 +92,7 @@ static int RestoreXpub(string xpubText, string[] o)
         AccountXpub = account.ToSlip132(),
     };
     var path = WalletPath(o, profile);
-    WalletStore.Save(doc, path, Opt(o, "--password"));
+    WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
     Console.WriteLine($"Watch-only wallet saved to {path}");
     return 0;
 }
@@ -117,7 +117,7 @@ static int RestoreAddress(string addrsText, string[] o)
         return 1;
     }
     var path = WalletPath(o, profile);
-    WalletStore.Save(doc, path, Opt(o, "--password"));
+    WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
     Console.WriteLine($"Watch-only wallet saved to {path} ({addresses.Length} address(es), cannot sign)");
     return 0;
 }
@@ -190,7 +190,7 @@ static async Task<int> Sync(string[] o)
         BlockHeaders = blockHeaders,
         AnchoredUpTo = anchoredUpTo,
     };
-    WalletStore.Save(doc, path, Opt(o, "--password"));
+    WalletStore.Save(doc, path, CliPassword.Current);
 
     Console.WriteLine($"Balance: {CoinAmount.Format(result.SpendableSats, account.Profile.CoinUnit)} spendable"
         + (result.ImmatureSats != 0 ? $" + {CoinAmount.Format(result.ImmatureSats)} maturing (not spendable)" : "")
@@ -322,11 +322,8 @@ static int SaveWallet(string words, string[] o)
     var (doc, account) = WalletLoader.NewFromMnemonic(
         words, Opt(o, "--passphrase"), Kind(o), profile,
         Opt(o, "--path") is { } p ? KeyPath.Parse(p) : null);
-    var password = Opt(o, "--password");
-    if (string.IsNullOrEmpty(password))
-        Console.WriteLine("WARNING: no --password, the seed will be stored in plaintext on disk (§17).");
     var path = WalletPath(o, profile);
-    WalletStore.Save(doc, path, password);
+    WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
     Console.WriteLine($"Wallet saved to {path}");
     Console.WriteLine($"First address: {account.GetReceiveAddress(0)}");
     return 0;
@@ -337,7 +334,7 @@ static (WalletDocument, IWalletAccount, string) OpenWallet(string[] o)
     var path = WalletPath(o, Profile(o));
     if (!WalletStore.Exists(path))
         throw new WalletSpendException($"No wallet at {path}: use 'create' or 'restore'.");
-    var doc = WalletStore.Load(path, Opt(o, "--password"));
+    var doc = WalletStore.Load(path, CliPassword.ForOpening(o, path));
     return (doc, WalletLoader.ToAccount(doc), path);
 }
 
@@ -387,14 +384,21 @@ static int Usage()
 
         Wallet:
           create        [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest]
-                        [--passphrase W] [--password P] [--file PATH]
+                        [--passphrase W] [--no-encryption] [--file PATH]
           restore       "<mnemonic>" [same options as create] [--path m/...]
-          restore-xpub  <slip132 xpub> [--net ...] [--password P] [--file PATH]   (watch-only)
-          restore-address <addr1,addr2,...> [--net ...] [--password P] [--file PATH]   (watch-only, no keys)
-          info          [--net ...] [--password P] [--file PATH]
+          restore-xpub  <slip132 xpub> [--net ...] [--file PATH]   (watch-only)
+          restore-address <addr1,addr2,...> [--net ...] [--file PATH]   (watch-only, no keys)
+          info          [--net ...] [--file PATH]
+
+        Wallet password (create/restore ask for one, encrypted wallets need it to open):
+          --password-env NAME   read it from an environment variable
+          --password-stdin      read it from the first line of stdin
+          (neither)             prompt on the terminal, no echo; fails if there is no terminal
+          --no-encryption       create/restore only: store the wallet UNENCRYPTED (explicit opt-in)
+          --password P          still accepted but unsafe (shell history, process list): warns
 
         Network (indexing server; without --server the first known server is used):
-          sync          [--server host[:port]] [--ssl] [--net ...] [--password P] [--file PATH]
+          sync          [--server host[:port]] [--ssl] [--net ...] [--file PATH]
           send          --to ADDRESS (--amount X | --all) [--feerate sat/vB]
                         [--server host[:port]] [--ssl] [--broadcast] [...]
           servers       [--discover] [--server host[:port]] [--ssl] [--net ...]

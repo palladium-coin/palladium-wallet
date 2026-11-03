@@ -372,17 +372,21 @@ validation rule, troubleshooting) see [USERGUIDE.md](USERGUIDE.md).
 ### CLI in brief
 ```bash
 # Wallet
-dotnet run --project src/Cli -- create          [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest] [--password P]
+dotnet run --project src/Cli -- create          [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest] [--no-encryption]
 dotnet run --project src/Cli -- restore         "<mnemonic>" [...]
-dotnet run --project src/Cli -- restore-xpub    <slip132-key> [--net ...] [--password P]
-dotnet run --project src/Cli -- restore-address <addr1,addr2,...> [--net ...] [--password P]
-dotnet run --project src/Cli -- info            [--net ...] [--password P]
+dotnet run --project src/Cli -- restore-xpub    <slip132-key> [--net ...] [--no-encryption]
+dotnet run --project src/Cli -- restore-address <addr1,addr2,...> [--net ...] [--no-encryption]
+dotnet run --project src/Cli -- info            [--net ...]
 
 # Network
 dotnet run --project src/Cli -- sync     [--server host[:port]] [--ssl]
 dotnet run --project src/Cli -- send     --to ADDRESS (--amount X | --all) [--feerate sat/vB] [--broadcast]
 dotnet run --project src/Cli -- servers  [--discover]
 ```
+
+The wallet password is read from `--password-env NAME`, `--password-stdin` or a no-echo terminal
+prompt; a new wallet is stored unencrypted only with `--no-encryption` (`--password P` still works
+but is unsafe and warns). See USERGUIDE section 17.
 The default wallet file is `~/.palladium-wallet/<network>/wallets/default.wallet.json` (override with `--file`).
 Run without arguments for the full command list (also covers `newseed`, `addresses`, `reset-certs`);
 see [USERGUIDE.md §17](USERGUIDE.md#17-command-line-interface-cli) for complete flag reference.
