@@ -54,15 +54,21 @@ public abstract class VmTestBase : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }
     }
 
-    protected static async Task Eventually(Func<bool> condition, int timeoutMs = 10_000)
+    protected async Task Eventually(Func<bool> condition, int timeoutMs = 10_000, Func<string>? describe = null)
     {
         for (var waited = 0; !condition(); waited += 20)
         {
-            Assert.True(waited < timeoutMs, "condition not reached in time");
+            Assert.True(waited < timeoutMs, "condition not reached in time" + (describe is null ? "" : $": {describe()}") + $" | calls: {Calls()}");
             Dispatcher.UIThread.RunJobs();
             await Task.Delay(20);
         }
     }
+
+    private string Calls() => string.Join(", ", new[]
+    {
+        "blockchain.headers.subscribe", "blockchain.scripthash.get_history", "blockchain.transaction.get",
+        "blockchain.transaction.get_merkle", "blockchain.block.header", "blockchain.block.headers",
+    }.Select(m => $"{m.Split('.')[^1]}={_server.CallCount(m)}"));
 
     protected static void RestoreFlow(MainWindowViewModel vm, string mnemonic, string? password, string? name = null)
     {

@@ -292,7 +292,19 @@ public partial class MainWindowViewModel
                 // final, fully-verified snapshot below is saved); coin selection still refuses
                 // any UTXO whose proof isn't checked yet (CachedUtxo.Verified), so showing this
                 // early can't be exploited to spend a server-fabricated balance.
-                _synchronizer.PartialResult += r => Dispatcher.UIThread.Post(() => ApplyPartialResult(r));
+                // A partial snapshot posted to the UI thread can run after the sync's final snapshot was
+                // applied (UI thread busy, or a test that pumps jobs late): it would then overwrite the
+                // verified rows and cache with the older unverified ones. Tag it with the run it
+                // belongs to and drop it once that run has been finalised.
+                _synchronizer.PartialResult += r =>
+                {
+                    var run = Volatile.Read(ref _syncRun);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (run == Volatile.Read(ref _syncRun))
+                            ApplyPartialResult(r);
+                    });
+                };
             }
 
             do
@@ -315,9 +327,12 @@ public partial class MainWindowViewModel
                     AnchoredDownTo = anchoredDownTo,
                 };
                 FillDisplayFields(cache, result);
+                // Finalise this run BEFORE the save's await: a stale partial snapshot still queued on the
+                // UI thread would otherwise run during the save and replace _doc.Cache with unverified rows.
+                Interlocked.Increment(ref _syncRun);
                 _doc.Cache = cache;
+                ApplyCache(cache);
                 await WalletStore.SaveAsync(_doc, _walletPath!, _password);
-                ApplyCache(_doc.Cache);
                 _syncFailed = false;
                 StatusMessage = $"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
                     $"{result.History.Count} {Loc.Tr("msg.synced.detail")}";
@@ -549,9 +564,12 @@ public partial class MainWindowViewModel
     // Witness servers for cross-checking recent headers (ADR 0042): opened lazily by the
     // synchronizer, only from the hardcoded bootstrap list, and closed with the primary connection.
     private readonly List<ElectrumClient> _witnesses = [];
+    private int _syncRun; // bumped each time a sync's final snapshot is applied (see PartialResult)
 
     private async Task<IReadOnlyList<ElectrumClient>> ConnectWitnessesAsync(ElectrumClient primary)
     {
+        if (Profile.BootstrapServers.Count == 0)
+            return [];
         var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
         var list = await WitnessConnector.ConnectAsync(Profile, Profile.BootstrapServers,
             primary.Host, primary.Port, UseSsl, pins);

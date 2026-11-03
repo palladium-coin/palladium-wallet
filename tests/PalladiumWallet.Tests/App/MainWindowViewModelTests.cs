@@ -388,7 +388,8 @@ public sealed class MainWindowViewModelTests : VmTestBase
         var vm = new MainWindowViewModel();
 
         RestoreFlow(vm, Mnemonic, null, "funded");
-        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1);
+        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1 && vm.History[0].Verified,
+            describe: () => $"connected={vm.IsConnected} syncing={vm.IsSyncing} rows={vm.History.Count} verified={vm.History.FirstOrDefault()?.Verified} status='{vm.StatusMessage}'");
 
         Assert.True(vm.History[0].Verified);
         Assert.Contains("0.025", vm.BalanceText);
@@ -412,7 +413,8 @@ public sealed class MainWindowViewModelTests : VmTestBase
         };
         var vm = new MainWindowViewModel();
         RestoreFlow(vm, Mnemonic, null, "unanch");
-        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1);
+        await Eventually(() => vm.IsConnected && !vm.IsSyncing && vm.History.Count == 1 && vm.History[0].Verified,
+            describe: () => $"connected={vm.IsConnected} syncing={vm.IsSyncing} rows={vm.History.Count} verified={vm.History.FirstOrDefault()?.Verified} status='{vm.StatusMessage}'");
 
         Assert.True(vm.History[0].Verified);          // the Merkle proof checks out
         Assert.True(vm.History[0].Unanchored);        // but height 100 is above the checkpoint at 50
@@ -494,7 +496,8 @@ public sealed class MainWindowViewModelTests : VmTestBase
         _server.Handle("blockchain.estimatefee", _ => 0.00002m);
         var vm = new MainWindowViewModel();
         RestoreFlow(vm, Mnemonic, null, "fees4");
-        await Eventually(() => vm.HasFeeEstimates && !vm.IsSyncing && vm.History.Count == 1);
+        await Eventually(() => vm.HasFeeEstimates && !vm.IsSyncing && vm.History.Count == 1 && vm.History[0].Verified,
+            describe: () => $"connected={vm.IsConnected} syncing={vm.IsSyncing} rows={vm.History.Count} verified={vm.History.FirstOrDefault()?.Verified} status='{vm.StatusMessage}'");
 
         vm.SendTo = account.GetReceiveAddress(7).ToString();
         vm.SendAmount = "0.1";
@@ -522,7 +525,8 @@ public sealed class MainWindowViewModelTests : VmTestBase
         WireFundedChain(account.GetReceiveAddress(0), 50_000_000);
         var vm = new MainWindowViewModel();
         RestoreFlow(vm, Mnemonic, null, "sender");
-        await Eventually(() => !vm.IsSyncing && vm.History.Count == 1);
+        await Eventually(() => !vm.IsSyncing && vm.History.Count == 1 && vm.History[0].Verified,
+            describe: () => $"connected={vm.IsConnected} syncing={vm.IsSyncing} rows={vm.History.Count} verified={vm.History.FirstOrDefault()?.Verified} status='{vm.StatusMessage}'");
         // Coins need MinConfirmations (tip 200, height 100 → 101 confirmations): spendable.
 
         vm.SendTo = account.GetReceiveAddress(7).ToString();

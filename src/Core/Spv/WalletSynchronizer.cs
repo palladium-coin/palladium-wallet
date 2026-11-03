@@ -543,8 +543,16 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     {
         Task<IReadOnlyList<ElectrumClient>> witnessesTask;
         lock (_witnessLock)
-            witnessesTask = _witnesses ??= WitnessProvider!(CancellationToken.None);
-        var witnesses = await witnessesTask;
+            witnessesTask = _witnesses ??= Task.Run(() => WitnessProvider!(CancellationToken.None));
+        IReadOnlyList<ElectrumClient> witnesses;
+        try
+        {
+            witnesses = await witnessesTask;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return; // best effort: a failure to open witnesses leaves only the Merkle proof, as before
+        }
         if (witnesses.Count == 0)
             return;
 

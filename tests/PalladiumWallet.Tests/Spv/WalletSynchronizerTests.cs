@@ -938,6 +938,25 @@ public class WalletSynchronizerTests
     }
 
     [Fact]
+    public async Task A_witness_provider_that_throws_leaves_only_the_merkle_proof()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var sync = new WalletSynchronizer(account, client)
+        {
+            WitnessProvider = _ => throw new IOException("cannot open witnesses"),
+        };
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.SpendableSats);
+        Assert.Equal(0, result.PendingVerificationSats);
+    }
+
+    [Fact]
     public async Task A_witness_that_does_not_know_the_block_or_is_gone_is_skipped()
     {
         var account = Account(ProfileWithCheckpointAt100());
