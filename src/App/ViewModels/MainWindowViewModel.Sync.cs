@@ -153,8 +153,9 @@ public partial class MainWindowViewModel
             if (seen.Add(key))
                 yield return (selectedHost, selectedPort);
         }
-        // 2. Other known servers, in list order.
-        foreach (var s in KnownServers)
+        // 2. The shipped (bootstrap) servers, in list order. Servers discovered from peers are
+        // never tried automatically: someone else named them (see ServerRegistry.Trusted).
+        foreach (var s in Registry.Trusted)
         {
             var p = s.PortFor(UseSsl);
             var key = $"{s.Host}:{p}";

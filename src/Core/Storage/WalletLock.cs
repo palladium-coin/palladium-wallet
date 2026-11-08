@@ -7,14 +7,9 @@ namespace PalladiumWallet.Core.Storage;
 /// </summary>
 public sealed class WalletLock : IDisposable
 {
-    private readonly string _lockPath;
     private FileStream? _stream;
 
-    private WalletLock(string lockPath, FileStream stream)
-    {
-        _lockPath = lockPath;
-        _stream = stream;
-    }
+    private WalletLock(FileStream stream) => _stream = stream;
 
     /// <summary>
     /// Tries to acquire an exclusive lock for <paramref name="walletPath"/>.
@@ -26,12 +21,17 @@ public sealed class WalletLock : IDisposable
         var lockPath = walletPath + ".lock";
         try
         {
+            // DeleteOnClose: the file disappears together with the lock, in one step. Deleting it
+            // after releasing the lock left a window in which another process could take the lock
+            // on the old file while a third created and locked a new one at the same path.
             var stream = new FileStream(
                 lockPath,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
-                FileShare.None);
-            return new WalletLock(lockPath, stream);
+                FileShare.None,
+                bufferSize: 1,
+                FileOptions.DeleteOnClose);
+            return new WalletLock(stream);
         }
         catch (IOException)
         {
@@ -43,6 +43,5 @@ public sealed class WalletLock : IDisposable
     {
         _stream?.Dispose();
         _stream = null;
-        try { File.Delete(_lockPath); } catch { }
     }
 }

@@ -82,6 +82,7 @@ a sync, never a partial one, so no unverified data survives a restart.
 - Authentication: GCM tag (16 bytes) — any tampering is detected before decryption
 - A malformed container (broken JSON, missing fields, bad base64, wrong nonce/tag size) always fails with a typed `InvalidDataException`, never a raw parser exception — the decrypt path is fuzz-tested (`tests/PalladiumWallet.Fuzz`)
 - The user can explicitly opt out of encryption (UI shows a warning); the `WalletStore.Save` API accepts `null` password only when the caller has confirmed user intent
+- The wallet file is written owner-only (0600 on Unix, whether or not it is encrypted), flushed to disk and renamed over the old one, so a crash leaves the old file or the new one, never a partial one. The single-instance lock file is removed in the same step that releases the lock (ADR 0044)
 
 ---
 
@@ -90,6 +91,10 @@ a sync, never a partial one, so no unverified data survives a restart.
 Connections to the indexing server use TOFU (Trust On First Use): the server's TLS certificate is pinned on first connection and stored in `server-certs.json`. A certificate change triggers a hard error (`CertificatePinMismatchException`) requiring explicit reset by the user. This prevents silent MITM substitution after first connection.
 
 ---
+
+## Servers announced by peers
+
+Servers learned through peer discovery are listed and can be selected by the user, but the wallet never connects to one on its own: the automatic fallback after a connection failure uses only the servers shipped in the profile's bootstrap list, and peers naming `localhost`, private, link-local or otherwise non-public addresses are dropped (ADR 0044). A hostile server therefore cannot steer the wallet to servers of its choosing or have it probe the user's own network.
 
 ## Backup
 

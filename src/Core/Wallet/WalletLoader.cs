@@ -35,7 +35,7 @@ public static class WalletLoader
             if (!Slip132.TryDecodePrivate(xprvStr, profile, out var xprv, out _))
                 throw new InvalidDataException("Xprv in wallet file is invalid for this network.");
             var path = doc.AccountPath is { Length: > 0 } p ? KeyPath.Parse(p) : null;
-            return HdAccount.FromAccountXprv(xprv!, kind, profile, path);
+            return HdAccount.FromAccountXprv(xprv!, kind, profile, path, HdAccount.ParseFingerprint(doc.MasterFingerprint));
         }
 
         // 3. Imported WIF keys
@@ -65,7 +65,7 @@ public static class WalletLoader
         if (!Slip132.TryDecodePublic(doc.AccountXpub, profile, out var xpub, out _))
             throw new InvalidDataException("Xpub in wallet file is invalid for this network.");
         var accountPath = doc.AccountPath is { Length: > 0 } ap ? KeyPath.Parse(ap) : null;
-        return HdAccount.FromAccountXpub(xpub!, kind, profile, accountPath);
+        return HdAccount.FromAccountXpub(xpub!, kind, profile, accountPath, HdAccount.ParseFingerprint(doc.MasterFingerprint));
     }
 
     /// <summary>Creates the document for a new seed wallet.</summary>
@@ -98,12 +98,13 @@ public static class WalletLoader
     /// it for ambiguous prefixes (xpub can be Legacy or Taproot).
     /// </summary>
     public static (WalletDocument Doc, HdAccount Account) NewFromXpub(
-        string slip132, ChainProfile profile, ScriptKind? kindOverride = null)
+        string slip132, ChainProfile profile, ScriptKind? kindOverride = null,
+        KeyPath? accountPath = null, HDFingerprint? masterFingerprint = null)
     {
         if (!Slip132.TryDecodePublic(slip132.Trim(), profile, out var xpub, out var detectedKind))
             throw new InvalidDataException("Extended public key is invalid or unrecognised for this network.");
         var kind = kindOverride ?? detectedKind;
-        var account = HdAccount.FromAccountXpub(xpub!, kind, profile);
+        var account = HdAccount.FromAccountXpub(xpub!, kind, profile, accountPath, masterFingerprint);
 
         var doc = new WalletDocument
         {
@@ -111,6 +112,8 @@ public static class WalletLoader
             ScriptKind = kind.ToString(),
             AccountPath = account.AccountPath.ToString(),
             AccountXpub = slip132.Trim(),
+            MasterFingerprint = masterFingerprint is { } fp
+                ? Convert.ToHexString(fp.ToBytes()).ToLowerInvariant() : null,
         };
         return (doc, account);
     }

@@ -545,10 +545,11 @@ server…*, or menu *Network* on desktop). Fields:
 - **Known servers** list — click an entry to select it. The wallet ships with four bootstrap
   mainnet servers and remembers any servers learned via discovery.
 - **Discover servers (peers)** — asks the connected server for its known peers and adds new
-  ones to the list.
+  ones to the list (hosts that are not public — `localhost`, private networks — are skipped).
+  A discovered server is never used automatically: pick it yourself if you want it.
 
 Connection behavior: the wallet tries your selected server first, then walks the rest of
-the known list until one answers. The last working server is remembered and reused at next
+the shipped (bootstrap) servers until one answers. The last working server is remembered and reused at next
 launch. A 20-second keep-alive ping detects drops and reconnects automatically;
 server push notifications trigger instant re-syncs when a new block or a relevant
 transaction appears (*"Real-time updates active"*).
@@ -794,9 +795,13 @@ Restores from an existing mnemonic (quoted, words space-separated).
 
 ```
 restore-xpub <slip132-key> [--net N] [--no-encryption] [--file PATH]
+             [--fingerprint HEX8 --path m/...]
 ```
 Creates a **watch-only** wallet from an xpub/ypub/zpub; the script type is inferred from
-the key prefix.
+the key prefix. To have the PSBTs it exports recognised by an external or hardware signer,
+pass the **master key fingerprint** (8 hex digits) and the **account path** the key came
+from (for example `--fingerprint 73c5da0a --path "m/84'/746'/0'"`). Without a fingerprint
+the PSBT carries no BIP32 origin information.
 
 ```
 info     [--net N] [--file PATH] [--addresses]

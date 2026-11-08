@@ -9,10 +9,18 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- The wallet file is written owner-only (0600 on Unix) and flushed to disk before the rename; before, a wallet saved without a password was readable by other local users, and overlapping `Save`/`SaveAsync` calls shared one temporary file (ADR 0044).
+- The single-instance wallet lock is released and its file removed in one step (`DeleteOnClose`); before, a window after release let two processes own the same wallet.
+- Servers announced by peers are no longer tried automatically as fallbacks, and peers naming `localhost` or private addresses, or ports outside 1–65535, are dropped (ADR 0044).
+
 - Imported-key wallets (WIF or plain addresses) fetched their address histories concurrently into a shared dictionary, which could silently lose history entries; the results are now gathered before being stored.
 - Importing the same key or address twice crashed the synchronisation (duplicate scriptPubKey) and listed it twice; duplicates are now collapsed on import and when loading an existing wallet file, keeping the copy that has the private key.
 - A transaction reported at different heights by different addresses (a block arriving between the per-address queries) now takes the highest one instead of whichever was read last.
 - Wrapped segwit (P2SH-P2WPKH) wallets could not build a spend: the redeem script is now attached to each input coin, so they can send, and watch-only ones can produce a PSBT.
+
+### Added
+
+- Watch-only PSBTs now carry the BIP32 origin of the inputs, of the change output and of the account xpub when the master fingerprint is known, so an external signer can match its keys; `restore-xpub` accepts `--fingerprint` and `--path` (ADR 0044).
 
 ### Security
 

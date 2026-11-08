@@ -83,13 +83,32 @@ static int RestoreXpub(string xpubText, string[] o)
         Console.Error.WriteLine("Extended key not recognised for this network.");
         return 1;
     }
-    var account = HdAccount.FromAccountXpub(xpub!, kind, profile);
+    // The origin of the key (master fingerprint + account path) is not in the xpub: it must be
+    // supplied for the PSBT to carry BIP32 origin info that an external signer can match.
+    HDFingerprint? fingerprint = null;
+    if (Opt(o, "--fingerprint") is { } fpText)
+    {
+        fingerprint = HdAccount.ParseFingerprint(fpText.Trim().ToLowerInvariant());
+        if (fingerprint is null)
+        {
+            Console.Error.WriteLine("--fingerprint must be 8 hex digits (the master key fingerprint).");
+            return 1;
+        }
+    }
+    KeyPath? accountPath = null;
+    if (Opt(o, "--path") is { } pathText && !DerivationPaths.TryParse(pathText, out accountPath))
+    {
+        Console.Error.WriteLine("--path is not a valid derivation path (e.g. m/84'/746'/0').");
+        return 1;
+    }
+    var account = HdAccount.FromAccountXpub(xpub!, kind, profile, accountPath, fingerprint);
     var doc = new WalletDocument
     {
         Network = profile.NetName,
         ScriptKind = kind.ToString(),
         AccountPath = account.AccountPath.ToString(),
         AccountXpub = account.ToSlip132(),
+        MasterFingerprint = fingerprint is { } fp ? Convert.ToHexString(fp.ToBytes()).ToLowerInvariant() : null,
     };
     var path = WalletPath(o, profile);
     WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
@@ -399,7 +418,7 @@ static int Usage()
           create        [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest]
                         [--passphrase W] [--no-encryption] [--file PATH]
           restore       "<mnemonic>" [same options as create] [--path m/...]
-          restore-xpub  <slip132 xpub> [--net ...] [--file PATH]   (watch-only)
+          restore-xpub  <slip132 xpub> [--net ...] [--file PATH] [--fingerprint HEX8 --path m/...]   (watch-only)
           restore-address <addr1,addr2,...> [--net ...] [--file PATH]   (watch-only, no keys)
           info          [--net ...] [--file PATH]
 

@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace PalladiumWallet.Core.Storage;
 
 /// <summary>
@@ -33,10 +35,30 @@ public static class WalletStore
         if (!string.IsNullOrEmpty(password))
             content = EncryptedFile.Encrypt(content, password);
 
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, content);
-        File.Move(tmp, path, overwrite: true);
+        // One save at a time in this process (Save and SaveAsync share the temp name); other
+        // processes are kept out by WalletLock. The temp file is created owner-only (0600 on
+        // Unix: a plaintext wallet must not be readable by other users) and flushed to disk
+        // before the rename, so a power loss leaves the old file or the new one, never an empty one.
+        lock (SaveLock)
+        {
+            var tmp = path + ".tmp";
+            File.Delete(tmp); // a leftover from a crash could have looser permissions
+            using (var stream = new FileStream(tmp, new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            }))
+            {
+                stream.Write(new UTF8Encoding(false).GetBytes(content));
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(tmp, path, overwrite: true);
+        }
     }
+
+    private static readonly object SaveLock = new();
 
     /// <summary>
     /// Same as <see cref="Save"/> but with the JSON serialization and disk write off the

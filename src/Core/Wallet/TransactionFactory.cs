@@ -228,7 +228,7 @@ public sealed class TransactionFactory(IWalletAccount account)
             Fee = GetFee(tx, coins),
             FeeRate = feeRate,
             Signed = !account.IsWatchOnly,
-            Psbt = builder.BuildPSBT(sign: !account.IsWatchOnly),
+            Psbt = WithOrigins(builder.BuildPSBT(sign: !account.IsWatchOnly), selectedUtxos, changeIndex),
         };
     }
 
@@ -246,6 +246,32 @@ public sealed class TransactionFactory(IWalletAccount account)
             && account.GetPublicKey(u.IsChange, u.AddressIndex) is { } key
             ? coin.ToScriptCoin(key.WitHash.ScriptPubKey)
             : coin;
+    }
+
+    /// <summary>
+    /// Adds the BIP32 origin of every key the transaction involves (inputs and the change output),
+    /// plus the account xpub, so an external signer can recognise its keys and the change. Only when
+    /// the master fingerprint is really known: a made-up origin would mislead a signer, so a wallet
+    /// imported from a bare xpub (no fingerprint given) leaves the PSBT without it.
+    /// </summary>
+    private PSBT WithOrigins(PSBT psbt, IReadOnlyList<CachedUtxo> inputs, int changeIndex)
+    {
+        if (account is not HdAccount { HasKnownOrigin: true } hd)
+            return psbt;
+
+        var wanted = inputs.Select(u => (u.IsChange, Index: u.AddressIndex))
+            .Append((IsChange: true, Index: changeIndex))
+            .Distinct();
+        foreach (var (isChange, index) in wanted)
+        {
+            var key = hd.GetPublicKey(isChange, index);
+            if (key is null) continue;
+            var path = hd.AccountPath.Derive(DerivationPaths.AddressSubPath(isChange, index));
+            psbt.AddKeyPath(key, new RootedKeyPath(hd.MasterFingerprint, path),
+                hd.GetAddress(isChange, index).ScriptPubKey);
+        }
+        psbt.GlobalXPubs[hd.AccountXpub.GetWif(Network)] = new RootedKeyPath(hd.MasterFingerprint, hd.AccountPath);
+        return psbt;
     }
 
     private static string BuildTooLargeMessage(

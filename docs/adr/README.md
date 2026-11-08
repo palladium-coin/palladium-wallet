@@ -47,6 +47,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0041 | [Flag transactions above the newest checkpoint as not anchored](0041-flag-transactions-above-the-newest-checkpoint.md) | SPV | Accepted |
 | 0042 | [Cross-check recent headers with a witness server; no bounded-PoW check](0042-cross-check-recent-headers-with-a-witness-server.md) | SPV | Accepted |
 | 0043 | [Bind transactions to their txid; persist only anchored headers; validate header ranges](0043-bind-transactions-to-txid-and-keep-only-anchored-headers.md) | SPV | Accepted |
+| 0044 | [Harden the wallet file and lock, carry BIP32 origin in the PSBT, distrust announced servers](0044-harden-wallet-file-lock-psbt-origin-and-discovered-servers.md) | Wallet | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.
