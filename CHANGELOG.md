@@ -9,6 +9,9 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- Imported-key wallets (WIF or plain addresses) fetched their address histories concurrently into a shared dictionary, which could silently lose history entries; the results are now gathered before being stored.
+- Importing the same key or address twice crashed the synchronisation (duplicate scriptPubKey) and listed it twice; duplicates are now collapsed on import and when loading an existing wallet file, keeping the copy that has the private key.
+- A transaction reported at different heights by different addresses (a block arriving between the per-address queries) now takes the highest one instead of whichever was read last.
 - Wrapped segwit (P2SH-P2WPKH) wallets could not build a spend: the redeem script is now attached to each input coin, so they can send, and watch-only ones can produce a PSBT.
 
 ### Security

@@ -1078,6 +1078,74 @@ public class WalletSynchronizerTests
         Assert.Equal(1, result.NextReceiveIndex);
     }
 
+    [Fact]
+    public async Task A_fixed_address_account_with_many_addresses_keeps_every_history()
+    {
+        // The per-address histories are fetched concurrently: none may be lost to a shared write.
+        var keys = Enumerable.Range(0, 300).Select(_ => new Key()).ToList();
+        var entries = keys.Select(k => (k.PubKey.GetAddress(ScriptPubKeyType.Segwit, Net), (Key?)k)).ToList();
+        var account = new ImportedKeyAccount(entries, ScriptKind.NativeSegwit, Profile);
+        var scenario = new Scenario { TipHeight = 1000 };
+        for (var i = 0; i < entries.Count; i++) // one tx per block: the fake has one tx per header
+            scenario.Pay(entries[i].Item1, 1_000, height: 150 + i);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var result = await new WalletSynchronizer(account, client).SyncOnceAsync();
+
+        Assert.Equal(300, result.History.Count);
+        Assert.Equal(300_000, result.ConfirmedSats);
+        Assert.Equal(300, result.AddressRows.Count(a => a.TxCount == 1));
+    }
+
+    [Fact]
+    public async Task A_wallet_file_listing_the_same_key_twice_syncs_and_counts_it_once()
+    {
+        var key = new Key();
+        var wif = key.GetWif(Net).ToString();
+        var doc = new PalladiumWallet.Core.Storage.WalletDocument
+        {
+            Network = Profile.NetName, ScriptKind = nameof(ScriptKind.NativeSegwit),
+            WifKeys = [wif, wif],
+        };
+        var account = PalladiumWallet.Core.Wallet.WalletLoader.ToAccount(doc);
+        var address = key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Net);
+        var scenario = new Scenario();
+        scenario.Pay(address, 750_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var result = await new WalletSynchronizer(account, client).SyncOnceAsync();
+
+        Assert.Equal(750_000, result.ConfirmedSats);
+        Assert.Single(result.Addresses);
+        Assert.Equal(1, server.CallCount("blockchain.scripthash.get_history"));
+    }
+
+    [Fact]
+    public async Task A_transaction_reported_at_different_heights_takes_the_highest()
+    {
+        // Two addresses of the wallet touched by one tx; a block arrived between the two queries,
+        // so the first address says confirmed and the later one says mempool.
+        var account = Account();
+        var scenario = new Scenario();
+        var tx = Net.CreateTransaction();
+        tx.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        tx.Outputs.Add(Money.Satoshis(600_000), account.GetReceiveAddress(0));
+        tx.Outputs.Add(Money.Satoshis(400_000), account.GetReceiveAddress(1));
+        scenario.Register(tx, 150, account.GetReceiveAddress(0));
+        scenario.Register(tx, 0, account.GetReceiveAddress(1));
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var result = await new WalletSynchronizer(account, client).SyncOnceAsync();
+
+        var entry = Assert.Single(result.History);
+        Assert.Equal(150, entry.Height);
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+        Assert.Equal(0, result.UnconfirmedSats);
+    }
+
     // ---- cross-check of recent headers against a witness server (ADR 0042) ----
 
     private static ChainProfile ProfileWithCheckpointAt100() => Profile with

@@ -25,7 +25,23 @@ public sealed class ImportedKeyAccount : IWalletAccount
     {
         if (entries.Count == 0)
             throw new ArgumentException("At least one address is required.", nameof(entries));
-        _entries = [.. entries];
+        // One entry per address: the same key or address imported twice would otherwise be tracked
+        // twice (duplicate rows, and a scriptPubKey collision in the synchroniser). When one copy
+        // has the private key and the other does not, the spendable one is kept.
+        var unique = new List<(BitcoinAddress Address, Key? PrivateKey)>();
+        var position = new Dictionary<Script, int>();
+        foreach (var entry in entries)
+        {
+            if (position.TryGetValue(entry.Address.ScriptPubKey, out var at))
+            {
+                if (unique[at].PrivateKey is null && entry.PrivateKey is not null)
+                    unique[at] = entry;
+                continue;
+            }
+            position[entry.Address.ScriptPubKey] = unique.Count;
+            unique.Add(entry);
+        }
+        _entries = [.. unique];
         Kind = kind;
         Profile = profile;
     }

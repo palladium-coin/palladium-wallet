@@ -245,12 +245,16 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             nextReceive = tracked.Count(t => !t.IsChange);
             nextChange  = 0;
 
-            await Task.WhenAll(tracked.Select(t => RetryOnBusyAsync(async () =>
-            {
-                var h = await client.GetHistoryAsync(t.ScriptHash, ct);
-                if (h.Count > 0) historyByAddress[t.ScriptHash] = h;
-            }, ct)).Concat(tracked.Select(t =>
-                RetryOnBusyAsync(() => client.SubscribeScripthashAsync(t.ScriptHash, ct), ct))));
+            // The requests run concurrently and their continuations on pool threads: results are
+            // gathered by Task.WhenAll and stored here, never written to the dictionary from inside.
+            var histories = Task.WhenAll(tracked.Select(t => RetryOnBusyAsync(
+                () => client.GetHistoryAsync(t.ScriptHash, ct), ct)));
+            var subscriptions = Task.WhenAll(tracked.Select(t => RetryOnBusyAsync(
+                () => client.SubscribeScripthashAsync(t.ScriptHash, ct), ct)));
+            await Task.WhenAll(histories, subscriptions);
+            for (var i = 0; i < tracked.Count; i++)
+                if (histories.Result[i].Count > 0)
+                    historyByAddress[tracked[i].ScriptHash] = histories.Result[i];
         }
         else
         {
@@ -277,10 +281,14 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
                     RetryOnBusyAsync(() => client.SubscribeScripthashAsync(t.ScriptHash, ct), ct)));
         }
 
-        // 3. Merged history (txid → highest reported height).
+        // 3. Merged history (txid → highest reported height). The per-address queries are not
+        // atomic: a block arriving between two of them can leave one address saying mempool (0)
+        // and another saying confirmed, so the highest value wins, not the last one read.
         var txHeights = new Dictionary<string, int>();
         foreach (var item in historyByAddress.Values.SelectMany(h => h))
-            txHeights[item.TxHash] = item.Height;
+            txHeights[item.TxHash] = txHeights.TryGetValue(item.TxHash, out var known)
+                ? Math.Max(known, item.Height)
+                : item.Height;
 
         // 4. Download missing transactions — needed to compute amounts/UTXOs locally.
         // Merkle-proof verification (5) is deliberately NOT awaited together with this: on a

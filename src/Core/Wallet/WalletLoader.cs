@@ -165,6 +165,8 @@ public static class WalletLoader
             }
             var addr = secret.PrivateKey.PubKey
                 .GetAddress(DerivationPaths.ScriptPubKeyTypeFor(kind), network);
+            if (entries.Any(e => e.Item1.ScriptPubKey == addr.ScriptPubKey))
+                continue; // same key twice: tracked and stored once
             entries.Add((addr, secret.PrivateKey));
             wifStrings.Add(raw.Trim());
         }
@@ -207,6 +209,8 @@ public static class WalletLoader
             {
                 throw new InvalidDataException($"Invalid address: {ex.Message}");
             }
+            if (entries.Any(e => e.Item1.ScriptPubKey == addr.ScriptPubKey))
+                continue; // same address twice: tracked and stored once
             entries.Add((addr, null));
             addressStrings.Add(raw.Trim());
         }
