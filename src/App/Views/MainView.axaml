@@ -192,6 +192,12 @@
                     <TextBlock Text="{Binding Loc[wiz.importxkey.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.placeholder]}"
                              Text="{Binding ImportXkeyInput}" AcceptsReturn="False"/>
+                    <TextBlock Text="{Binding Loc[wiz.importxkey.origin.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.fingerprint.placeholder]}"
+                             Text="{Binding ImportFingerprintInput}" AcceptsReturn="False"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.path.placeholder]}"
+                             Text="{Binding ImportPathInput}" AcceptsReturn="False"/>
                     <TextBlock Text="{Binding ImportXkeyDetectedKind}"
                                IsVisible="{Binding ImportXkeyDetectedKind, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Foreground="{DynamicResource SuccessBrush}" FontSize="12"/>

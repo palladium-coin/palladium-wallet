@@ -131,5 +131,5 @@ public static class EncryptedFile
 /// <summary>Wrong password (or tampered wallet file: the GCM tag does not distinguish the two cases).</summary>
 public sealed class WrongPasswordException : Exception
 {
-    public WrongPasswordException() : base("Password errata o file wallet danneggiato.") { }
+    public WrongPasswordException() : base("Wrong password, or the wallet file is damaged.") { }
 }

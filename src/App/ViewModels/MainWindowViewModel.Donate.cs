@@ -60,7 +60,9 @@ public partial class MainWindowViewModel
                 _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, sendAll: false);
 
-            DonatePreview = $"txid {_pendingDonate.Txid[..16]}… · " +
+            DonatePreview = (_pendingDonate.TxidIsFinal
+                    ? $"txid {_pendingDonate.Txid[..16]}… · "
+                    : Loc.Tr("msg.txid.notfinal") + " · ") +
                 $"fee {Fmt(_pendingDonate.Fee.Satoshi)} " +
                 $"({_pendingDonate.Transaction.GetVirtualSize()} vB)" +
                 (_pendingDonate.Signed ? "" : " · watch-only") +
@@ -83,7 +85,7 @@ public partial class MainWindowViewModel
             return;
         try
         {
-            var txid = await _client.BroadcastAsync(_pendingDonate.ToHex());
+            var txid = await _client.BroadcastVerifiedAsync(_pendingDonate.ToHex(), _pendingDonate.Txid);
             DonatePreview = $"{Loc.Tr("msg.donate.thanks")}: {txid}";
             DonateAmount = "";
             _pendingDonate = null;
@@ -92,7 +94,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            DonatePreview = $"{Loc.Tr("msg.broadcast.error")}: {ex.Message}";
+            DonatePreview = $"{Loc.Tr("msg.broadcast.error")}: {DescribeError(ex)}";
         }
     }
 

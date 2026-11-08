@@ -121,7 +121,7 @@ The coin type in the derivation path is **746** on mainnet (1 on testnet/regtest
 |---|---|---|---|
 | HD (BIP39 seed) | Create new / Restore from seed | Yes | The normal case |
 | HD (imported xprv) | Import extended key (xprv/yprv/zprv) | Yes | Full account key, no seed words |
-| Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing |
+| Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing (`sign-psbt` signs it on the machine with the seed) |
 | Imported WIF keys | Import WIF key(s) | Yes | Fixed address list, **no HD derivation and no change chain — change always returns to the first imported address** (this links your coins together; prefer an HD wallet for privacy) |
 
 The extended-key format is **SLIP-132**: `xpub`/`xprv` (Legacy and Taproot), `ypub`/`yprv`
@@ -444,6 +444,15 @@ watch-only + offline-signing workflow, use the **CLI**, whose `send` command pri
 ([section 17](#17-command-line-interface-cli)). Sign that PSBT on the offline machine with
 software of your choice, then broadcast the finalized transaction.
 
+The CLI can also be the offline signer: on the machine that holds the seed, run
+`sign-psbt <psbt-base64> --file seed-wallet.json` (see [section 17](#17-command-line-interface-cli)).
+It prints the inputs, outputs (your own change marked) and fee, signs, and, when every input
+is signed, prints the final transaction; with `--broadcast --server …` it also transmits it.
+For an external or hardware signer to recognise its keys in the PSBT, import the xpub with
+its **master fingerprint** and **account path** (the import step of the GUI and
+`restore-xpub --fingerprint … --path …` both take them). Note that for legacy and
+P2SH-wrapped inputs the txid shown before signing is not the final one; for native segwit it is.
+
 ### 8.6 The Donate tab (Help → Donate)
 
 The Help overlay includes a donation form (developer address
@@ -743,7 +752,7 @@ A condensed version of the project's published threat model (`SECURITY.md`).
 
 **Honest limitations of this version** (also listed in [section 1](#1-what-palladium-wallet-is-and-is-not)):
 single server connection (no pooling), no coin control, no fee estimation, no RBF bumping,
-no hardware wallets, no Tor, GUI mainnet-only, and PSBT export only via the CLI.
+no hardware wallets, no Tor, GUI mainnet-only, and PSBT export and signing only via the CLI.
 
 ---
 
@@ -843,6 +852,16 @@ Behavior by wallet type and flags:
   broadcast elsewhere.
 - Spendable wallet, **with `--broadcast`** → signs, transmits, prints the txid. Irreversible
   from this point.
+
+```
+sign-psbt  <base64|-> [--scan N] [--broadcast --server ...] [--ssl] [--net N] [--file PATH]
+```
+Signs a PSBT with this wallet's keys. `-` reads the PSBT from standard input. It refuses a
+watch-only wallet, any input that asks for a sighash other than ALL, and a previous
+transaction that does not match its outpoint. It prints inputs, outputs and fee, then the
+signed PSBT; if every input is signed it also prints the txid and the final transaction, and
+`--broadcast` sends it. `--scan` is how many receive and change addresses to try when matching
+keys to inputs (default: enough for the wallet's used addresses plus the gap limit, at least 100).
 
 ```
 servers  [--discover] [--server ...] [--ssl] [--net N]

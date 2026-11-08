@@ -138,6 +138,13 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     private int _knownChangeIndex;
 
     /// <summary>
+    /// Outpoints the user has frozen (see <see cref="SyncCache.FrozenOutpoints"/>). Set before each
+    /// SyncOnceAsync: the UTXOs are rebuilt from the chain, and the flag is applied while they are
+    /// built, so balances and coin selection already exclude frozen coins.
+    /// </summary>
+    public HashSet<(string Txid, int Vout)> FrozenOutpoints { get; set; } = [];
+
+    /// <summary>
     /// Pre-populates internal caches from data saved on disk.
     /// Call before SyncOnceAsync to avoid re-downloading already known transactions.
     /// </summary>
@@ -222,8 +229,11 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     public async Task<SyncResult> SyncOnceAsync(CancellationToken ct = default)
     {
         var tip = await client.SubscribeHeadersAsync(ct);
-        _tipHeight = tip.Height;
         Progress?.Invoke($"chain tip: {tip.Height}");
+        // The tip is the one number every confirmation count rests on, and the primary server says
+        // it alone. A witness is asked in parallel with the address scan (its connection is opened
+        // once per synchronizer); the lower of the two is used, see ClampTipAsync.
+        var tipTask = ClampTipAsync(tip.Height, ct);
 
         // Headers outside an anchored segment (above the newest checkpoint) are only backed by
         // what a server said, and a reorganisation can replace them: never carried over between
@@ -273,13 +283,15 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             nextReceive = rxScan.NextIndex;
             nextChange  = chScan.NextIndex;
 
-            var gapAddresses = tracked.Where(t =>
-                (!t.IsChange && t.Index >= nextReceive && t.Index < nextReceive + gapLimit) ||
-                ( t.IsChange && t.Index >= nextChange  && t.Index < nextChange  + gapLimit)).ToList();
-            if (gapAddresses.Count > 0)
-                await Task.WhenAll(gapAddresses.Select(t =>
-                    RetryOnBusyAsync(() => client.SubscribeScripthashAsync(t.ScriptHash, ct), ct)));
+            // Subscribe to every tracked address, not only the gap window: a subscription is
+            // per connection, so the already-used addresses (fetched above with GetHistory only)
+            // would otherwise stay silent until the next block. Same as the fixed-address branch.
+            await Task.WhenAll(tracked.Select(t =>
+                RetryOnBusyAsync(() => client.SubscribeScripthashAsync(t.ScriptHash, ct), ct)));
         }
+
+        var tipHeight = await tipTask;
+        _tipHeight = tipHeight;
 
         // 3. Merged history (txid → highest reported height). The per-address queries are not
         // atomic: a block arriving between two of them can leave one address saying mempool (0)
@@ -304,7 +316,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         var toVerify = txHeights
             .Where(kv => kv.Value > 0
                 && (!_verifiedAtHeight.TryGetValue(kv.Key, out var h) || h != kv.Value
-                    || NeedsRecheck(kv.Value, tip.Height)))
+                    || NeedsRecheck(kv.Value, tipHeight)))
             .ToList();
 
         // Total/already-cached counts (not just this session's downloads): on a sync resumed
@@ -334,7 +346,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         }, ct)));
 
         SyncResult BuildSnapshot() =>
-            BuildResult(tip.Height, tracked, historyByAddress, txHeights, nextReceive, nextChange);
+            BuildResult(tipHeight, tracked, historyByAddress, txHeights, nextReceive, nextChange);
 
         PartialResult?.Invoke(BuildSnapshot());
 
@@ -435,6 +447,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
                     Height        = height,
                     IsCoinbase    = tx.IsCoinBase,
                     Verified      = verifiedTx,
+                    Frozen        = FrozenOutpoints.Contains((txid, vout)),
                 });
             }
         }
@@ -626,20 +639,65 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         }
     }
 
-    private async Task CrossCheckCoreAsync(int height, CancellationToken ct)
+    /// <summary>
+    /// Two servers may be a block or two apart simply because a block is still propagating; more
+    /// than this and one of them is behind or lying about the tip.
+    /// </summary>
+    public const int TipSkewTolerance = 2;
+
+    /// <summary>
+    /// The chain tip to count confirmations from. A primary server that reports a tip higher than
+    /// it really is would make fresh outputs look deeply confirmed and spendable (the confirmation
+    /// threshold would be meaningless), and nothing in the tip header can prove the height without
+    /// checking proof of work. So a witness (ADR 0042) is asked too: when the primary is more than
+    /// <see cref="TipSkewTolerance"/> ahead of it, the lower tip is used. The error is on the safe
+    /// side: a witness that is merely behind only delays spending until it catches up. Without a
+    /// witness, or when it cannot answer, the primary tip stands.
+    /// </summary>
+    private async Task<int> ClampTipAsync(int primaryTip, CancellationToken ct)
     {
+        var effective = primaryTip;
+        foreach (var witness in await GetWitnessesAsync())
+        {
+            try
+            {
+                var witnessTip = (await witness.SubscribeHeadersAsync(ct)).Height;
+                if (primaryTip - witnessTip > TipSkewTolerance)
+                    effective = Math.Min(effective, witnessTip);
+            }
+            catch (Exception ex) when (ex is ElectrumServerException or IOException or TimeoutException
+                                           or InvalidOperationException or ObjectDisposedException
+                                           or KeyNotFoundException or System.Text.Json.JsonException)
+            {
+                // this witness cannot say: skip it
+            }
+        }
+        if (effective < primaryTip)
+            Progress?.Invoke($"chain tip lowered to {effective}: the server reported {primaryTip}, a second server does not confirm it");
+        return effective;
+    }
+
+    /// <summary>The witness connections, opened once per synchronizer; empty when none is configured or none opens.</summary>
+    private async Task<IReadOnlyList<ElectrumClient>> GetWitnessesAsync()
+    {
+        if (WitnessProvider is null)
+            return [];
         Task<IReadOnlyList<ElectrumClient>> witnessesTask;
         lock (_witnessLock)
-            witnessesTask = _witnesses ??= Task.Run(() => WitnessProvider!(CancellationToken.None));
-        IReadOnlyList<ElectrumClient> witnesses;
+            witnessesTask = _witnesses ??= Task.Run(() => WitnessProvider(CancellationToken.None));
         try
         {
-            witnesses = await witnessesTask;
+            return await witnessesTask;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return; // best effort: a failure to open witnesses leaves only the Merkle proof, as before
+            return []; // best effort: a failure to open witnesses leaves only the Merkle proof, as before
         }
+    }
+
+    private async Task CrossCheckCoreAsync(int height, CancellationToken ct)
+    {
+        var witnesses = await GetWitnessesAsync();
         if (witnesses.Count == 0)
             return;
 

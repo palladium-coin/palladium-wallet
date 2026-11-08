@@ -202,7 +202,10 @@ public partial class MainWindowViewModel
                 // synchronizer will use a different client and must be recreated,
                 // but already-downloaded data is preserved via _doc.Cache.
                 PersistPartialTxCache();
-                _synchronizer = null;
+                // Release the dead connection's resources first: its witness connections and the
+                // dead client itself (DisconnectAsync also clears the synchronizer). Without this the
+                // witnesses opened for the previous primary stay open until the next explicit disconnect.
+                await DisconnectAsync();
 
                 // Try all known servers in order; starts with the selected one
                 // and walks the list until the first that responds.
@@ -314,6 +317,7 @@ public partial class MainWindowViewModel
                 // Off the UI thread: sync does heavy CPU work (LINQ over thousands of
                 // cached txs/UTXOs) and blocking JSON/disk I/O between awaits, negligible
                 // on desktop but enough to freeze the UI (ANR) on slower mobile hardware.
+                _synchronizer.FrozenOutpoints = _doc.Cache?.FrozenOutpoints() ?? [];
                 var (result, rawHex, verifiedAt, blockHeaders, anchoredDownTo) = await Task.Run(async () =>
                 {
                     var r = await _synchronizer.SyncOnceAsync(ct);
@@ -514,6 +518,8 @@ public partial class MainWindowViewModel
     {
         CertificatePinMismatchException cert =>
             string.Format(Loc.Tr("msg.cert.mismatch"), $"{cert.Host}:{cert.Port}"),
+        WrongPasswordException => Loc.Tr("msg.wrongpassword"),
+        BroadcastTxidMismatchException => Loc.Tr("msg.broadcast.txid.mismatch"),
         WrongChainException chain =>
             string.Format(Loc.Tr("msg.chain.wrong"), $"{chain.Host}:{chain.Port}"),
         _ => ex.Message,

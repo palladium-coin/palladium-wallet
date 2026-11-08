@@ -37,6 +37,54 @@ public class TransactionFactoryLimitsTests
     }
 
     [Fact]
+    public void ZeroAmount_IsRejectedBeforeCoinSelection()
+    {
+        var account = Account();
+        var (utxos, txs) = Fund(account, 1, 100_000);
+
+        var ex = Assert.Throws<WalletSpendException>(() => new TransactionFactory(account).Build(
+            utxos, txs, account.GetReceiveAddress(5), amountSats: 0,
+            feeRateSatPerVByte: 1, changeIndex: 0, tipHeight: 1_000));
+        Assert.Contains("greater than zero", ex.Message);
+    }
+
+    [Fact]
+    public void Payment_BelowTheDustLimitOfItsScript_IsRejected()
+    {
+        var account = Account();
+        var (utxos, txs) = Fund(account, 1, 100_000);
+        var to = account.GetReceiveAddress(5);
+        Assert.Equal(294, TransactionFactory.DustLimitSats(to.ScriptPubKey)); // P2WPKH
+
+        var ex = Assert.Throws<WalletSpendException>(() => new TransactionFactory(account).Build(
+            utxos, txs, to, amountSats: 293,
+            feeRateSatPerVByte: 1, changeIndex: 0, tipHeight: 1_000));
+        Assert.Contains("dust", ex.Message);
+    }
+
+    [Fact]
+    public void Payment_AtTheDustLimit_IsAccepted()
+    {
+        var account = Account();
+        var (utxos, txs) = Fund(account, 1, 100_000);
+        var to = account.GetReceiveAddress(5);
+
+        var built = new TransactionFactory(account).Build(
+            utxos, txs, to, amountSats: 294,
+            feeRateSatPerVByte: 1, changeIndex: 0, tipHeight: 1_000);
+
+        Assert.Contains(built.Transaction.Outputs, o => o.Value.Satoshi == 294 && o.ScriptPubKey == to.ScriptPubKey);
+    }
+
+    [Fact]
+    public void DustLimit_MatchesBitcoinCore_ForP2pkhAndP2wpkh()
+    {
+        var account = Account();
+        Assert.Equal(294, TransactionFactory.DustLimitSats(account.GetReceiveAddress(0).ScriptPubKey));
+        Assert.Equal(546, TransactionFactory.DustLimitSats(new Key().PubKey.Hash.ScriptPubKey));
+    }
+
+    [Fact]
     public void SendAll_WithBalanceBelowTheFee_IsRejectedAsInsufficientFunds()
     {
         var account = Account();

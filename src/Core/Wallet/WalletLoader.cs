@@ -123,12 +123,13 @@ public static class WalletLoader
     /// The document contains the xprv in plaintext — it must be encrypted.
     /// </summary>
     public static (WalletDocument Doc, HdAccount Account) NewFromXprv(
-        string slip132, ChainProfile profile, ScriptKind? kindOverride = null)
+        string slip132, ChainProfile profile, ScriptKind? kindOverride = null,
+        KeyPath? accountPath = null, HDFingerprint? masterFingerprint = null)
     {
         if (!Slip132.TryDecodePrivate(slip132.Trim(), profile, out var xprv, out var detectedKind))
             throw new InvalidDataException("Extended private key is invalid or unrecognised for this network.");
         var kind = kindOverride ?? detectedKind;
-        var account = HdAccount.FromAccountXprv(xprv!, kind, profile);
+        var account = HdAccount.FromAccountXprv(xprv!, kind, profile, accountPath, masterFingerprint);
 
         var doc = new WalletDocument
         {
@@ -137,6 +138,8 @@ public static class WalletLoader
             AccountPath = account.AccountPath.ToString(),
             AccountXpub = account.ToSlip132(),
             AccountXprv = slip132.Trim(),
+            MasterFingerprint = masterFingerprint is { } fp
+                ? Convert.ToHexString(fp.ToBytes()).ToLowerInvariant() : null,
         };
         return (doc, account);
     }

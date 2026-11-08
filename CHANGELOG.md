@@ -9,17 +9,35 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- The PSBT of a watch-only wallet could hold a different transaction (another output order) from the one whose txid and fee had just been shown: it is now built from that very transaction (ADR 0045).
+- A server could report an inflated chain tip and make fresh outputs look deeply confirmed; the tip is now checked against a witness server and the lower one is used when they differ by more than 2 blocks (ADR 0045).
+- A TLS connection made without a pin store accepted any certificate; it now validates the certificate normally unless the caller opts out explicitly (ADR 0045).
 - The wallet file is written owner-only (0600 on Unix) and flushed to disk before the rename; before, a wallet saved without a password was readable by other local users, and overlapping `Save`/`SaveAsync` calls shared one temporary file (ADR 0044).
 - The single-instance wallet lock is released and its file removed in one step (`DeleteOnClose`); before, a window after release let two processes own the same wallet.
 - Servers announced by peers are no longer tried automatically as fallbacks, and peers naming `localhost` or private addresses, or ports outside 1–65535, are dropped (ADR 0044).
-
 - Imported-key wallets (WIF or plain addresses) fetched their address histories concurrently into a shared dictionary, which could silently lose history entries; the results are now gathered before being stored.
 - Importing the same key or address twice crashed the synchronisation (duplicate scriptPubKey) and listed it twice; duplicates are now collapsed on import and when loading an existing wallet file, keeping the copy that has the private key.
 - A transaction reported at different heights by different addresses (a block arriving between the per-address queries) now takes the highest one instead of whichever was read last.
 - Wrapped segwit (P2SH-P2WPKH) wallets could not build a spend: the redeem script is now attached to each input coin, so they can send, and watch-only ones can produce a PSBT.
 
+- A zero amount was accepted for a payment, and a payment below the dust limit of its script (546 sat for P2PKH, 294 sat for P2WPKH, as Bitcoin Core computes it) was built and then rejected by the network; both are now refused before signing, in the watch-only path too.
+- A broadcast reply naming a txid other than the one built was shown as a successful send; it is now reported as not confirmed.
+- Addresses already used before the last sync were not subscribed on the server, so a payment to them was not notified until the next block.
+- A failed write on the server connection left it looking alive until the 30 s request timeout; it is now torn down at once, and an exception thrown by a notification subscriber no longer drops the connection.
+- Reconnecting after the primary server died left the witness connections of the previous session open.
+- The Frozen flag of a UTXO is kept across syncs (it was reset on every sync). No UI sets it yet.
+- Core error messages and comments are in English; the wrong-password message is shown in the UI language.
+- `send` synchronizes the wallet before it builds the transaction. Before, it built from the last saved cache, so a second send right after the first could select an output already spent and fail at broadcast, after printing a txid.
+- The CLI `send --broadcast` and `sign-psbt --broadcast` check that the server's txid is the one computed locally, as the GUI already did.
+- A watch-only transaction with legacy or wrapped inputs shows "txid not final until signed": its txid changes when signed, so the one shown before was not the one broadcast.
+- A frozen UTXO stays frozen after a CLI sync, and it is excluded from the balance as well as from coin selection (the flag is applied while the UTXOs are built).
+- An address of another network (e.g. a mainnet address on regtest) gives a one-line error instead of a stack trace.
+
 ### Added
 
+- `sign-psbt` CLI command: signs a PSBT with the wallet's keys after printing inputs, outputs (own change marked) and fee, refuses sighash types other than ALL and a previous transaction that does not match its outpoint, finalises when complete and can broadcast (ADR 0045).
+- The xpub/xprv import step of the GUI takes the optional master fingerprint and account path (ADR 0045).
+- PSBTs attach the full previous transaction of every input, so an offline signer can verify the amounts.
 - Watch-only PSBTs now carry the BIP32 origin of the inputs, of the change output and of the account xpub when the master fingerprint is known, so an external signer can match its keys; `restore-xpub` accepts `--fingerprint` and `--path` (ADR 0044).
 
 ### Security

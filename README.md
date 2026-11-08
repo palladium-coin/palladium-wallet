@@ -381,6 +381,7 @@ dotnet run --project src/Cli -- info            [--net ...]
 # Network
 dotnet run --project src/Cli -- sync     [--server host[:port]] [--ssl]
 dotnet run --project src/Cli -- send     --to ADDRESS (--amount X | --all) [--feerate sat/vB] [--broadcast]
+dotnet run --project src/Cli -- sign-psbt <base64|-> [--broadcast] [--file wallet]
 dotnet run --project src/Cli -- servers  [--discover]
 ```
 

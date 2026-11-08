@@ -22,6 +22,7 @@ try
         ["info", .. var rest] => Info(rest),
         ["sync", .. var rest] => await Sync(rest),
         ["send", .. var rest] => await Send(rest),
+        ["sign-psbt", var psbt, .. var rest] => await SignPsbt(psbt, rest),
         ["reset-certs", .. var rest] => ResetCerts(rest),
         ["servers", .. var rest] => await Servers(rest),
         _ => Usage(),
@@ -29,7 +30,7 @@ try
 }
 catch (Exception ex) when (ex is WalletSpendException or WrongPasswordException
     or CertificatePinMismatchException or ElectrumServerException or SpvVerificationException
-    or WrongChainException)
+    or WrongChainException or BroadcastTxidMismatchException)
 {
     Console.Error.WriteLine($"Error: {ex.Message}");
     return 1;
@@ -176,7 +177,28 @@ static async Task<int> Sync(string[] o)
 {
     var (doc, account, path) = OpenWallet(o);
     await using var client = await Connect(o, account.Profile);
+    var result = await SyncWallet(doc, account, path, client);
 
+    Console.WriteLine($"Balance: {CoinAmount.Format(result.SpendableSats, account.Profile.CoinUnit)} spendable"
+        + (result.ImmatureSats != 0 ? $" + {CoinAmount.Format(result.ImmatureSats)} maturing (not spendable)" : "")
+        + (result.PendingVerificationSats != 0 ? $" + {CoinAmount.Format(result.PendingVerificationSats)} awaiting SPV verification (not spendable)" : "")
+        + (result.UnconfirmedSats != 0 ? $" + {CoinAmount.Format(result.UnconfirmedSats)} pending confirmation (not spendable)" : ""));
+    Console.WriteLine($"History ({result.History.Count}):");
+    foreach (var tx in result.History)
+        Console.WriteLine($"  {(tx.Height > 0 ? tx.Height.ToString() : "mempool"),7}  " +
+            $"{(tx.DeltaSats >= 0 ? "+" : "")}{CoinAmount.Format(tx.DeltaSats)}  {tx.Txid}" +
+            (tx.Verified ? "" : "  (unverified)"));
+    return 0;
+}
+
+/// <summary>
+/// Synchronizes the wallet with the server and saves the result. Used by `sync`, and by `send`
+/// before it builds anything: a spend must start from the chain's current state, not from a cache
+/// written before the last transaction (an output already spent would be selected again).
+/// </summary>
+static async Task<SyncResult> SyncWallet(WalletDocument doc, IWalletAccount account, string path,
+    ElectrumClient client)
+{
     var sync = new WalletSynchronizer(account, client, doc.GapLimit);
     IReadOnlyList<ElectrumClient> witnesses = [];
     sync.WitnessProvider = async ct =>
@@ -186,6 +208,7 @@ static async Task<int> Sync(string[] o)
             account.Profile.BootstrapServers, client.Host, client.Port, client.UseSsl, pins, ct: ct);
     };
     sync.Progress += msg => Console.WriteLine($"  {msg}");
+    sync.FrozenOutpoints = doc.Cache?.FrozenOutpoints() ?? [];
     var net = PalladiumNetworks.For(account.Profile.Kind);
     sync.PreloadCaches(
         doc.Cache?.RawTxHex ?? [],
@@ -204,7 +227,7 @@ static async Task<int> Sync(string[] o)
     }
 
     var (rawHex, verifiedAt, blockHeaders, anchoredDownTo) = sync.ExportCaches(net);
-    doc.Cache = new SyncCache
+    var cache = new SyncCache
     {
         TipHeight = result.TipHeight,
         ConfirmedSats = result.ConfirmedSats,
@@ -222,30 +245,29 @@ static async Task<int> Sync(string[] o)
         BlockHeaders = blockHeaders,
         AnchoredDownTo = anchoredDownTo,
     };
+    doc.Cache = cache;
     WalletStore.Save(doc, path, CliPassword.Current);
+    return result;
+}
 
-    Console.WriteLine($"Balance: {CoinAmount.Format(result.SpendableSats, account.Profile.CoinUnit)} spendable"
-        + (result.ImmatureSats != 0 ? $" + {CoinAmount.Format(result.ImmatureSats)} maturing (not spendable)" : "")
-        + (result.PendingVerificationSats != 0 ? $" + {CoinAmount.Format(result.PendingVerificationSats)} awaiting SPV verification (not spendable)" : "")
-        + (result.UnconfirmedSats != 0 ? $" + {CoinAmount.Format(result.UnconfirmedSats)} pending confirmation (not spendable)" : ""));
-    Console.WriteLine($"History ({result.History.Count}):");
-    foreach (var tx in result.History)
-        Console.WriteLine($"  {(tx.Height > 0 ? tx.Height.ToString() : "mempool"),7}  " +
-            $"{(tx.DeltaSats >= 0 ? "+" : "")}{CoinAmount.Format(tx.DeltaSats)}  {tx.Txid}" +
-            (tx.Verified ? "" : "  (unverified)"));
-    return 0;
+/// <summary>Parses a destination for the wallet's network, with a clean error for another network's address.</summary>
+static BitcoinAddress ParseAddress(string text, ChainProfile profile)
+{
+    try
+    {
+        return BitcoinAddress.Create(text, PalladiumNetworks.For(profile.Kind));
+    }
+    catch (Exception ex) when (ex is FormatException or ArgumentException or NotSupportedException)
+    {
+        throw new WalletSpendException($"'{text}' is not a valid address for {profile.NetName}.");
+    }
 }
 
 static async Task<int> Send(string[] o)
 {
     var (doc, account, path) = OpenWallet(o);
-    if (doc.Cache is null)
-    {
-        Console.Error.WriteLine("Wallet never synchronized: run 'sync' first.");
-        return 1;
-    }
     var to = Opt(o, "--to") ?? throw new WalletSpendException("--to missing.");
-    var destination = BitcoinAddress.Create(to, PalladiumNetworks.For(account.Profile.Kind));
+    var destination = ParseAddress(to, account.Profile);
     var sendAll = o.Contains("--all");
     long amount = 0;
     if (!sendAll && !CoinAmount.TryParseCoins(Opt(o, "--amount") ?? "", out amount))
@@ -254,18 +276,23 @@ static async Task<int> Send(string[] o)
     if (Opt(o, "--feerate") is { } feeText && !CoinAmount.TryParseFeeRate(feeText, out feeRate))
         throw new WalletSpendException($"--feerate invalid (expected sat/vB in (0, {CoinAmount.MaxFeeRate}]).");
 
-    // Source transactions of the UTXOs: needed for amounts and signing.
     await using var client = await Connect(o, account.Profile);
+    await SyncWallet(doc, account, path, client);
+    var cache = doc.Cache!; // set by SyncWallet just above
+
+    // Source transactions of the UTXOs: needed for amounts and signing.
     var network = PalladiumNetworks.For(account.Profile.Kind);
     var transactions = new Dictionary<string, Transaction>();
-    foreach (var txid in doc.Cache.Utxos.Select(u => u.Txid).Distinct())
+    foreach (var txid in cache.Utxos.Select(u => u.Txid).Distinct())
         transactions[txid] = await client.GetVerifiedTransactionAsync(txid, network);
 
     var built = new TransactionFactory(account).Build(
-        doc.Cache.Utxos, transactions, destination, amount, feeRate,
-        doc.Cache.NextChangeIndex, doc.Cache.TipHeight, sendAll);
+        cache.Utxos, transactions, destination, amount, feeRate,
+        cache.NextChangeIndex, cache.TipHeight, sendAll);
 
-    Console.WriteLine($"txid:  {built.Txid}");
+    Console.WriteLine(built.TxidIsFinal
+        ? $"txid:  {built.Txid}"
+        : "txid:  not final until signed (a legacy or wrapped input changes the txid when signed)");
     Console.WriteLine($"fee:   {CoinAmount.Format(built.Fee.Satoshi, account.Profile.CoinUnit)} " +
         $"({feeRate} sat/vB, {built.Transaction.GetVirtualSize()} vB)");
 
@@ -283,8 +310,60 @@ static async Task<int> Send(string[] o)
         return 0;
     }
 
-    var txid2 = await client.BroadcastAsync(built.ToHex());
+    var txid2 = await client.BroadcastVerifiedAsync(built.ToHex(), built.Txid);
     Console.WriteLine($"Broadcast: {txid2}");
+    return 0;
+}
+
+static async Task<int> SignPsbt(string text, string[] o)
+{
+    var (doc, account, _) = OpenWallet(o);
+    var network = PalladiumNetworks.For(account.Profile.Kind);
+    if (text == "-")
+        text = Console.In.ReadToEnd();
+    PSBT psbt;
+    try { psbt = PSBT.Parse(text.Trim(), network); }
+    catch (Exception ex) when (ex is FormatException or ArgumentException)
+    {
+        throw new WalletSpendException("Not a valid PSBT (base64 for this network expected).");
+    }
+
+    var scan = Opt(o, "--scan") is { } scanText
+        ? int.Parse(scanText)
+        : Math.Max(PsbtSigner.DefaultScan,
+            Math.Max(doc.Cache?.NextReceiveIndex ?? 0, doc.Cache?.NextChangeIndex ?? 0) + doc.GapLimit);
+    var result = PsbtSigner.Sign(psbt, account, scan);
+
+    var unit = account.Profile.CoinUnit;
+    Console.WriteLine($"Inputs ({result.Inputs.Count}):");
+    foreach (var i in result.Inputs)
+        Console.WriteLine($"  {i.PrevTxid}:{i.PrevIndex}  "
+            + (i.AmountSats is { } a ? CoinAmount.Format(a, unit) : "amount unknown")
+            + (i.AmountSats is not null && !i.AmountVerified ? "  (amount not verified: no previous transaction)" : "")
+            + (i.Signed ? "  signed" : "  NOT signed"));
+    Console.WriteLine($"Outputs ({result.Outputs.Count}):");
+    foreach (var out_ in result.Outputs)
+        Console.WriteLine($"  {out_.Address ?? "(non-standard script)"}  {CoinAmount.Format(out_.AmountSats, unit)}"
+            + (out_.IsMine ? "  (yours: change)" : ""));
+    Console.WriteLine(result.FeeSats is { } fee
+        ? $"Fee: {CoinAmount.Format(fee, unit)}"
+        : "Fee: unknown (an input amount is missing)");
+
+    Console.WriteLine("PSBT:");
+    Console.WriteLine(result.Psbt.ToBase64());
+    if (result.FinalTransaction is not { } final)
+    {
+        Console.WriteLine("Incomplete: not every input could be signed by this wallet.");
+        return o.Contains("--broadcast") ? 1 : 0;
+    }
+    Console.WriteLine($"txid:  {final.GetHash()}");
+    Console.WriteLine("Final transaction:");
+    Console.WriteLine(final.ToHex());
+    if (!o.Contains("--broadcast"))
+        return 0;
+
+    await using var client = await Connect(o, account.Profile);
+    Console.WriteLine($"Broadcast: {await client.BroadcastVerifiedAsync(final.ToHex(), final.GetHash().ToString())}");
     return 0;
 }
 
@@ -433,6 +512,8 @@ static int Usage()
           sync          [--server host[:port]] [--ssl] [--net ...] [--file PATH]
           send          --to ADDRESS (--amount X | --all) [--feerate sat/vB]
                         [--server host[:port]] [--ssl] [--broadcast] [...]
+          sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
+                        sign a PSBT with this wallet's keys (offline half of the watch-only flow)
           servers       [--discover] [--server host[:port]] [--ssl] [--net ...]
           reset-certs   [--net ...]
 

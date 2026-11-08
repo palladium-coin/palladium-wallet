@@ -85,6 +85,14 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string importXkeyInput = "";
 
+    /// <summary>Optional origin of an imported xpub: master fingerprint (8 hex digits), for PSBTs an external signer can match.</summary>
+    [ObservableProperty]
+    private string importFingerprintInput = "";
+
+    /// <summary>Optional account path of the imported key (e.g. m/84'/746'/0').</summary>
+    [ObservableProperty]
+    private string importPathInput = "";
+
     [ObservableProperty]
     private string importWifInput = "";
 
@@ -206,6 +214,7 @@ public partial class MainWindowViewModel
     {
         _wizardFlow = WizardFlowKind.ImportXkey;
         ImportXkeyInput = "";
+        ImportFingerprintInput = ImportPathInput = "";
         ImportXkeyDetectedKind = "";
         SetupStep = StepImportXkey;
         StatusMessage = "";
@@ -299,10 +308,38 @@ public partial class MainWindowViewModel
             StatusMessage = Loc.Tr("msg.xkey.invalid");
             return;
         }
+        if (!TryReadImportOrigin(out _, out _))
+            return;
         PasswordInput = ConfirmPasswordInput = "";
         EncryptWallet = true;
         SetupStep = StepPassword;
         StatusMessage = "";
+    }
+
+    /// <summary>
+    /// Reads the optional fingerprint and path fields. Empty means "not given" (no BIP32 origin in
+    /// exported PSBTs); a non-empty field that does not parse sets the status message and fails.
+    /// </summary>
+    private bool TryReadImportOrigin(out NBitcoin.HDFingerprint? fingerprint, out NBitcoin.KeyPath? path)
+    {
+        fingerprint = null;
+        path = null;
+        if (!string.IsNullOrWhiteSpace(ImportFingerprintInput))
+        {
+            fingerprint = HdAccount.ParseFingerprint(ImportFingerprintInput.Trim().ToLowerInvariant());
+            if (fingerprint is null)
+            {
+                StatusMessage = Loc.Tr("msg.xkey.fingerprint.invalid");
+                return false;
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(ImportPathInput)
+            && !DerivationPaths.TryParse(ImportPathInput, out path))
+        {
+            StatusMessage = Loc.Tr("msg.xkey.path.invalid");
+            return false;
+        }
+        return true;
     }
 
     [RelayCommand]
@@ -420,14 +457,16 @@ public partial class MainWindowViewModel
                 case WizardFlowKind.ImportXkey:
                 {
                     var input = ImportXkeyInput.Trim();
+                    if (!TryReadImportOrigin(out var fingerprint, out var accountPath))
+                        return;
                     if (Slip132.TryDecodePublic(input, Profile, out _, out _))
                     {
-                        var (d, a) = WalletLoader.NewFromXpub(input, Profile, SelectedScriptKind);
+                        var (d, a) = WalletLoader.NewFromXpub(input, Profile, SelectedScriptKind, accountPath, fingerprint);
                         (doc, account) = (d, a);
                     }
                     else
                     {
-                        var (d, a) = WalletLoader.NewFromXprv(input, Profile, SelectedScriptKind);
+                        var (d, a) = WalletLoader.NewFromXprv(input, Profile, SelectedScriptKind, accountPath, fingerprint);
                         (doc, account) = (d, a);
                     }
                     break;
@@ -555,6 +594,7 @@ public partial class MainWindowViewModel
         _password = password;
         MnemonicInput = ConfirmMnemonicInput = PassphraseInput = PasswordInput = ConfirmPasswordInput = WalletNameInput = "";
         ImportXkeyInput = ImportWifInput = ImportAddressInput = ImportXkeyDetectedKind = "";
+        ImportFingerprintInput = ImportPathInput = "";
         SetupStep = StepStart;
         OnPropertyChanged(nameof(IsWatchOnlyAccount));
 

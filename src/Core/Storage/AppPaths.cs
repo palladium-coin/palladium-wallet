@@ -7,8 +7,7 @@ namespace PalladiumWallet.Core.Storage;
 /// 1. <b>portable</b>: "palladium-data" folder next to the executable;
 /// 2. <b>custom</b>: chosen by the user at first launch and stored in
 ///    a small "pointer" file at a fixed bootstrap location;
-/// 3. <b>legacy</b>: old location (%APPDATA%/PalladiumWallet) if it already holds data;
-/// 4. <b>default</b>: ~/.PalladiumWallet (Linux/macOS) or %ProgramFiles%\PalladiumWallet (Windows).
+/// 3. <b>default</b>: %APPDATA%\PalladiumWallet (Windows) or ~/.palladium-wallet (Linux/macOS).
 /// Under the root there is a per-network subfolder (config, wallet, header, certificates).
 /// </summary>
 public static class AppPaths

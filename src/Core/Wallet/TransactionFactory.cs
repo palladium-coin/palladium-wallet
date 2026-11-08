@@ -14,6 +14,14 @@ public sealed class BuiltTransaction
     public required FeeRate FeeRate { get; init; }
     public required bool Signed { get; init; }
 
+    /// <summary>
+    /// True when <see cref="Txid"/> is the txid the signed transaction will have. The txid covers the
+    /// scriptSig, and a legacy or wrapped-segwit input gets its scriptSig only when signed, so a
+    /// watch-only transaction of those kinds has a provisional txid. Native segwit (empty scriptSig,
+    /// witness outside the txid) is final either way.
+    /// </summary>
+    public required bool TxidIsFinal { get; init; }
+
     /// <summary>PSBT for watch-only/air-gapped/multisig flows (§6.5).</summary>
     public required PSBT Psbt { get; init; }
 
@@ -54,6 +62,16 @@ public sealed class TransactionFactory(IWalletAccount account)
         int tipHeight,
         bool sendAll = false)
     {
+        // Checked here, not only in the UI: the watch-only path and the CLI go through this too.
+        if (!sendAll)
+        {
+            if (amountSats <= 0)
+                throw new WalletSpendException("Amount must be greater than zero.");
+            var dust = DustLimitSats(destination.ScriptPubKey);
+            if (amountSats < dust)
+                throw new WalletSpendException($"Amount is below the dust limit ({dust} sat).");
+        }
+
         var profile = account.Profile;
         var spendable = utxos.Where(u => u.IsSpendable(profile, tipHeight)).ToList();
 
@@ -181,13 +199,11 @@ public sealed class TransactionFactory(IWalletAccount account)
         else
             builder.Send(destination, Money.Satoshis(amountSats));
 
-        if (!account.IsWatchOnly)
-        {
-            builder.AddKeys(selectedUtxos
-                .Select(u => account.GetPrivateKey(u.IsChange, u.AddressIndex))
-                .OfType<Key>()
-                .ToArray());
-        }
+        var signingKeys = account.IsWatchOnly
+            ? []
+            : selectedUtxos.Select(u => account.GetPrivateKey(u.IsChange, u.AddressIndex)).OfType<Key>().ToArray();
+        if (signingKeys.Length > 0)
+            builder.AddKeys(signingKeys);
 
         Transaction tx;
         try
@@ -215,6 +231,12 @@ public sealed class TransactionFactory(IWalletAccount account)
         if (tx.GetVirtualSize() > MaxStandardTransactionVirtualSize)
             throw new TransactionTooLargeException(BuildTooLargeMessage(selectedUtxos.Count, totalSpendableCount, sendAll, tx.GetVirtualSize()));
 
+        // Send-all computes the amount inside the builder, so its dust check runs on the result.
+        if (sendAll && tx.Outputs.FirstOrDefault(o => o.ScriptPubKey == destination.ScriptPubKey) is { } paid
+            && paid.Value.Satoshi < DustLimitSats(destination.ScriptPubKey))
+            throw new WalletSpendException(
+                $"Send-all leaves {paid.Value.Satoshi} sat for the recipient, below the dust limit ({DustLimitSats(destination.ScriptPubKey)} sat).");
+
         if (!account.IsWatchOnly)
         {
             if (!builder.Verify(tx, out TransactionPolicyError[] errors))
@@ -228,7 +250,12 @@ public sealed class TransactionFactory(IWalletAccount account)
             Fee = GetFee(tx, coins),
             FeeRate = feeRate,
             Signed = !account.IsWatchOnly,
-            Psbt = WithOrigins(builder.BuildPSBT(sign: !account.IsWatchOnly), selectedUtxos, changeIndex),
+            TxidIsFinal = !account.IsWatchOnly || account.Kind == ScriptKind.NativeSegwit,
+            // Built from the very transaction returned above. A second BuildPSBT run would assemble
+            // another transaction (the builder shuffles output order), so the txid shown to the user
+            // would not be the one of the PSBT that gets signed.
+            Psbt = WithOrigins(WithPreviousTransactions(
+                ToPsbt(tx, coins, signingKeys), transactions), selectedUtxos, changeIndex),
         };
     }
 
@@ -246,6 +273,29 @@ public sealed class TransactionFactory(IWalletAccount account)
             && account.GetPublicKey(u.IsChange, u.AddressIndex) is { } key
             ? coin.ToScriptCoin(key.WitHash.ScriptPubKey)
             : coin;
+    }
+
+    /// <summary>The PSBT of <paramref name="tx"/> (signatures stripped, then re-added with the keys, if any).</summary>
+    private PSBT ToPsbt(Transaction tx, IReadOnlyList<Coin> coins, Key[] signingKeys)
+    {
+        var unsigned = tx.Clone();
+        unsigned.RemoveSignatures();
+        var psbt = PSBT.FromTransaction(unsigned, Network).AddCoins([.. coins]);
+        return signingKeys.Length > 0 ? psbt.SignWithKeys(signingKeys) : psbt;
+    }
+
+    /// <summary>
+    /// Attaches to every input the full transaction it spends. Legacy inputs need it (BIP174), and
+    /// for segwit inputs it lets an offline signer check the amount it is about to sign: a bare
+    /// witness_utxo amount cannot be verified, and a lying one turns into fee.
+    /// </summary>
+    private static PSBT WithPreviousTransactions(PSBT psbt, IReadOnlyDictionary<string, Transaction> transactions)
+    {
+        foreach (var input in psbt.Inputs)
+            if (input.NonWitnessUtxo is null
+                && transactions.TryGetValue(input.PrevOut.Hash.ToString(), out var previous))
+                input.NonWitnessUtxo = previous;
+        return psbt;
     }
 
     /// <summary>
@@ -287,6 +337,25 @@ public sealed class TransactionFactory(IWalletAccount account)
 
         return $"{prefix}: {size} the {MaxStandardTransactionVirtualSize} vB standard relay limit " +
             $"with {selectedInputCount}/{totalSpendableCount} spendable input(s). Send a smaller amount or consolidate in multiple smaller transactions.";
+    }
+
+    /// <summary>
+    /// Smallest payment output worth relaying, computed as Bitcoin Core does: the cost of spending
+    /// the output (serialized output plus the input that would spend it) at the 3 sat/vB dust
+    /// relay rate. That gives 546 sat for P2PKH and 294 sat for P2WPKH. Palladium's relay policy is
+    /// assumed to match; a node with a different policy would reject a transaction that passes here.
+    /// </summary>
+    internal static long DustLimitSats(Script scriptPubKey)
+    {
+        const int DustRelaySatPerVByte = 3;
+        var script = scriptPubKey.ToBytes();
+        var outputSize = 8 + 1 + script.Length; // value, script length (single byte), script
+        // Witness program: version opcode (OP_0 or OP_1..OP_16) then one push of the whole program.
+        var isWitness = script.Length is >= 4 and <= 42
+            && (script[0] == 0x00 || script[0] is >= 0x51 and <= 0x60)
+            && script[1] == script.Length - 2;
+        var inputSize = isWitness ? 67 : 148;
+        return DustRelaySatPerVByte * (outputSize + inputSize);
     }
 
     private static Money GetFee(Transaction tx, IReadOnlyList<Coin> coins)

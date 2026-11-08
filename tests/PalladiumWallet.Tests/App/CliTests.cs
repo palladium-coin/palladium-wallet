@@ -140,12 +140,49 @@ public sealed class CliTests : IDisposable
     }
 
     [Fact]
-    public async Task Send_BeforeAnySync_AsksToSyncFirst()
+    public async Task Send_SynchronizesFirst_SoItNeverBuildsFromAnEarlierCache()
+    {
+        var account = HdAccount.FromMnemonic(
+            Bip39.TryParse(Mnemonic, out var m) ? m! : throw new InvalidOperationException(),
+            null, ScriptKind.NativeSegwit, ChainProfiles.Regtest);
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Regtest.GenesisHash });
+        server.Handle("blockchain.headers.subscribe", _ => new { height = 300, hex = RegtestHeader(300) });
+        server.Handle("blockchain.scripthash.subscribe", _ => null);
+        server.Handle("blockchain.scripthash.get_history", _ => Array.Empty<object>());
+
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        var (exit, _, err) = await Cli("send", "--to", account.GetReceiveAddress(9).ToString(), "--all",
+            "--server", $"{server.Host}:{server.Port}", "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("No spendable UTXOs", err);                 // empty wallet, now known from the server
+        Assert.True(server.CallCount("blockchain.scripthash.get_history") > 0); // the send did sync
+    }
+
+    [Fact]
+    public async Task Send_ToAnAddressOfAnotherNetwork_FailsWithACleanError()
     {
         await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
-        var (exit, _, err) = await Cli("send", "--to", "x", "--all", "--net", "regtest", "--file", WalletFile());
+        var mainnetAddress = "plm1qdq3gu2zvg9lyr8gxd6yln4wavc5tlp8prmvfay"; // Palladium mainnet
+        var (exit, _, err) = await Cli("send", "--to", mainnetAddress, "--amount", "1",
+            "--net", "regtest", "--file", WalletFile());
+
         Assert.Equal(1, exit);
-        Assert.Contains("run 'sync' first", err);
+        Assert.Contains("not a valid address for regtest", err);
+        Assert.DoesNotContain("   at ", err); // no stack trace
+    }
+
+    /// <summary>A regtest block header with the given height, enough for the synchronizer's checks.</summary>
+    private static string RegtestHeader(int height)
+    {
+        var header = PalladiumNetworks.Regtest.Consensus.ConsensusFactory.CreateBlockHeader();
+        header.HashPrevBlock = uint256.Zero;
+        header.HashMerkleRoot = uint256.One;
+        header.BlockTime = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000 + height);
+        header.Bits = new Target(0x1d00ffffu);
+        header.Nonce = (uint)height;
+        return Convert.ToHexString(header.ToBytes()).ToLowerInvariant();
     }
 
     [Fact]

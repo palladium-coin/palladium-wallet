@@ -3,15 +3,15 @@ using System.Text;
 namespace PalladiumWallet.Core.Storage;
 
 /// <summary>
-/// Lettura/scrittura del file wallet su disco (blueprint §8): JSON in chiaro
-/// senza password, contenitore AES-GCM con password. Scrittura atomica
-/// (file temporaneo + rename) per non corrompere il wallet su crash.
+/// Reads and writes the wallet file on disk (blueprint §8): plain JSON without a
+/// password, AES-GCM container with one. Writes are atomic (temporary file + rename)
+/// so a crash never corrupts the wallet.
 /// </summary>
 public static class WalletStore
 {
     public static bool Exists(string path) => File.Exists(path);
 
-    /// <summary>True se il file richiede una password per l'apertura.</summary>
+    /// <summary>True when the file requires a password to open.</summary>
     public static bool RequiresPassword(string path) =>
         EncryptedFile.IsEncrypted(File.ReadAllText(path));
 

@@ -266,6 +266,49 @@ public class WalletSynchronizerTests
         Assert.True(Assert.Single(result.Utxos).IsCoinbase);
     }
 
+    [Fact]
+    public async Task UsedAddress_BelowTheKnownIndex_IsSubscribedToo()
+    {
+        var account = Account();
+        var used = account.GetReceiveAddress(0);
+        var scenario = new Scenario();
+        scenario.Pay(used, 50_000, height: 100);
+
+        var subscribed = new System.Collections.Concurrent.ConcurrentBag<string>();
+        await using var server = new FakeElectrumServer();
+        scenario.WireTo(server);
+        server.Handle("blockchain.scripthash.subscribe", p => { subscribed.Add(p[0].GetString()!); return null; });
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+
+        // The previous sync already knew that receive/0 is used: it was fetched, but outside the gap window.
+        var sync = new WalletSynchronizer(account, client);
+        sync.PreloadCaches(new(), new(), null, knownReceiveIndex: 1, knownChangeIndex: 0, Net);
+        await sync.SyncOnceAsync();
+
+        Assert.Contains(Scripthash.FromAddress(used), subscribed);
+    }
+
+    [Fact]
+    public async Task FrozenOutpoint_IsExcludedFromTheSpendableBalance_UntilUnfrozen()
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var tx = scenario.Pay(account.GetReceiveAddress(0), 50_000, height: 100);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        var outpoint = (tx.GetHash().ToString(), 0);
+
+        var frozen = new WalletSynchronizer(account, client) { FrozenOutpoints = [outpoint] };
+        var frozenResult = await frozen.SyncOnceAsync();
+        Assert.True(frozenResult.Utxos.Single().Frozen);
+        Assert.Equal(0, frozenResult.SpendableSats);
+
+        var unfrozen = new WalletSynchronizer(account, client);
+        var unfrozenResult = await unfrozen.SyncOnceAsync();
+        Assert.False(unfrozenResult.Utxos.Single().Frozen);
+        Assert.Equal(50_000, unfrozenResult.SpendableSats);
+    }
+
     // ---- sicurezza SPV ----
 
     [Fact]
@@ -954,6 +997,87 @@ public class WalletSynchronizerTests
 
         Assert.Equal(0, server.CallCount("blockchain.transaction.get_merkle"));
         Assert.Equal(0, server.CallCount("blockchain.block.header"));
+    }
+
+    // ---- chain tip cross-checked with a witness (ADR 0045) ----
+
+    private static ChainProfile SixConfirmations() => Profile with { MinConfirmations = 6 };
+
+    private static void WitnessTip(FakeElectrumServer witness, Scenario scenario, int tip)
+    {
+        witness.Handle("blockchain.headers.subscribe", _ => new { height = tip, hex = Scenario.SingleTxHeaderHex(uint256.One, tip) });
+        witness.Handle("blockchain.block.header", p => p[0].GetInt32() <= tip
+            ? scenario.Headers[p[0].GetInt32()]
+            : throw new FakeElectrumError(-1, "no such block"));
+    }
+
+    [Theory]
+    [InlineData(200, 200, false)] // agree
+    [InlineData(199, 200, false)] // a block still propagating: within tolerance
+    [InlineData(198, 200, false)] // exactly at the tolerance
+    [InlineData(197, 197, true)]  // clearly behind: the lower tip is used
+    [InlineData(150, 150, true)]
+    [InlineData(260, 200, false)] // a witness ahead of the primary never raises the tip
+    public async Task The_tip_is_the_lower_of_the_primary_and_a_witness_beyond_the_tolerance(
+        int witnessTip, int expectedTip, bool clamped)
+    {
+        var account = Account(SixConfirmations());
+        var scenario = new Scenario(); // primary tip 200
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 190);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(h => scenario.Headers[h]);
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+        WitnessTip(witness, scenario, witnessTip);
+        var progress = new List<string>();
+
+        var sync = new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+        sync.Progress += progress.Add;
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(expectedTip, result.TipHeight);
+        Assert.Equal(clamped, progress.Any(m => m.StartsWith("chain tip lowered")));
+        // 190 is 11 deep on the primary's tip, 8 on 197, but not even confirmed from the witness's 150
+        Assert.Equal(expectedTip >= 195 ? 1_000_000 : 0, result.SpendableSats);
+    }
+
+    [Fact]
+    public async Task A_primary_that_inflates_the_tip_cannot_make_a_fresh_output_spendable()
+    {
+        // The attack: a tx one block deep reported with a tip 100 blocks too high looks 100 deep.
+        var account = Account(SixConfirmations());
+        var scenario = new Scenario { TipHeight = 300 }; // a lie: the real tip is 191
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 190);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(h => scenario.Headers[h]);
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+        WitnessTip(witness, scenario, 191);
+
+        var sync = new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) };
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(191, result.TipHeight);
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+        Assert.Equal(0, result.SpendableSats); // 2 confirmations of the 6 required
+    }
+
+    [Fact]
+    public async Task A_witness_that_cannot_report_its_tip_leaves_the_primary_tip()
+    {
+        var account = Account(SixConfirmations());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 190);
+        var (server, client) = await StartAsync(scenario);
+        var (witness, witnessClient) = await StartWitnessAsync(h => scenario.Headers[h]); // no headers.subscribe
+        await using var _ = server; await using var __ = client;
+        await using var ___ = witness; await using var ____ = witnessClient;
+
+        var result = await new WalletSynchronizer(account, client) { WitnessProvider = _ => Witnesses(witnessClient) }
+            .SyncOnceAsync();
+
+        Assert.Equal(200, result.TipHeight);
+        Assert.Equal(1_000_000, result.SpendableSats);
     }
 
     // ---- cache su disco ----

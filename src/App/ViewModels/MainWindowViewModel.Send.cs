@@ -137,7 +137,7 @@ public partial class MainWindowViewModel
 
             var destination = BitcoinAddress.Create(SendTo.Trim(), PalladiumNetworks.For(Net));
             long amount = 0;
-            if (!SendAll && !CoinAmount.TryParseIn(SendAmount, _config.Unit, out amount))
+            if (!SendAll && (!CoinAmount.TryParseIn(SendAmount, _config.Unit, out amount) || amount <= 0))
             {
                 SendPreview = Loc.Tr("msg.amount.invalid");
                 return;
@@ -158,7 +158,9 @@ public partial class MainWindowViewModel
                 _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, SendAll);
 
-            SendPreview = $"txid {_pendingSend.Txid[..16]}… · " +
+            SendPreview = (_pendingSend.TxidIsFinal
+                    ? $"txid {_pendingSend.Txid[..16]}… · "
+                    : Loc.Tr("msg.txid.notfinal") + " · ") +
                 $"fee {Fmt(_pendingSend.Fee.Satoshi)} " +
                 $"({_pendingSend.Transaction.GetVirtualSize()} vB)" +
                 (_pendingSend.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
@@ -193,7 +195,7 @@ public partial class MainWindowViewModel
             return;
         try
         {
-            var txid = await _client.BroadcastAsync(_pendingSend.ToHex());
+            var txid = await _client.BroadcastVerifiedAsync(_pendingSend.ToHex(), _pendingSend.Txid);
             SendPreview = $"{Loc.Tr("msg.broadcasted")}: {txid}";
             SendTo = SendAmount = "";
             _pendingSend = null;
@@ -206,4 +208,5 @@ public partial class MainWindowViewModel
             SendPreview = $"{Loc.Tr("msg.broadcast.error")}: {DescribeError(ex)}";
         }
     }
+
 }

@@ -4,17 +4,17 @@ using NBitcoin.Crypto;
 namespace PalladiumWallet.Core.Spv;
 
 /// <summary>
-/// Verifica delle prove di Merkle (blueprint §7.1/§7.4): le risposte dei server
-/// non sono fidate, ogni transazione confermata va verificata contro il
-/// merkle_root dell'header al suo blocco (§17).
+/// Merkle proof verification (blueprint §7.1/§7.4): server replies are not trusted,
+/// so every confirmed transaction is checked against the merkle_root of the header
+/// of its block (§17).
 /// </summary>
 public static class MerkleProof
 {
     /// <summary>
-    /// Risale la prova dal txid alla radice: a ogni livello il nodo fratello
-    /// si concatena a sinistra o destra secondo il bit di posizione, con
-    /// doppio SHA-256. I nodi sono nell'ordine restituito dal server
-    /// (dal basso verso l'alto), in hex display (byte invertiti).
+    /// Walks the proof from the txid up to the root: at each level the sibling node is
+    /// concatenated on the left or the right according to the position bit, hashed with
+    /// double SHA-256. The nodes are in the order returned by the server (bottom to top),
+    /// in display hex (bytes reversed).
     /// </summary>
     public static uint256 ComputeRoot(uint256 txid, int position, IEnumerable<uint256> branch)
     {
@@ -41,7 +41,7 @@ public static class MerkleProof
     public static bool Verify(uint256 txid, int position, IEnumerable<uint256> branch, uint256 merkleRoot) =>
         ComputeRoot(txid, position, branch) == merkleRoot;
 
-    /// <summary>Radice di Merkle di una lista completa di txid (per i test e per blocchi piccoli).</summary>
+    /// <summary>Merkle root of a complete list of txids (for tests and small blocks).</summary>
     public static uint256 ComputeRootFromLeaves(IReadOnlyList<uint256> txids)
     {
         if (txids.Count == 0)

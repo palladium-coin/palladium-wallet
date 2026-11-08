@@ -8,6 +8,14 @@ public readonly record struct HistoryItem(string TxHash, int Height, long FeeSat
 /// <summary>UTXO reported by the server (blockchain.scripthash.listunspent).</summary>
 public readonly record struct UnspentItem(string TxHash, int TxPos, long ValueSats, int Height);
 
+/// <summary>The server answered a broadcast with a txid other than the one of the transaction sent.</summary>
+public sealed class BroadcastTxidMismatchException(string expectedTxid, string reportedTxid) : Exception(
+    $"The server reported txid {reportedTxid}, but the transaction sent is {expectedTxid}.")
+{
+    public string ExpectedTxid { get; } = expectedTxid;
+    public string ReportedTxid { get; } = reportedTxid;
+}
+
 /// <summary>Merkle proof (blockchain.transaction.get_merkle).</summary>
 public sealed record MerkleProofResponse(int BlockHeight, int Pos, IReadOnlyList<string> Merkle);
 
@@ -107,6 +115,20 @@ public static class ElectrumApi
     {
         var r = await c.RequestAsync("blockchain.transaction.broadcast", ct, rawTxHex);
         return r.GetString()!;
+    }
+
+    /// <summary>
+    /// Broadcasts a signed transaction and accepts the reply only if it names the txid computed
+    /// locally. The txid is fixed by the signed bytes, so a different one means the server is not
+    /// reporting what was sent. Used by every send path (GUI and CLI).
+    /// </summary>
+    public static async Task<string> BroadcastVerifiedAsync(this ElectrumClient c, string rawTxHex,
+        string expectedTxid, CancellationToken ct = default)
+    {
+        var reported = await c.BroadcastAsync(rawTxHex, ct);
+        if (!string.Equals(reported, expectedTxid, StringComparison.OrdinalIgnoreCase))
+            throw new BroadcastTxidMismatchException(expectedTxid, reported);
+        return reported;
     }
 
     /// <summary>Estimated fee in coin/kB for the given target; -1 if the server cannot estimate.</summary>
