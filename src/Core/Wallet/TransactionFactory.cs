@@ -166,9 +166,7 @@ public sealed class TransactionFactory(IWalletAccount account)
         bool sendAll,
         int totalSpendableCount)
     {
-        var coins = selectedUtxos.Select(u => new Coin(
-            new OutPoint(uint256.Parse(u.Txid), (uint)u.Vout),
-            transactions[u.Txid].Outputs[u.Vout])).ToList();
+        var coins = selectedUtxos.Select(u => CoinFor(u, transactions)).ToList();
 
         var builder = Network.CreateTransactionBuilder();
         builder.SetVersion(2);
@@ -232,6 +230,22 @@ public sealed class TransactionFactory(IWalletAccount account)
             Signed = !account.IsWatchOnly,
             Psbt = builder.BuildPSBT(sign: !account.IsWatchOnly),
         };
+    }
+
+    /// <summary>
+    /// The coin for a UTXO. A P2SH-wrapped segwit output (ScriptKind.WrappedSegwit) needs its
+    /// redeem script (the P2WPKH of the key) attached: without it NBitcoin cannot estimate the
+    /// input size nor sign it. It comes from the public key, so watch-only accounts get it too.
+    /// </summary>
+    private Coin CoinFor(CachedUtxo u, IReadOnlyDictionary<string, Transaction> transactions)
+    {
+        var coin = new Coin(
+            new OutPoint(uint256.Parse(u.Txid), (uint)u.Vout),
+            transactions[u.Txid].Outputs[u.Vout]);
+        return account.Kind == ScriptKind.WrappedSegwit
+            && account.GetPublicKey(u.IsChange, u.AddressIndex) is { } key
+            ? coin.ToScriptCoin(key.WitHash.ScriptPubKey)
+            : coin;
     }
 
     private static string BuildTooLargeMessage(

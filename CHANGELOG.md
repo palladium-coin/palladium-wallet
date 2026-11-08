@@ -7,6 +7,10 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- Wrapped segwit (P2SH-P2WPKH) wallets could not build a spend: the redeem script is now attached to each input coin, so they can send, and watch-only ones can produce a PSBT.
+
 ### Security
 
 - A raw transaction served by the indexing server is now required to hash to the txid it was requested under (sync, preload from the wallet cache, transaction details, CLI `send`). Before, the Merkle proof covered only the txid, so a hostile server could return a fabricated transaction for a real txid and have it counted as verified (ADR 0043).
