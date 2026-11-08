@@ -240,7 +240,7 @@ static async Task<int> Send(string[] o)
     var network = PalladiumNetworks.For(account.Profile.Kind);
     var transactions = new Dictionary<string, Transaction>();
     foreach (var txid in doc.Cache.Utxos.Select(u => u.Txid).Distinct())
-        transactions[txid] = Transaction.Parse(await client.GetTransactionAsync(txid), network);
+        transactions[txid] = await client.GetVerifiedTransactionAsync(txid, network);
 
     var built = new TransactionFactory(account).Build(
         doc.Cache.Utxos, transactions, destination, amount, feeRate,

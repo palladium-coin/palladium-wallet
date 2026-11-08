@@ -76,6 +76,13 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     /// </summary>
     public const int CrossCheckMinDepth = 3;
 
+    /// <summary>
+    /// A proof for a block above the newest checkpoint is verified again at every sync while the
+    /// block is less than this many blocks deep (2-minute blocks: about 48 minutes), so a
+    /// reorganisation that swaps the block for another one at the same height is noticed.
+    /// </summary>
+    public const int ReorgRecheckDepth = 24;
+
     private readonly object _witnessLock = new();
     private Task<IReadOnlyList<ElectrumClient>>? _witnesses;
     private readonly ConcurrentDictionary<int, Task> _crossChecks = new();
@@ -145,7 +152,12 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     {
         foreach (var (txid, hex) in rawTxHex)
         {
-            _txCache.TryAdd(txid, Transaction.Parse(hex, network));
+            var tx = Transaction.Parse(hex, network);
+            // A cached entry that no longer hashes to its key is not trusted (it is downloaded
+            // again): same binding as for a fresh download, see VerifiedTransactions.
+            if (!uint256.TryParse(txid, out var expected) || tx.GetHash() != expected)
+                continue;
+            _txCache.TryAdd(txid, tx);
             // ExportCaches only ever wrote confirmed transactions here (see its own
             // filter), so every preloaded entry is safe to mark confirmed too.
             _confirmedTxids.TryAdd(txid, 0);
@@ -157,9 +169,14 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             foreach (var (txid, height) in verifiedAt)
                 if (!_verifiedAtHeight.ContainsKey(txid))
                     _verifiedAtHeight[txid] = height;
-        if (blockHeaders is not null)
+        // A persisted header is trusted only inside a segment proven to hash-chain up to a
+        // checkpoint (ADR 0043). Anything else (above the newest checkpoint, or written by an
+        // older version that cached unvalidated headers) can be stale after a reorganisation or
+        // forged, and is fetched again when needed.
+        if (blockHeaders is not null && anchoredDownTo is not null)
             foreach (var (height, hex) in blockHeaders)
-                _headerFetches.TryAdd(height, Task.FromResult(hex));
+                if (anchoredDownTo.Any(a => a.Value <= height && height <= a.Key))
+                    _headerFetches.TryAdd(height, Task.FromResult(hex));
         // Only trust a preloaded anchor down to a height whose header is also cached: if the
         // header cache was cleared/corrupted independently, re-deriving the chain-of-hashes
         // check on next use (AnchorToCheckpointAsync re-fetches what's missing) is safer than
@@ -190,11 +207,12 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             .Where(_txCache.ContainsKey)
             .ToDictionary(txid => txid, txid => _txCache[txid].ToHex());
 
-        // Only already-completed headers: in-progress Task<string> instances
-        // are not persisted (they will be re-fetched on the next sync if needed).
+        // Only already-completed headers inside an anchored segment: in-progress Task<string>
+        // instances are not persisted (re-fetched if needed), and neither is a header that was
+        // never proven to chain to a checkpoint — it may be forged or stale after a reorg.
         var headers = new Dictionary<int, string>();
         foreach (var (height, task) in _headerFetches)
-            if (task.IsCompletedSuccessfully)
+            if (task.IsCompletedSuccessfully && IsInAnchoredSegment(height))
                 headers[height] = task.Result;
 
         return (rawHex, new Dictionary<string, int>(_verifiedAtHeight), headers,
@@ -206,6 +224,14 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         var tip = await client.SubscribeHeadersAsync(ct);
         _tipHeight = tip.Height;
         Progress?.Invoke($"chain tip: {tip.Height}");
+
+        // Headers outside an anchored segment (above the newest checkpoint) are only backed by
+        // what a server said, and a reorganisation can replace them: never carried over between
+        // syncs. The same goes for cross-check outcomes, and for a failed fetch cached as a task.
+        foreach (var h in _headerFetches.Keys)
+            if (!IsInAnchoredSegment(h))
+                _headerFetches.TryRemove(h, out _);
+        _crossChecks.Clear();
 
         // 1-2. Address scanning.
         var tracked = new List<TrackedAddress>();
@@ -269,7 +295,8 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         var missing  = txHeights.Keys.Where(txid => !_txCache.ContainsKey(txid)).ToList();
         var toVerify = txHeights
             .Where(kv => kv.Value > 0
-                && (!_verifiedAtHeight.TryGetValue(kv.Key, out var h) || h != kv.Value))
+                && (!_verifiedAtHeight.TryGetValue(kv.Key, out var h) || h != kv.Value
+                    || NeedsRecheck(kv.Value, tip.Height)))
             .ToList();
 
         // Total/already-cached counts (not just this session's downloads): on a sync resumed
@@ -290,7 +317,7 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
         await Task.WhenAll(missing.Select(txid => RetryOnBusyAsync(async () =>
         {
             var raw = await client.GetTransactionAsync(txid, ct);
-            _txCache[txid] = Transaction.Parse(raw, network);
+            _txCache[txid] = VerifiedTransactions.Parse(raw, txid, network);
             if (txHeights[txid] > 0)
                 _confirmedTxids.TryAdd(txid, 0);
             var n = Interlocked.Increment(ref dlDone);
@@ -319,6 +346,8 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             {
                 // A recent block on which the servers disagree: maybe a reorganisation in progress.
                 // Leave this proof unverified (not spendable) and decide again at the next sync.
+                // Also drop an earlier verdict being re-checked (NeedsRecheck): it is now in doubt.
+                _verifiedAtHeight.TryRemove(txid, out _);
                 return;
             }
             var headerHex = await _headerFetches.GetOrAdd(height, h => client.GetBlockHeaderAsync(h, ct));
@@ -490,31 +519,81 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
             return;
         }
 
-        _anchoredDownTo.TryGetValue(cp.Height, out var anchoredFrom);
-        var alreadyAnchored = _anchoredDownTo.ContainsKey(cp.Height);
-        if (alreadyAnchored && anchoredFrom <= height)
+        if (IsAnchored(cp.Height, height))
             return;
 
-        // Headers [height .. top]: top is the checkpoint itself, or the lowest height already
-        // proven to reach it (its header is trusted, so only the new segment is walked).
-        var top = alreadyAnchored ? anchoredFrom : cp.Height;
-        await FetchHeaderRangeAsync(height, top, ct);
+        // One walk at a time, and the whole walk (download, validation, publication) under the
+        // lock: a header reaches _headerFetches only after it has been proven to chain to the
+        // checkpoint, so a failed or partial walk never leaves unvalidated headers in the cache.
+        await _headerRangeLock.WaitAsync(ct);
+        try
+        {
+            if (IsAnchored(cp.Height, height))
+                return; // another walk covered this height while we were waiting
 
-        var headers = Enumerable.Range(height, top - height + 1)
-            .Select(h => BlockHeaderInfo.Parse(_headerFetches[h].Result))
-            .ToArray();
+            // Headers [height .. top]: top is the checkpoint itself, or the lowest height already
+            // proven to reach it (its header is trusted, so only the new segment is walked).
+            var alreadyAnchored = _anchoredDownTo.TryGetValue(cp.Height, out var anchoredFrom)
+                && _headerFetches.TryGetValue(anchoredFrom, out var anchorTask)
+                && anchorTask.IsCompletedSuccessfully;
+            var top = alreadyAnchored ? anchoredFrom : cp.Height;
 
-        if (!alreadyAnchored && !headers[^1].MatchesCheckpoint(cp))
-            throw new SpvVerificationException(
-                $"Header at checkpoint height {cp.Height} does not match the hardcoded hash: server is not trustworthy.");
+            var hexes = await FetchHeaderRangeAsync(height, top, ct);
 
-        for (var i = 1; i < headers.Length; i++)
-            if (!headers[i].IsValidChild(headers[i - 1].Hash, profile))
+            BlockHeaderInfo[] headers;
+            try
+            {
+                headers = [.. hexes.Select(BlockHeaderInfo.Parse)];
+            }
+            catch (Exception ex) when (ex is FormatException or ArgumentException)
+            {
                 throw new SpvVerificationException(
-                    $"Broken header chain at height {height + i}: server is not trustworthy.");
+                    $"Malformed header in range {height}..{top}: server is not trustworthy.");
+            }
 
-        _anchoredDownTo.AddOrUpdate(cp.Height, height, (_, existing) => Math.Min(existing, height));
+            if (!alreadyAnchored && !headers[^1].MatchesCheckpoint(cp))
+                throw new SpvVerificationException(
+                    $"Header at checkpoint height {cp.Height} does not match the hardcoded hash: server is not trustworthy.");
+
+            for (var i = 1; i < headers.Length; i++)
+                if (!headers[i].IsValidChild(headers[i - 1].Hash, profile))
+                    throw new SpvVerificationException(
+                        $"Broken header chain at height {height + i}: server is not trustworthy.");
+
+            for (var i = 0; i < hexes.Length; i++)
+                _headerFetches[height + i] = Task.FromResult(hexes[i]);
+            _anchoredDownTo.AddOrUpdate(cp.Height, height, (_, existing) => Math.Min(existing, height));
+        }
+        finally
+        {
+            _headerRangeLock.Release();
+        }
     }
+
+    /// <summary>True when <paramref name="height"/> is already proven to chain to checkpoint <paramref name="checkpointHeight"/> and its header is cached.</summary>
+    private bool IsAnchored(int checkpointHeight, int height) =>
+        _anchoredDownTo.TryGetValue(checkpointHeight, out var from) && from <= height
+        && _headerFetches.TryGetValue(height, out var task) && task.IsCompletedSuccessfully;
+
+    /// <summary>True for a height covered by a segment proven to hash-chain up to a checkpoint.</summary>
+    private bool IsInAnchoredSegment(int height)
+    {
+        foreach (var (checkpointHeight, from) in _anchoredDownTo)
+            if (from <= height && height <= checkpointHeight)
+                return true;
+        return false;
+    }
+
+    private int NewestCheckpointHeight =>
+        account.Profile.Checkpoints.Count == 0 ? 0 : account.Profile.Checkpoints.Max(c => c.Height);
+
+    /// <summary>
+    /// A verdict on a block above the newest checkpoint and still within <see cref="ReorgRecheckDepth"/>
+    /// of the tip is renewed at every sync: a reorganisation can put the same transaction, at the
+    /// same height, into a different block, which the height comparison alone would not notice.
+    /// </summary>
+    private bool NeedsRecheck(int height, int tipHeight) =>
+        height > NewestCheckpointHeight && tipHeight - height < ReorgRecheckDepth;
 
     /// <summary>
     /// For a block above the newest checkpoint: ask the witness servers for the same header and
@@ -579,38 +658,42 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
     }
 
     /// <summary>
-    /// Ensures every height in [<paramref name="fromHeight"/>, <paramref name="toHeightInclusive"/>]
-    /// is present in <see cref="_headerFetches"/>, downloading gaps with
+    /// Returns the raw header of every height in [<paramref name="fromHeight"/>, <paramref name="toHeightInclusive"/>],
+    /// taking already-cached ones from <see cref="_headerFetches"/> and downloading the gaps with
     /// blockchain.block.headers (§7.3) instead of one blockchain.block.header call per height.
+    /// Nothing is published to the cache: the caller does that after validating the chain. The reply
+    /// is untrusted, so its shape is checked before any slicing. Call with <see cref="_headerRangeLock"/> held.
     /// </summary>
-    private async Task FetchHeaderRangeAsync(int fromHeight, int toHeightInclusive, CancellationToken ct)
+    private async Task<string[]> FetchHeaderRangeAsync(int fromHeight, int toHeightInclusive, CancellationToken ct)
     {
-        await _headerRangeLock.WaitAsync(ct);
-        try
+        var result = new string[toHeightInclusive - fromHeight + 1];
+        var h = fromHeight;
+        while (h <= toHeightInclusive)
         {
-            var h = fromHeight;
-            while (h <= toHeightInclusive)
+            if (_headerFetches.TryGetValue(h, out var cached) && cached.IsCompletedSuccessfully)
             {
-                if (_headerFetches.ContainsKey(h)) { h++; continue; }
-
-                var requested = Math.Min(HeaderBatchSize, toHeightInclusive - h + 1);
-                var range = await client.GetBlockHeadersAsync(h, requested, ct);
-                if (range.Count == 0)
-                    throw new SpvVerificationException(
-                        $"Server returned no headers starting at height {h}: server is not trustworthy.");
-
-                for (var i = 0; i < range.Count; i++)
-                {
-                    var headerHex = range.Hex.Substring(i * BlockHeaderInfo.Size * 2, BlockHeaderInfo.Size * 2);
-                    _headerFetches.TryAdd(h + i, Task.FromResult(headerHex));
-                }
-                h += range.Count;
+                result[h - fromHeight] = cached.Result;
+                h++;
+                continue;
             }
+
+            var requested = Math.Min(HeaderBatchSize, toHeightInclusive - h + 1);
+            var range = await client.GetBlockHeadersAsync(h, requested, ct);
+            if (range.Count == 0)
+                throw new SpvVerificationException(
+                    $"Server returned no headers starting at height {h}: server is not trustworthy.");
+            // More headers than asked, or a hex string that is not exactly count * 80 bytes, is a
+            // broken or hostile reply: never slice it, never let it spill past the requested range.
+            if (range.Count < 0 || range.Count > requested
+                || range.Hex is null || range.Hex.Length != range.Count * BlockHeaderInfo.Size * 2)
+                throw new SpvVerificationException(
+                    $"Malformed header range at height {h} (count {range.Count}, requested {requested}): server is not trustworthy.");
+
+            for (var i = 0; i < range.Count; i++)
+                result[h - fromHeight + i] = range.Hex.Substring(i * BlockHeaderInfo.Size * 2, BlockHeaderInfo.Size * 2);
+            h += range.Count;
         }
-        finally
-        {
-            _headerRangeLock.Release();
-        }
+        return result;
     }
 
     /// <summary>

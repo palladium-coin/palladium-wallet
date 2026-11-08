@@ -732,6 +732,230 @@ public class WalletSynchronizerTests
         Assert.Equal(funding.GetHash().ToString(), Assert.Single(result.History).Txid);
     }
 
+    // ---- ADR 0043: tx bound to txid, header cache hygiene, header-range validation ----
+
+    private static Transaction OtherTx(HdAccount account)
+    {
+        var tx = Net.CreateTransaction();
+        tx.Inputs.Add(new TxIn(new OutPoint(uint256.One, 7)));
+        tx.Outputs.Add(Money.Satoshis(9_000_000), account.GetReceiveAddress(0));
+        return tx;
+    }
+
+    [Fact]
+    public async Task A_server_that_answers_with_another_transaction_for_a_txid_is_detected()
+    {
+        // The Merkle proof only covers the txid; the bytes must hash to it too.
+        var account = Account();
+        var scenario = new Scenario();
+        var real = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        scenario.Txs[real.GetHash().ToString()] = OtherTx(account); // forged content, real txid
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(
+            () => new WalletSynchronizer(account, client).SyncOnceAsync());
+        Assert.Contains("does not hash to", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_cached_transaction_that_does_not_hash_to_its_key_is_downloaded_again()
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var real = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 100);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        var first = new WalletSynchronizer(account, client);
+        var result1 = await first.SyncOnceAsync();
+        var (rawTx, verifiedAt, headers, anchored) = first.ExportCaches(Net);
+        rawTx[real.GetHash().ToString()] = OtherTx(account).ToHex(); // tampered cache entry
+
+        server.ResetCallCounts();
+        var second = new WalletSynchronizer(account, client);
+        second.PreloadCaches(rawTx, verifiedAt, headers,
+            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchored);
+        var result2 = await second.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result2.ConfirmedSats); // not the 9,000,000 of the tampered entry
+        Assert.Equal(1, server.CallCount("blockchain.transaction.get"));
+    }
+
+    private (Scenario Scenario, HdAccount Account, Transaction Funding, Dictionary<int, string> Chain)
+        CheckpointedChain(int checkpointHeight = 105, int lastHeader = 105)
+    {
+        var account = Account();
+        var scenario = new Scenario();
+        var funding = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 103);
+        var chain = ChainedHeaders(100, lastHeader, funding.GetHash(), roots: new() { [103] = funding.GetHash() });
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+        return (scenario, account, funding, chain);
+    }
+
+    private static HdAccount CheckpointAccount(Dictionary<int, string> chain, int height = 105) =>
+        Account(Profile with
+        {
+            Checkpoints = [new Checkpoint(height, BlockHeaderInfo.Parse(chain[height]).Hash.ToString(), 0x1d00ffff)],
+        });
+
+    [Fact]
+    public async Task A_header_range_with_more_headers_than_requested_is_rejected()
+    {
+        var (scenario, _, _, chain) = CheckpointedChain(lastHeader: 110);
+        var account = CheckpointAccount(chain);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        // A hostile server ignores the requested count and returns everything it has (103..110 = 8).
+        server.Handle("blockchain.block.headers", p =>
+        {
+            var hexes = Enumerable.Range(p[0].GetInt32(), 8).Select(h => scenario.Headers[h]).ToList();
+            return new { count = hexes.Count, hex = string.Concat(hexes) };
+        });
+
+        var sync = new WalletSynchronizer(account, client);
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(() => sync.SyncOnceAsync());
+
+        Assert.Contains("Malformed header range", ex.Message);
+        Assert.Empty(sync.ExportCaches(Net).BlockHeaders);
+    }
+
+    [Theory]
+    [InlineData(3, 100)]  // far too short for 3 headers
+    [InlineData(3, 481)]  // one hex digit too many
+    [InlineData(-1, 0)]   // negative count
+    public async Task A_header_range_whose_hex_does_not_match_its_count_is_rejected(int count, int hexLength)
+    {
+        var (scenario, _, _, chain) = CheckpointedChain();
+        var account = CheckpointAccount(chain);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        server.Handle("blockchain.block.headers", _ => new { count, hex = new string('0', hexLength) });
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(
+            () => new WalletSynchronizer(account, client).SyncOnceAsync());
+        Assert.Contains("Malformed header range", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_header_range_that_is_not_hex_is_a_verification_failure()
+    {
+        var (scenario, _, _, chain) = CheckpointedChain();
+        var account = CheckpointAccount(chain);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        server.Handle("blockchain.block.headers", _ => new { count = 3, hex = new string('z', 480) });
+
+        var ex = await Assert.ThrowsAsync<SpvVerificationException>(
+            () => new WalletSynchronizer(account, client).SyncOnceAsync());
+        Assert.Contains("Malformed header", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_failed_anchoring_walk_leaves_no_unvalidated_header_behind()
+    {
+        var (scenario, _, _, chain) = CheckpointedChain();
+        var account = CheckpointAccount(chain);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        // First a server that serves a chain which does not end at the hardcoded hash...
+        var forged = ChainedHeaders(100, 105, uint256.One);
+        foreach (var (h, hex) in forged) scenario.Headers[h] = hex;
+        var sync = new WalletSynchronizer(account, client);
+        await Assert.ThrowsAsync<SpvVerificationException>(() => sync.SyncOnceAsync());
+
+        // ...then an honest one: the forged headers must not have been cached.
+        foreach (var (h, hex) in chain) scenario.Headers[h] = hex;
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.ConfirmedSats);
+    }
+
+    [Fact]
+    public async Task Headers_above_the_newest_checkpoint_are_not_exported()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var sync = new WalletSynchronizer(account, client);
+        await sync.SyncOnceAsync();
+
+        var (_, verifiedAt, headers, _) = sync.ExportCaches(Net);
+        Assert.Single(verifiedAt);
+        Assert.Empty(headers);
+    }
+
+    [Fact]
+    public async Task A_persisted_header_outside_an_anchored_segment_is_not_trusted_on_preload()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario();
+        var tx = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+        var first = new WalletSynchronizer(account, client);
+        var result1 = await first.SyncOnceAsync();
+        var (rawTx, _, _, anchored) = first.ExportCaches(Net);
+
+        // An old cache (or a poisoned one) carries a header for 150 that proves nothing. The tx is
+        // not marked verified, so its proof is checked again and must fetch the real header.
+        var stale = Scenario.SingleTxHeaderHex(uint256.One, 150);
+        server.ResetCallCounts();
+        var second = new WalletSynchronizer(account, client);
+        second.PreloadCaches(rawTx, [], new() { [150] = stale },
+            result1.NextReceiveIndex, result1.NextChangeIndex, Net, anchored);
+        var result2 = await second.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result2.SpendableSats);
+        Assert.Equal(1, server.CallCount("blockchain.block.header"));
+        Assert.NotNull(tx);
+    }
+
+    [Fact]
+    public async Task A_reorg_that_swaps_the_block_at_the_same_height_is_followed_not_reported_as_a_forgery()
+    {
+        // The tx is in a recent block above the newest checkpoint. The block is replaced by another
+        // one at the same height that still contains the tx. A header kept from the first sync
+        // would no longer match the server: it must be fetched again, not treated as a lie.
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario { TipHeight = 160 };
+        var tx = scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 155);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var sync = new WalletSynchronizer(account, client);
+        await sync.SyncOnceAsync();
+        Assert.Equal(1, server.CallCount("blockchain.block.header"));
+
+        scenario.Headers[155] = Scenario.SingleTxHeaderHex(tx.GetHash(), 155, prevHash: uint256.One);
+        var result = await sync.SyncOnceAsync();
+
+        Assert.Equal(1_000_000, result.SpendableSats);
+        Assert.True(Assert.Single(result.History).Verified);
+        Assert.Equal(2, server.CallCount("blockchain.block.header")); // fetched again, not reused
+    }
+
+    [Fact]
+    public async Task A_deep_verified_proof_is_not_checked_again_at_every_sync()
+    {
+        var account = Account(ProfileWithCheckpointAt100());
+        var scenario = new Scenario(); // tip 200, tx at 150: 50 deep, beyond ReorgRecheckDepth
+        scenario.Pay(account.GetReceiveAddress(0), 1_000_000, height: 150);
+        var (server, client) = await StartAsync(scenario);
+        await using var _ = server; await using var __ = client;
+
+        var sync = new WalletSynchronizer(account, client);
+        await sync.SyncOnceAsync();
+        server.ResetCallCounts();
+        await sync.SyncOnceAsync();
+
+        Assert.Equal(0, server.CallCount("blockchain.transaction.get_merkle"));
+        Assert.Equal(0, server.CallCount("blockchain.block.header"));
+    }
+
     // ---- cache su disco ----
 
     [Fact]
@@ -749,7 +973,8 @@ public class WalletSynchronizerTests
 
         Assert.Single(rawTx);      // the confirmed tx is exported
         Assert.Single(verifiedAt); // with its verified height
-        Assert.NotEmpty(headers);
+        // Regtest has no checkpoint: nothing is anchored, so no header is persisted (ADR 0043).
+        Assert.Empty(headers);
 
         // Fresh synchroniser (new launch), warm cache: no re-download.
         server.ResetCallCounts();

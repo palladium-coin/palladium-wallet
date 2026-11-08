@@ -79,7 +79,7 @@ public static class TransactionInspector
         {
             if (cache is not null && cache.TryGetValue(id, out var hit))
                 return hit;
-            return Transaction.Parse(await client.GetTransactionAsync(id, ct), network);
+            return await client.GetVerifiedTransactionAsync(id, network, ct);
         }
 
         async Task<Transaction?> GetTxOrNull(string id)

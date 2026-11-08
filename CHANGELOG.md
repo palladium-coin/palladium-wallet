@@ -5,6 +5,14 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
+## [Unreleased]
+
+### Security
+
+- A raw transaction served by the indexing server is now required to hash to the txid it was requested under (sync, preload from the wallet cache, transaction details, CLI `send`). Before, the Merkle proof covered only the txid, so a hostile server could return a fabricated transaction for a real txid and have it counted as verified (ADR 0043).
+- Block headers not chained to a checkpoint (above the newest one, or on networks without checkpoints) are no longer kept between syncs nor written to the wallet file; proofs for blocks less than 24 deep are re-verified at every sync. This fixes honest servers being reported as untrustworthy after a shallow reorganisation, a state that also survived restarts (ADR 0043).
+- Header-range replies are validated (count within what was requested, hex exactly `count × 80` bytes, valid hex) and a header reaches the cache only after the whole range has been validated against the checkpoint (ADR 0043).
+
 ## [1.2.0] — 2026-11-03
 
 Hardens SPV verification (header anchoring fix, recent-block witness cross-check, chain identity
