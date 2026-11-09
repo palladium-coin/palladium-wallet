@@ -34,6 +34,7 @@ The indexing server (ElectrumX-compatible, port 50001/50002) is a **semi-trusted
 
 - Lie about unconfirmed (mempool) transactions — the wallet shows mempool transactions as unconfirmed and non-spendable
 - Refuse to relay a broadcast transaction
+- Answer a broadcast with a txid other than the one of the transaction sent. The wallet compares the reply with the txid it computed itself (`BroadcastVerifiedAsync`); on a mismatch it does not believe either side, but asks the server for the transaction by its txid. A transaction the server returns with the right hash is reported as in the network, one it does not know stays pending and can be sent again (same signed bytes, harmless to repeat), and a check that cannot be made also keeps it pending (ADR 0047). The answer to that check comes from the same server, so a send is only certain once a sync shows it in the wallet history.
 - Delay reporting of new blocks
 - Suggest misleading fee estimates or relay fee (the wallet ignores implausible values, never goes below the relay fee, and always shows the absolute fee, flagging one above 1% of the amount — ADR 0039)
 

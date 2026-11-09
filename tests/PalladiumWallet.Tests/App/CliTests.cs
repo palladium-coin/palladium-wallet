@@ -173,12 +173,84 @@ public sealed class CliTests : IDisposable
         Assert.DoesNotContain("   at ", err); // no stack trace
     }
 
+    private static readonly string WrongTxid = new('b', 64);
+
+    /// <summary>Wires <paramref name="server"/> so that the wallet of <see cref="Mnemonic"/> holds one 0.1 PLM coin.</summary>
+    private static (HdAccount Account, Transaction Funding) WireFundedServer(FakeElectrumServer server)
+    {
+        var net = PalladiumNetworks.Regtest;
+        Assert.True(Bip39.TryParse(Mnemonic, out var mnemonic));
+        var account = HdAccount.FromMnemonic(mnemonic!, null, ScriptKind.NativeSegwit, ChainProfiles.Regtest);
+        var funding = net.CreateTransaction();
+        funding.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        funding.Outputs.Add(Money.Satoshis(10_000_000), account.GetReceiveAddress(0));
+        var scripthash = Scripthash.FromAddress(account.GetReceiveAddress(0));
+
+        server.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Regtest.GenesisHash });
+        server.Handle("blockchain.headers.subscribe", _ => new { height = 300, hex = RegtestHeader(300) });
+        server.Handle("blockchain.scripthash.subscribe", _ => null);
+        server.Handle("blockchain.scripthash.get_history", p =>
+            p[0].GetString() == scripthash
+                ? new[] { new { tx_hash = funding.GetHash().ToString(), height = 100 } }
+                : Array.Empty<object>());
+        server.Handle("blockchain.transaction.get", _ => funding.ToHex());
+        server.Handle("blockchain.transaction.get_merkle",
+            _ => new { block_height = 100, pos = 0, merkle = Array.Empty<string>() });
+        server.Handle("blockchain.block.header", _ => RegtestHeader(100, funding.GetHash()));
+        return (account, funding);
+    }
+
+    [Fact]
+    public async Task Broadcast_WithAWrongTxidReply_AndTheTransactionNotInTheNetwork_PrintsTheSignedHex_AndFails()
+    {
+        await using var server = new FakeElectrumServer();
+        var (account, funding) = WireFundedServer(server);
+        server.Handle("blockchain.transaction.broadcast", _ => WrongTxid);
+        server.Handle("blockchain.transaction.get", p =>
+            p[0].GetString() == funding.GetHash().ToString()
+                ? funding.ToHex()
+                : throw new FakeElectrumError(2, "No such mempool or blockchain transaction"));
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+
+        var (exit, output, err) = await Cli("send", "--to", account.GetReceiveAddress(9).ToString(), "--amount", "0.05",
+            "--broadcast", "--server", $"{server.Host}:{server.Port}", "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("is not in the network", err);
+        var hex = output.Split('\n', StringSplitOptions.TrimEntries).Last(l => l.Length > 100 && l.All(Uri.IsHexDigit));
+        var tx = Transaction.Parse(hex, PalladiumNetworks.Regtest);
+        Assert.Contains(tx.Outputs, o => o.Value == Money.Satoshis(5_000_000));
+        Assert.Contains(tx.GetHash().ToString(), err);
+    }
+
+    [Fact]
+    public async Task Broadcast_WithAWrongTxidReply_AndTheTransactionInTheNetwork_SucceedsAndReportsTheServer()
+    {
+        await using var server = new FakeElectrumServer();
+        var (account, funding) = WireFundedServer(server);
+        string? sent = null;
+        server.Handle("blockchain.transaction.broadcast", p => { sent = p[0].GetString(); return WrongTxid; });
+        server.Handle("blockchain.transaction.get", p =>
+            sent is not null && Transaction.Parse(sent, PalladiumNetworks.Regtest).GetHash().ToString() == p[0].GetString() ? sent
+            : p[0].GetString() == funding.GetHash().ToString() ? funding.ToHex()
+            : throw new FakeElectrumError(2, "No such mempool or blockchain transaction"));
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+
+        var (exit, output, _) = await Cli("send", "--to", account.GetReceiveAddress(9).ToString(), "--amount", "0.05",
+            "--broadcast", "--server", $"{server.Host}:{server.Port}", "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        var ourTxid = Transaction.Parse(sent!, PalladiumNetworks.Regtest).GetHash().ToString();
+        Assert.Contains($"{ourTxid} is in the network", output);
+        Assert.Contains(WrongTxid, output);
+    }
+
     /// <summary>A regtest block header with the given height, enough for the synchronizer's checks.</summary>
-    private static string RegtestHeader(int height)
+    private static string RegtestHeader(int height, uint256? merkleRoot = null)
     {
         var header = PalladiumNetworks.Regtest.Consensus.ConsensusFactory.CreateBlockHeader();
         header.HashPrevBlock = uint256.Zero;
-        header.HashMerkleRoot = uint256.One;
+        header.HashMerkleRoot = merkleRoot ?? uint256.One;
         header.BlockTime = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000 + height);
         header.Bits = new Target(0x1d00ffffu);
         header.Nonce = (uint)height;

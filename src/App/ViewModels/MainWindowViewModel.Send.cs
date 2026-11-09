@@ -197,18 +197,22 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ConfirmSend()
     {
-        if (_pendingSend is null || _client is null)
+        var built = _pendingSend;
+        var client = _client;
+        if (built is null || client is null)
             return;
         try
         {
-            var txid = await _client.BroadcastVerifiedAsync(_pendingSend.ToHex(), _pendingSend.Txid);
+            var txid = await client.BroadcastVerifiedAsync(built.ToHex(), built.Txid);
             SendPreview = $"{Loc.Tr("msg.broadcasted")}: {txid}";
-            SendTo = SendAmount = "";
-            ClearCoinSelection(); // the selected coins are spent now
-            _pendingSend = null;
-            HasPendingSend = false;
-            PendingPsbtBase64 = "";
-            await ConnectAndSync();
+            await FinishSendAsync();
+        }
+        catch (BroadcastTxidMismatchException)
+        {
+            var (message, inNetwork) = await ReconcileBroadcastMismatchAsync(client, built);
+            SendPreview = message;
+            if (inNetwork)
+                await FinishSendAsync();
         }
         catch (Exception ex)
         {
@@ -216,4 +220,37 @@ public partial class MainWindowViewModel
         }
     }
 
+    /// <summary>The send is done: the form, the pending transaction and the coin selection are cleared and the wallet resyncs.</summary>
+    private async Task FinishSendAsync()
+    {
+        SendTo = SendAmount = "";
+        ClearCoinSelection(); // the selected coins are spent now
+        _pendingSend = null;
+        HasPendingSend = false;
+        PendingPsbtBase64 = "";
+        await ConnectAndSync();
+    }
+
+    /// <summary>
+    /// The server answered a broadcast with a txid other than the one we built. The reply is not
+    /// evidence, so the server is asked for the transaction itself: when it holds the transaction, it
+    /// is in the network and the send is done (the anomaly is still reported); when it does not, the
+    /// transaction stays pending and can be sent again, because the same signed bytes are harmless
+    /// to repeat. A check that cannot be completed also keeps the transaction pending.
+    /// Shared with Donate. Returns the message to show and whether the transaction is in the network.
+    /// </summary>
+    private async Task<(string Message, bool InNetwork)> ReconcileBroadcastMismatchAsync(
+        ElectrumClient client, BuiltTransaction built)
+    {
+        try
+        {
+            return await client.HasTransactionAsync(built.Txid, PalladiumNetworks.For(Net))
+                ? (string.Format(Loc.Tr("msg.broadcast.innetwork"), built.Txid), true)
+                : (Loc.Tr("msg.broadcast.notinnetwork"), false);
+        }
+        catch (Exception)
+        {
+            return (Loc.Tr("msg.broadcast.checkfailed"), false);
+        }
+    }
 }

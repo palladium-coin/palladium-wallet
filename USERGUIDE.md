@@ -406,6 +406,14 @@ Sending is a **two-step** operation:
    shows the full txid; the form clears and a re-sync starts. After broadcasting, **a
    transaction cannot be cancelled** — it is in the network's mempool and will confirm.
 
+   In the rare case that the server answers with a txid that is not the one of your
+   transaction, the wallet asks the server for the transaction itself. If the server has it,
+   the send is done and the message says the server replied with a different txid (report it
+   to the server's operator). If the server does not have it, or the check could not be made,
+   the transaction stays **pending**: press confirm again to send the same transaction once
+   more, which is harmless. The sure sign that a send went through is that it appears in your
+   history after the re-sync.
+
 ### 8.3 How the transaction is built (facts you may need)
 
 - **Coin selection is automatic** unless you choose coins yourself in the Coins tab (see

@@ -29,6 +29,7 @@ release and covers the full history from the initial commit.
 - Core error messages and comments are in English; the wrong-password message is shown in the UI language.
 - `send` synchronizes the wallet before it builds the transaction. Before, it built from the last saved cache, so a second send right after the first could select an output already spent and fail at broadcast, after printing a txid.
 - The CLI `send --broadcast` and `sign-psbt --broadcast` check that the server's txid is the one computed locally, as the GUI already did.
+- When a broadcast is answered with another txid, the wallet no longer stops at an error: it asks the server for the transaction it built. If the server holds it, the send is done and the anomaly is reported; if not, the transaction stays pending and can be sent again (same signed bytes); if the check cannot be made, it stays pending too. The CLI exits 0 when the transaction is in the network, and otherwise exits 1 and prints the signed hex. See ADR 0047.
 - A watch-only transaction with legacy or wrapped inputs shows "txid not final until signed": its txid changes when signed, so the one shown before was not the one broadcast.
 - A frozen UTXO stays frozen after a CLI sync, and it is excluded from the balance as well as from coin selection (the flag is applied while the UTXOs are built).
 - An address of another network (e.g. a mainnet address on regtest) gives a one-line error instead of a stack trace.

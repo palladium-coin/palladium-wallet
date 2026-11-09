@@ -131,6 +131,29 @@ public static class ElectrumApi
         return reported;
     }
 
+    /// <summary>
+    /// Whether the server holds the transaction with this txid, in its mempool or in the chain. It is
+    /// true only when the raw transaction the server returns hashes to <paramref name="txid"/>: the
+    /// reply of a broadcast is not evidence, the transaction itself is. A server that does not know the
+    /// transaction answers with a JSON-RPC error, and so does a server that returns something that is
+    /// not a transaction: both are "no". A transport failure is not an answer and propagates.
+    /// </summary>
+    public static async Task<bool> HasTransactionAsync(this ElectrumClient c, string txid,
+        NBitcoin.Network network, CancellationToken ct = default)
+    {
+        string raw;
+        try
+        {
+            raw = await c.GetTransactionAsync(txid, ct);
+            return string.Equals(NBitcoin.Transaction.Parse(raw, network).GetHash().ToString(), txid,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ElectrumServerException or FormatException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Estimated fee in coin/kB for the given target; -1 if the server cannot estimate.</summary>
     public static async Task<decimal> EstimateFeeAsync(this ElectrumClient c, int targetBlocks,
         CancellationToken ct = default)

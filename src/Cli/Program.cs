@@ -310,9 +310,50 @@ static async Task<int> Send(string[] o)
         return 0;
     }
 
-    var txid2 = await client.BroadcastVerifiedAsync(built.ToHex(), built.Txid);
-    Console.WriteLine($"Broadcast: {txid2}");
-    return 0;
+    return await BroadcastSigned(client, built.Transaction, network);
+}
+
+/// <summary>
+/// Broadcasts a signed transaction. When the server replies with a txid other than the one computed
+/// locally, the reply is not trusted either way: the server is asked for the transaction itself. If it
+/// holds it, the transaction is in the network (reported, exit 0); if not, the signed hex is printed so
+/// it can be sent again (the same bytes are harmless to repeat) and the exit code is 1.
+/// </summary>
+static async Task<int> BroadcastSigned(ElectrumClient client, Transaction tx, Network network)
+{
+    var hex = tx.ToHex();
+    var txid = tx.GetHash().ToString();
+    try
+    {
+        Console.WriteLine($"Broadcast: {await client.BroadcastVerifiedAsync(hex, txid)}");
+        return 0;
+    }
+    catch (BroadcastTxidMismatchException mismatch)
+    {
+        bool inNetwork;
+        try
+        {
+            inNetwork = await client.HasTransactionAsync(txid, network);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: the server replied with txid {mismatch.ReportedTxid} and the network " +
+                $"could not be checked ({ex.Message}). The signed transaction {txid} is:");
+            Console.WriteLine(hex);
+            return 1;
+        }
+
+        if (inNetwork)
+        {
+            Console.WriteLine($"Broadcast: {txid} is in the network. The server replied with txid " +
+                $"{mismatch.ReportedTxid}: report it to the server operator.");
+            return 0;
+        }
+        Console.Error.WriteLine($"Error: the server replied with txid {mismatch.ReportedTxid} and {txid} " +
+            "is not in the network. The signed transaction is printed below: send it again (same bytes).");
+        Console.WriteLine(hex);
+        return 1;
+    }
 }
 
 static async Task<int> SignPsbt(string text, string[] o)
@@ -363,8 +404,7 @@ static async Task<int> SignPsbt(string text, string[] o)
         return 0;
 
     await using var client = await Connect(o, account.Profile);
-    Console.WriteLine($"Broadcast: {await client.BroadcastVerifiedAsync(final.ToHex(), final.GetHash().ToString())}");
-    return 0;
+    return await BroadcastSigned(client, final, network);
 }
 
 static int ResetCerts(string[] o)

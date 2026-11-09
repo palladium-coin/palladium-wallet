@@ -87,22 +87,37 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ConfirmDonate()
     {
-        if (_pendingDonate is null || _client is null)
+        var built = _pendingDonate;
+        var client = _client;
+        if (built is null || client is null)
             return;
         try
         {
-            var txid = await _client.BroadcastVerifiedAsync(_pendingDonate.ToHex(), _pendingDonate.Txid);
+            var txid = await client.BroadcastVerifiedAsync(built.ToHex(), built.Txid);
             DonatePreview = $"{Loc.Tr("msg.donate.thanks")}: {txid}";
-            DonateAmount = "";
-            ClearCoinSelection(); // the selected coins are spent now
-            _pendingDonate = null;
-            HasPendingDonate = false;
-            await ConnectAndSync();
+            await FinishDonateAsync();
+        }
+        catch (BroadcastTxidMismatchException)
+        {
+            // Same reconciliation as Send: the transaction the server holds decides, not its reply.
+            var (message, inNetwork) = await ReconcileBroadcastMismatchAsync(client, built);
+            DonatePreview = message;
+            if (inNetwork)
+                await FinishDonateAsync();
         }
         catch (Exception ex)
         {
             DonatePreview = $"{Loc.Tr("msg.broadcast.error")}: {DescribeError(ex)}";
         }
+    }
+
+    private async Task FinishDonateAsync()
+    {
+        DonateAmount = "";
+        ClearCoinSelection(); // the selected coins are spent now
+        _pendingDonate = null;
+        HasPendingDonate = false;
+        await ConnectAndSync();
     }
 
     private void ResetDonate()
