@@ -276,6 +276,7 @@ public partial class MainWindowViewModel
             VerifyingText = "";
             ReceiveAddress = _account.GetReceiveAddress(0).ToString();
             History.Clear();
+            RefreshCoins(null);
             Addresses.Clear();
             for (var i = 0; i < 10; i++)
                 Addresses.Add(new AddressRow(_loc["addr.receive"], i,
@@ -291,6 +292,7 @@ public partial class MainWindowViewModel
         // negative. SpendableSats is computed directly from the same IsSpendable gate
         // coin selection uses, so it's always correct.
         BalanceText = Fmt(cache.SpendableSats);
+        RefreshCoins(cache);
         var pending = cache.History.Where(t => t.Height <= 0).Sum(t => t.DeltaSats);
         UnconfirmedText = pending != 0
             ? $"{Loc.Tr("msg.pending")}: {(pending > 0 ? "+" : "")}{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"

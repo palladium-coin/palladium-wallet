@@ -35,6 +35,7 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- A **Coins** tab in the GUI lists every coin of the wallet. A coin can be frozen (it is then never spent, and it leaves the balance; the freeze is saved in the wallet file), and coins can be selected to restrict the next send or donation to them (coin control). See ADR 0046 and the user guide, section 8.7.
 - `sign-psbt` CLI command: signs a PSBT with the wallet's keys after printing inputs, outputs (own change marked) and fee, refuses sighash types other than ALL and a previous transaction that does not match its outpoint, finalises when complete and can broadcast (ADR 0045).
 - The xpub/xprv import step of the GUI takes the optional master fingerprint and account path (ADR 0045).
 - PSBTs attach the full previous transaction of every input, so an offline signer can verify the amounts.

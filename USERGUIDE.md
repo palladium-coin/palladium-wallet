@@ -56,7 +56,6 @@ What this wallet intentionally does **not** include (as of this version):
 
 - Lightning Network
 - Hardware-wallet integration
-- Coin control (manual UTXO selection) — coin selection is always automatic
 - RBF fee bumping (transactions *signal* RBF, but there is no "bump fee" button)
 - Tor/proxy support — the indexing server can observe which addresses you query
 - Fiat currency conversion
@@ -320,7 +319,7 @@ applicable.
 
 ## 6. The main screen
 
-Five tabs: **History**, **Send**, **Receive**, **Addresses**, **Contacts**.
+Six tabs: **History**, **Send**, **Receive**, **Addresses**, **Contacts**, **Coins**.
 
 - **Balance** (top): confirmed, spendable balance in your chosen unit. Below it, when
   applicable, two amber advisory lines: *pending confirmation* (mempool, unproven, not
@@ -409,7 +408,8 @@ Sending is a **two-step** operation:
 
 ### 8.3 How the transaction is built (facts you may need)
 
-- **Coin selection is automatic** (there is no coin control). The wallet spends from its
+- **Coin selection is automatic** unless you choose coins yourself in the Coins tab (see
+  [section 8.7](#87-coins-tab-and-coin-control)). The wallet spends from its
   spendable UTXOs and sends any **change back to its own internal change chain** — this is
   why, in transaction details, one output to an address you don't recognize as "yours" may
   still be marked as yours: it is your change.
@@ -458,6 +458,21 @@ P2SH-wrapped inputs the txid shown before signing is not the final one; for nati
 The Help overlay includes a donation form (developer address
 `plm1qdq3gu2zvg9lyr8gxd6yln4wavc5tlp8prmvfay`) using the same prepare/confirm flow and the
 fee rate from the Send tab (an invalid rate is reported as an error). Entirely optional.
+
+### 8.7 Coins tab and coin control
+
+The **Coins** tab lists every coin (UTXO) of the wallet with its amount, its outpoint
+(`txid:vout`), its address and its status.
+
+- **Freeze / Unfreeze.** A frozen coin is never spent: not by automatic selection, and not by
+  coin control. Its value is also left out of the balance. The freeze is saved in the wallet
+  file, so it survives restarts and syncs. A coin you froze and forgot keeps its value out of
+  the balance until you unfreeze it.
+- **Use in next send.** Select spendable coins to restrict the next send (or donation) to them.
+  A summary appears in the Send tab, and *Clear selection* removes it. A successful send
+  clears the selection. The selection is not saved: it is gone when you restart the app.
+- If a selected coin stops being spendable (for example, it becomes unconfirmed after a
+  chain reorganisation), the send is blocked with a message until you deselect that coin.
 
 ---
 
@@ -751,7 +766,7 @@ A condensed version of the project's published threat model (`SECURITY.md`).
   irreversible.
 
 **Honest limitations of this version** (also listed in [section 1](#1-what-palladium-wallet-is-and-is-not)):
-single server connection (no pooling), no coin control, no fee estimation, no RBF bumping,
+single server connection (no pooling), no fee estimation, no RBF bumping,
 no hardware wallets, no Tor, GUI mainnet-only, and PSBT export and signing only via the CLI.
 
 ---

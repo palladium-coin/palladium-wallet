@@ -89,12 +89,17 @@ public abstract class VmTestBase : IDisposable
         return m!;
     }
 
-    protected (Transaction Funding, string TxHex) WireFundedChain(BitcoinAddress to, long sats)
+    /// <summary>
+    /// One funding transaction paying <paramref name="outputs"/> to <paramref name="to"/>, one output
+    /// each, in order: output n is vout n, so the wallet holds one coin per value.
+    /// </summary>
+    protected (Transaction Funding, string TxHex) WireFundedChain(BitcoinAddress to, params long[] outputs)
     {
         var net = PalladiumNetworks.Mainnet;
         var tx = net.CreateTransaction();
         tx.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
-        tx.Outputs.Add(Money.Satoshis(sats), to);
+        foreach (var sats in outputs)
+            tx.Outputs.Add(Money.Satoshis(sats), to);
         var txid = tx.GetHash();
         var scripthash = Scripthash.FromAddress(to);
 

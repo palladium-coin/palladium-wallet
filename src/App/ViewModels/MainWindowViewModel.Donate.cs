@@ -56,8 +56,14 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            var pool = SpendPool(out var poolError);
+            if (pool is null)
+            {
+                DonatePreview = poolError!;
+                return;
+            }
             _pendingDonate = new TransactionFactory(_account).Build(
-                _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
+                pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, sendAll: false);
 
             DonatePreview = (_pendingDonate.TxidIsFinal
@@ -88,6 +94,7 @@ public partial class MainWindowViewModel
             var txid = await _client.BroadcastVerifiedAsync(_pendingDonate.ToHex(), _pendingDonate.Txid);
             DonatePreview = $"{Loc.Tr("msg.donate.thanks")}: {txid}";
             DonateAmount = "";
+            ClearCoinSelection(); // the selected coins are spent now
             _pendingDonate = null;
             HasPendingDonate = false;
             await ConnectAndSync();

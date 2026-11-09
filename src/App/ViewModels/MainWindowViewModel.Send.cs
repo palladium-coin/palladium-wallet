@@ -154,8 +154,14 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            var pool = SpendPool(out var poolError);
+            if (pool is null)
+            {
+                SendPreview = poolError!;
+                return;
+            }
             _pendingSend = new TransactionFactory(_account).Build(
-                _doc.Cache.Utxos, _lastTransactions, destination, amount, feeRate,
+                pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, SendAll);
 
             SendPreview = (_pendingSend.TxidIsFinal
@@ -198,6 +204,7 @@ public partial class MainWindowViewModel
             var txid = await _client.BroadcastVerifiedAsync(_pendingSend.ToHex(), _pendingSend.Txid);
             SendPreview = $"{Loc.Tr("msg.broadcasted")}: {txid}";
             SendTo = SendAmount = "";
+            ClearCoinSelection(); // the selected coins are spent now
             _pendingSend = null;
             HasPendingSend = false;
             PendingPsbtBase64 = "";

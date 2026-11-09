@@ -12,6 +12,7 @@ using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Net;
 using PalladiumWallet.Core.Spv;
 using PalladiumWallet.Core.Storage;
+using PalladiumWallet.Core.Wallet;
 
 namespace PalladiumWallet.App.ViewModels;
 
@@ -332,6 +333,8 @@ public partial class MainWindowViewModel
                     AnchoredDownTo = anchoredDownTo,
                 };
                 FillDisplayFields(cache, result);
+                // The freezes as they are now: the user may have changed one while the sync ran.
+                CoinControl.ApplyFrozen(cache, Profile, _doc.Cache?.FrozenOutpoints() ?? new HashSet<(string Txid, int Vout)>());
                 // Finalise this run BEFORE the save's await: a stale partial snapshot still queued on the
                 // UI thread would otherwise run during the save and replace _doc.Cache with unverified rows.
                 Interlocked.Increment(ref _syncRun);
