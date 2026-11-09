@@ -25,11 +25,27 @@ public partial class MainWindowViewModel
 
     private BuiltTransaction? _pendingDonate;
 
-    [RelayCommand]
-    private async Task PrepareDonate()
+    // Same snapshot rule as Send (ADR 0048): changing the amount discards the prepared donation.
+    partial void OnDonateAmountChanged(string value) => InvalidatePendingDonate();
+
+    private void DiscardPendingDonate()
     {
         _pendingDonate = null;
         HasPendingDonate = false;
+    }
+
+    private void InvalidatePendingDonate()
+    {
+        if (_pendingDonate is null)
+            return;
+        DiscardPendingDonate();
+        DonatePreview = "";
+    }
+
+    [RelayCommand]
+    private async Task PrepareDonate()
+    {
+        DiscardPendingDonate();
 
         if (_account is null || _doc?.Cache is null || _lastTransactions is null)
         {
@@ -66,7 +82,8 @@ public partial class MainWindowViewModel
                 pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, sendAll: false);
 
-            DonatePreview = (_pendingDonate.TxidIsFinal
+            DonatePreview = DescribePayment(_pendingDonate, destination) +
+                (_pendingDonate.TxidIsFinal
                     ? $"txid {_pendingDonate.Txid[..16]}… · "
                     : Loc.Tr("msg.txid.notfinal") + " · ") +
                 $"fee {Fmt(_pendingDonate.Fee.Satoshi)} " +
@@ -77,8 +94,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _pendingDonate = null;
-            HasPendingDonate = false;
+            DiscardPendingDonate();
             DonatePreview = $"{Loc.Tr("msg.error")}: {ex.Message}";
         }
         await Task.CompletedTask;
@@ -113,18 +129,18 @@ public partial class MainWindowViewModel
 
     private async Task FinishDonateAsync()
     {
+        // The pending donation goes first: clearing the amount fires the invalidation hook, which
+        // would otherwise wipe the message that was just set.
+        DiscardPendingDonate();
         DonateAmount = "";
         ClearCoinSelection(); // the selected coins are spent now
-        _pendingDonate = null;
-        HasPendingDonate = false;
         await ConnectAndSync();
     }
 
     private void ResetDonate()
     {
+        DiscardPendingDonate();
         DonateAmount = "";
         DonatePreview = "";
-        HasPendingDonate = false;
-        _pendingDonate = null;
     }
 }

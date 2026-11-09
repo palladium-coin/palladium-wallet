@@ -340,6 +340,7 @@ public partial class MainWindowViewModel
                 Interlocked.Increment(ref _syncRun);
                 _doc.Cache = cache;
                 ApplyCache(cache);
+                DiscardStalePending(cache); // final state only: a partial snapshot may still be unverified
                 await WalletStore.SaveAsync(_doc, _walletPath!, _password);
                 _syncFailed = false;
                 StatusMessage = $"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +

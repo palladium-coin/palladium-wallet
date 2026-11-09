@@ -102,6 +102,7 @@ public partial class MainWindowViewModel
         if (freeze)
             _selectedCoins.Remove((row.Txid, row.Vout));
         ApplyCache(_doc.Cache);
+        DiscardStalePending(_doc.Cache); // freezing a coin of a prepared transaction drops that transaction
         if (_walletPath is null)
             return;
         try
@@ -123,6 +124,7 @@ public partial class MainWindowViewModel
         var key = (row.Txid, row.Vout);
         if (_selectedCoins.Remove(key))
         {
+            InvalidatePending(); // the selection went into any prepared transaction
             RefreshCoins(_doc.Cache);
             return;
         }
@@ -133,13 +135,18 @@ public partial class MainWindowViewModel
             return;
         }
         _selectedCoins.Add(key);
+        InvalidatePending();
         RefreshCoins(_doc.Cache);
     }
 
     [RelayCommand]
     private void ClearCoinSelection()
     {
-        _selectedCoins.Clear();
+        if (_selectedCoins.Count > 0)
+        {
+            _selectedCoins.Clear();
+            InvalidatePending();
+        }
         RefreshCoins(_doc?.Cache);
     }
 

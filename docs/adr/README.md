@@ -51,6 +51,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0045 | [Clamp the tip with a witness, validate TLS by default, build PSBTs from the shown transaction and sign them](0045-clamp-the-tip-with-a-witness-validate-tls-by-default-and-sign-psbts.md) | SPV | Accepted |
 | 0046 | [Freeze coins and select them by hand in a Coins tab](0046-freeze-coins-and-coin-control-in-the-gui.md) | Wallet | Accepted |
 | 0047 | [Reconcile a mismatched broadcast reply with the transaction the server holds](0047-reconcile-a-mismatched-broadcast-reply-with-the-transaction-the-server-holds.md) | Wallet | Accepted |
+| 0048 | [Treat the prepared transaction as a snapshot of what the user reviewed](0048-treat-the-prepared-transaction-as-a-snapshot-of-what-the-user-reviewed.md) | UI | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

@@ -399,9 +399,19 @@ wallet must be spendable (not watch-only) to actually broadcast.
 Sending is a **two-step** operation:
 
 1. **Prepare transaction** — builds and signs the transaction locally, without sending
-   anything. The summary card shows the txid (truncated), the **exact fee**, and the virtual
-   size, e.g. `txid 4f3a…| fee 0.00000141 PLM (141 vB)`. Nothing has left your wallet yet;
-   you can change the fields and prepare again, or simply navigate away to abandon it.
+   anything. The summary card is read from the transaction itself: the **amount and the full
+   address** it pays, the change that comes back to your wallet, then the txid (truncated), the
+   **exact fee**, and the virtual size, e.g. `txid 4f3a…| fee 0.00000141 PLM (141 vB)`. Check
+   the address character by character: it is what will be paid. Nothing has left your wallet
+   yet.
+
+   The prepared transaction is a **snapshot**. If you change anything that went into it (the
+   destination, the amount, *Send all*, the fee rate, or the coins selected in the Coins tab),
+   it is discarded and the summary clears: prepare again. The confirm button only ever sends
+   the transaction whose summary you are looking at. If a sync then finds that one of its
+   coins is no longer spendable (spent elsewhere, back in the mempool after a reorganisation,
+   or frozen), the prepared transaction is dropped with a message, and you prepare it again.
+   The Donate tab works the same way.
 2. **CONFIRM AND BROADCAST** — transmits the prepared transaction to the server. Success
    shows the full txid; the form clears and a re-sync starts. After broadcasting, **a
    transaction cannot be cancelled** — it is in the network's mempool and will confirm.
