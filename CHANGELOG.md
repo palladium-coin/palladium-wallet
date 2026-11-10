@@ -11,7 +11,13 @@ release and covers the full history from the initial commit.
 
 - The dust relay rate (3 sat/vB) moved from a literal in `TransactionFactory` to `ChainProfile.DustRelaySatPerVByte`; the thresholds (P2PKH 546, P2SH 540, P2WPKH 294, P2WSH 330 sat) were verified against Palladium Core v2.1.0 with `testmempoolaccept` (ADR 0049).
 
+### Added
+
+- CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
+
 ### Fixed
+
+- Malformed CLI input and environment failures escaped as a stack trace (exit 134): an invalid `--path`, `--server` port or `--scan`, a server that refuses the connection, a corrupt wallet file. They are now one-line errors with exit code 1.
 
 - The PSBT of a watch-only wallet could hold a different transaction (another output order) from the one whose txid and fee had just been shown: it is now built from that very transaction (ADR 0045).
 - A server could report an inflated chain tip and make fresh outputs look deeply confirmed; the tip is now checked against a witness server and the lower one is used when they differ by more than 2 blocks (ADR 0045).

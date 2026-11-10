@@ -23,6 +23,9 @@ try
         ["sync", .. var rest] => await Sync(rest),
         ["send", .. var rest] => await Send(rest),
         ["sign-psbt", var psbt, .. var rest] => await SignPsbt(psbt, rest),
+        ["utxos", .. var rest] => Utxos(rest),
+        ["freeze", var outpoint, .. var rest] => Freeze(outpoint, rest, frozen: true),
+        ["unfreeze", var outpoint, .. var rest] => Freeze(outpoint, rest, frozen: false),
         ["reset-certs", .. var rest] => ResetCerts(rest),
         ["servers", .. var rest] => await Servers(rest),
         _ => Usage(),
@@ -32,6 +35,14 @@ catch (Exception ex) when (ex is WalletSpendException or WrongPasswordException
     or CertificatePinMismatchException or ElectrumServerException or SpvVerificationException
     or WrongChainException or BroadcastTxidMismatchException)
 {
+    Console.Error.WriteLine($"Error: {ex.Message}");
+    return 1;
+}
+catch (Exception ex) when (ex is System.Net.Sockets.SocketException or IOException or TimeoutException
+    or InvalidDataException or System.Text.Json.JsonException or OperationCanceledException)
+{
+    // Environment failures (server unreachable or dropped, unreadable or corrupt wallet file): a
+    // clean one-line error, not a stack trace. A bug (any other exception) still surfaces loudly.
     Console.Error.WriteLine($"Error: {ex.Message}");
     return 1;
 }
@@ -313,6 +324,46 @@ static async Task<int> Send(string[] o)
     return await BroadcastSigned(client, built.Transaction, network);
 }
 
+/// <summary>Lists the cached coins with their state (offline: run <c>sync</c> to refresh them).</summary>
+static int Utxos(string[] o)
+{
+    var (doc, account, _) = OpenWallet(o);
+    if (doc.Cache is not { } cache)
+        throw new WalletSpendException("The wallet has never been synchronized: run 'sync' first.");
+    var profile = account.Profile;
+    Console.WriteLine($"Coins at height {cache.TipHeight} (from the last sync):");
+    foreach (var u in cache.Utxos.OrderBy(u => u.Txid, StringComparer.Ordinal).ThenBy(u => u.Vout))
+    {
+        var state = u.Frozen ? "frozen"
+            : u.Height <= 0 ? "unconfirmed"
+            : !u.Verified ? "awaiting SPV proof"
+            : u.Confirmations(cache.TipHeight) < u.RequiredConfirmations(profile) ? "not yet spendable"
+            : "spendable";
+        Console.WriteLine($"  {u.Txid}:{u.Vout}  {CoinAmount.Format(u.ValueSats, profile.CoinUnit),18}  " +
+            $"{u.Address}  {u.Confirmations(cache.TipHeight)} conf  {state}");
+    }
+    var frozenSats = cache.Utxos.Where(u => u.Frozen).Sum(u => u.ValueSats);
+    Console.WriteLine($"{cache.Utxos.Count} coin(s), {CoinAmount.Format(cache.SpendableSats, profile.CoinUnit)} spendable" +
+        (frozenSats != 0 ? $", {CoinAmount.Format(frozenSats, profile.CoinUnit)} frozen" : ""));
+    return 0;
+}
+
+/// <summary>Freezes or unfreezes one coin (<c>txid:vout</c>): a frozen coin is kept out of every spend.</summary>
+static int Freeze(string outpoint, string[] o, bool frozen)
+{
+    var (doc, account, path) = OpenWallet(o);
+    var parts = outpoint.Split(':');
+    if (parts.Length != 2 || parts[0].Length != 64 || !parts[0].All(Uri.IsHexDigit)
+        || !int.TryParse(parts[1], out var vout) || vout < 0)
+        throw new WalletSpendException("Expected a coin as <txid>:<vout> (see 'utxos').");
+    var txid = parts[0].ToLowerInvariant();
+    if (doc.Cache is not { } cache || !CoinControl.SetFrozen(cache, account.Profile, txid, vout, frozen))
+        throw new WalletSpendException($"{txid}:{vout} is not a coin of this wallet (run 'sync', then 'utxos').");
+    WalletStore.Save(doc, path, CliPassword.Current);
+    Console.WriteLine($"{(frozen ? "Frozen" : "Unfrozen")}: {txid}:{vout}");
+    return 0;
+}
+
 /// <summary>
 /// Broadcasts a signed transaction. When the server replies with a txid other than the one computed
 /// locally, the reply is not trusted either way: the server is asked for the transaction itself. If it
@@ -370,7 +421,9 @@ static async Task<int> SignPsbt(string text, string[] o)
     }
 
     var scan = Opt(o, "--scan") is { } scanText
-        ? int.Parse(scanText)
+        ? int.TryParse(scanText, out var scanCount) && scanCount is > 0 and <= 100_000
+            ? scanCount
+            : throw new WalletSpendException("--scan must be a number of addresses in 1-100000.")
         : Math.Max(PsbtSigner.DefaultScan,
             Math.Max(doc.Cache?.NextReceiveIndex ?? 0, doc.Cache?.NextChangeIndex ?? 0) + doc.GapLimit);
     var result = PsbtSigner.Sign(psbt, account, scan);
@@ -463,7 +516,7 @@ static HdAccount? AccountFromWords(string words, string[] o)
     var kind = Kind(o);
     var passphrase = Opt(o, "--passphrase");
     return Opt(o, "--path") is { } path
-        ? HdAccount.FromSeed(Bip39.ToSeed(mnemonic!, passphrase), kind, profile, KeyPath.Parse(path))
+        ? HdAccount.FromSeed(Bip39.ToSeed(mnemonic!, passphrase), kind, profile, ParsePath(path))
         : HdAccount.FromMnemonic(mnemonic!, passphrase, kind, profile);
 }
 
@@ -472,7 +525,7 @@ static int SaveWallet(string words, string[] o)
     var profile = Profile(o);
     var (doc, account) = WalletLoader.NewFromMnemonic(
         words, Opt(o, "--passphrase"), Kind(o), profile,
-        Opt(o, "--path") is { } p ? KeyPath.Parse(p) : null);
+        Opt(o, "--path") is { } p ? ParsePath(p) : null);
     var path = WalletPath(o, profile);
     WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
     Console.WriteLine($"Wallet saved to {path}");
@@ -485,7 +538,12 @@ static (WalletDocument, IWalletAccount, string) OpenWallet(string[] o)
     var path = WalletPath(o, Profile(o));
     if (!WalletStore.Exists(path))
         throw new WalletSpendException($"No wallet at {path}: use 'create' or 'restore'.");
-    var doc = WalletStore.Load(path, CliPassword.ForOpening(o, path));
+    WalletDocument doc;
+    try { doc = WalletStore.Load(path, CliPassword.ForOpening(o, path)); }
+    catch (System.Text.Json.JsonException)
+    {
+        throw new WalletSpendException($"{path} is not a valid wallet file.");
+    }
     return (doc, WalletLoader.ToAccount(doc), path);
 }
 
@@ -498,7 +556,10 @@ static async Task<ElectrumClient> Connect(string[] o, ChainProfile profile)
     {
         var parts = server.Split(':');
         host = parts[0];
-        port = parts.Length > 1 ? int.Parse(parts[1])
+        port = parts.Length > 1
+            ? int.TryParse(parts[1], out var p) && p is > 0 and <= 65535
+                ? p
+                : throw new WalletSpendException("--server must be host[:port] with a port in 1-65535.")
             : useSsl ? profile.DefaultSslPort : profile.DefaultTcpPort;
     }
     else
@@ -521,6 +582,12 @@ static async Task<ElectrumClient> Connect(string[] o, ChainProfile profile)
     }
     return client;
 }
+
+/// <summary>Parses a derivation path option, with a clean error instead of a parser exception.</summary>
+static KeyPath ParsePath(string text) =>
+    DerivationPaths.TryParse(text, out var keyPath) && keyPath is not null
+        ? keyPath
+        : throw new WalletSpendException("--path is not a valid derivation path (e.g. m/84'/746'/0').");
 
 static string? Opt(string[] options, string name)
 {
@@ -552,6 +619,9 @@ static int Usage()
           sync          [--server host[:port]] [--ssl] [--net ...] [--file PATH]
           send          --to ADDRESS (--amount X | --all) [--feerate sat/vB]
                         [--server host[:port]] [--ssl] [--broadcast] [...]
+          utxos         [--net ...] [--file PATH]     list the coins of the last sync (offline)
+          freeze        <txid>:<vout> [--net ...] [--file PATH]     keep a coin out of every spend (offline)
+          unfreeze      <txid>:<vout> [--net ...] [--file PATH]
           sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
                         sign a PSBT with this wallet's keys (offline half of the watch-only flow)
           servers       [--discover] [--server host[:port]] [--ssl] [--net ...]

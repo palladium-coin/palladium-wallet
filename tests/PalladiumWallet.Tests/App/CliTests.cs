@@ -464,4 +464,151 @@ public sealed class CliTests : IDisposable
         Assert.Equal(0, exit);
         Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
     }
+
+    // ----- coin listing and freezing (offline) -----
+
+    private static readonly string CoinTxid = new('a', 64);
+
+    private async Task<string> WalletWithOneCoin()
+    {
+        var file = WalletFile();
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", file);
+        var doc = WalletStore.Load(file, null);
+        doc.Cache = new SyncCache
+        {
+            TipHeight = 200,
+            SpendableSats = 50_000,
+            Utxos = [new CachedUtxo
+            {
+                Txid = CoinTxid, Vout = 1, ValueSats = 50_000, Address = "rplm1qexample",
+                Height = 150, Verified = true,
+            }],
+        };
+        WalletStore.Save(doc, file, null);
+        return file;
+    }
+
+    [Fact]
+    public async Task Utxos_ListsTheCachedCoins_AndNeedsASyncFirst()
+    {
+        var file = WalletFile();
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", file);
+        var (neverSynced, _, err) = await Cli("utxos", "--net", "regtest", "--file", file);
+        Assert.Equal(1, neverSynced);
+        Assert.Contains("never been synchronized", err);
+
+        await WalletWithOneCoin();
+        var (exit, output, _) = await Cli("utxos", "--net", "regtest", "--file", file);
+        Assert.Equal(0, exit);
+        Assert.Contains($"{CoinTxid}:1", output);
+        Assert.Contains("spendable", output);
+    }
+
+    [Fact]
+    public async Task Freeze_KeepsTheCoinOutOfTheBalance_AndUnfreezeRestoresIt()
+    {
+        var file = await WalletWithOneCoin();
+
+        var (exit, output, _) = await Cli("freeze", $"{CoinTxid}:1", "--net", "regtest", "--file", file);
+        Assert.Equal(0, exit);
+        Assert.Contains("Frozen", output);
+        var frozen = WalletStore.Load(file, null).Cache!;
+        Assert.True(frozen.Utxos[0].Frozen);
+        Assert.Equal(0, frozen.SpendableSats);
+        Assert.Contains("frozen", (await Cli("utxos", "--net", "regtest", "--file", file)).Out);
+
+        await Cli("unfreeze", $"{CoinTxid}:1", "--net", "regtest", "--file", file);
+        var restored = WalletStore.Load(file, null).Cache!;
+        Assert.False(restored.Utxos[0].Frozen);
+        Assert.Equal(50_000, restored.SpendableSats);
+    }
+
+    [Theory]
+    [InlineData("nothex:1")]
+    [InlineData("aaaa")]
+    [InlineData("TXID")]
+    public async Task Freeze_WithAMalformedOutpoint_FailsCleanly(string outpoint)
+    {
+        var file = await WalletWithOneCoin();
+        var (exit, _, err) = await Cli("freeze", outpoint, "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.Contains("<txid>:<vout>", err);
+    }
+
+    [Fact]
+    public async Task Freeze_OfACoinTheWalletDoesNotHave_FailsAndChangesNothing()
+    {
+        var file = await WalletWithOneCoin();
+        var (exit, _, err) = await Cli("freeze", $"{new string('b', 64)}:0", "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.Contains("not a coin of this wallet", err);
+        Assert.False(WalletStore.Load(file, null).Cache!.Utxos[0].Frozen);
+    }
+
+    // ----- malformed input and environment failures are clean errors, never a stack trace -----
+
+    [Theory]
+    [InlineData("restore", "--path", "foo")]
+    [InlineData("addresses", "--path", "foo")]
+    public async Task AnInvalidDerivationPath_IsACleanError(string command, string flag, string value)
+    {
+        var (exit, _, err) = await Cli(command, Mnemonic, "--net", "regtest", "--no-encryption", flag, value,
+            "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("--path is not a valid derivation path", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1:abc")]
+    [InlineData("127.0.0.1:0")]
+    [InlineData("127.0.0.1:70000")]
+    public async Task AnInvalidServerPort_IsACleanError(string server)
+    {
+        var file = await WalletWithOneCoin();
+        var (exit, _, err) = await Cli("sync", "--server", server, "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.Contains("port in 1-65535", err);
+    }
+
+    [Fact]
+    public async Task AServerThatRefusesTheConnection_IsACleanError()
+    {
+        var file = await WalletWithOneCoin();
+        int freePort;
+        using (var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            probe.Start();
+            freePort = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+        } // closed again: nothing listens on it
+        var (exit, _, err) = await Cli("sync", "--server", $"127.0.0.1:{freePort}", "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.StartsWith("Error:", err);
+        Assert.DoesNotContain("   at ", err);
+    }
+
+    [Fact]
+    public async Task ACorruptWalletFile_IsACleanError()
+    {
+        var file = WalletFile();
+        await File.WriteAllTextAsync(file, "garbage");
+        var (exit, _, err) = await Cli("info", "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.Contains("not a valid wallet file", err);
+    }
+
+    [Fact]
+    public async Task SignPsbt_WithAMalformedScan_IsACleanError()
+    {
+        // A real, parseable PSBT is needed to reach the --scan parsing.
+        var file = await WalletWithOneCoin();
+        var net = PalladiumNetworks.Regtest;
+        var tx = net.CreateTransaction();
+        tx.Inputs.Add(new NBitcoin.OutPoint(NBitcoin.uint256.One, 0));
+        tx.Outputs.Add(NBitcoin.Money.Satoshis(1000), new NBitcoin.Key().PubKey.WitHash);
+        var psbt = NBitcoin.PSBT.FromTransaction(tx, net).ToBase64();
+        var (exit, _, err) = await Cli("sign-psbt", psbt, "--scan", "abc", "--net", "regtest", "--file", file);
+        Assert.Equal(1, exit);
+        Assert.Contains("--scan must be", err);
+    }
 }

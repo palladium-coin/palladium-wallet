@@ -359,6 +359,12 @@ would **not be found after a restore from seed**. Under normal use (addresses ha
 sequentially, most getting used) this never triggers. The limit (20) is stored per wallet
 and is not editable in the GUI.
 
+*Example.* A wallet whose last used address is #4 scans #5–#24 and stops. If someone pays
+address **#45**, that payment is invisible after a restore from seed (and to a sync from a
+cache that never saw it): the balance stays at zero although the coins are on the chain.
+Nothing is lost: the funds appear once the wallet scans that far, so never hand out an address
+more than 20 positions beyond the last used one.
+
 ---
 
 ## 8. Sending funds
@@ -873,7 +879,8 @@ marked as unverified.
 send     --to ADDRESS (--amount X | --all) [--feerate R] [--broadcast]
          [--server ...] [--ssl] [--net N] [--file PATH]
 ```
-Builds a transaction from the synced cache (`sync` must have been run first). `--amount` is
+Synchronizes first (a spend must start from the chain's current state, never from an older cache),
+then builds the transaction. `--amount` is
 in **PLM**; `--all` sends everything minus the fee. `--feerate` is in sat/vB, **default 1**.
 Behavior by wallet type and flags:
 
@@ -885,6 +892,17 @@ Behavior by wallet type and flags:
   broadcast elsewhere.
 - Spendable wallet, **with `--broadcast`** → signs, transmits, prints the txid. Irreversible
   from this point.
+
+```
+utxos     [--net N] [--file PATH]
+freeze    <txid>:<vout> [--net N] [--file PATH]
+unfreeze  <txid>:<vout> [--net N] [--file PATH]
+```
+Work offline on the coins of the last `sync` (modelled on Bitcoin Core's `listunspent` and
+`lockunspent`). `utxos` lists each coin with its confirmations and state (spendable, frozen,
+unconfirmed, awaiting SPV proof) and the frozen total. A **frozen** coin is kept out of every
+spend, automatic or manual, and stays frozen across later syncs. `freeze` and `unfreeze` take a
+coin as printed by `utxos`.
 
 ```
 sign-psbt  <base64|-> [--scan N] [--broadcast --server ...] [--ssl] [--net N] [--file PATH]

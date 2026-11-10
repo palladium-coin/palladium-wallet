@@ -54,6 +54,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0048 | [Treat the prepared transaction as a snapshot of what the user reviewed](0048-treat-the-prepared-transaction-as-a-snapshot-of-what-the-user-reviewed.md) | UI | Accepted |
 | 0049 | [Keep the dust relay rate in the chain profile, verified against the node](0049-keep-the-dust-relay-rate-in-the-chain-profile-verified-against-the-node.md) | Chain | Accepted |
 | 0050 | [Sync before every CLI send and keep sign-psbt offline](0050-sync-before-every-cli-send-and-keep-sign-psbt-offline.md) | Wallet | Accepted |
+| 0051 | [Expose coin listing and freezing in the CLI](0051-expose-coin-listing-and-freezing-in-the-cli.md) | Wallet | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

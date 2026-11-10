@@ -43,8 +43,8 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) �
 
 ## Commands
 
-.NET 10 SDK lives in `~/.dotnet10` — in non-interactive shells, before any `dotnet` command run
-`export PATH="$HOME/.dotnet10:$PATH" DOTNET_ROOT="$HOME/.dotnet10"`.
+.NET 10 SDK lives in `~/.dotnet` — in non-interactive shells, before any `dotnet` command run
+`export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"`.
 
 - **Build:** `dotnet build`
 - **Test** (headless, primary verification layer): `dotnet test`
@@ -56,6 +56,7 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) �
   - Network/SPV code (`ElectrumClient`, `WalletSynchronizer`, `TransactionInspector`, TOFU pinning): test against the in-process fake server `tests/PalladiumWallet.Tests/Net/FakeElectrumServer.cs` (loopback TCP + optional TLS, per-method handlers, call counters) — extend that, don't mock the client (it isn't an interface, by design)
   - Two `internal` test seams (via `InternalsVisibleTo`) sandbox the remaining externals: `UpdateChecker.CheckAsync` takes an optional `HttpMessageHandler` (never hit GitHub from a test); `AppPaths.BootstrapDirOverride`/`PortableBaseOverride`/`DefaultRootOverride` redirect the machine-global path locations (tests using them share xUnit collection `"AppPaths"` because that state is static)
 - **Live server probe** (`tests/PalladiumWallet.ServerProbe`): read-only conformance/health check for real Electrum/Fulcrum/ElectrumX servers (`dotnet run --project tests/PalladiumWallet.ServerProbe -- --server host:port --ssl`, or `--registry`). Also runnable from `dotnet test` via env vars: `PALLADIUM_TEST_SERVERS=host:port,… [PALLADIUM_TEST_SSL=1] [PALLADIUM_TEST_NET=…] dotnet test --filter LiveServer` (no-op when unset, so the default run stays offline)
+- **Regtest end-to-end** (`tests/regtest/e2e.sh`): starts its own Palladium Core + plm-fulcrum containers (the node enforces relay policy with `-acceptnonstdtxn=0`) and drives the CLI through sync, dust refusal/boundary, broadcast and coin freezing; needs Docker, ~35s, not part of `dotnet test`
 - **Fuzzing** (`tests/PalladiumWallet.Fuzz`, SharpFuzz): one target per untrusted-input parser (`header merkle slip132 bip39 address coinamount walletdoc encfile peers`), each encoding that parser's error contract — any other escaping exception is a finding
   - Seed corpus (incl. regression inputs for past findings) replays inside `dotnet test` via `FuzzCorpusTests`
   - Quick smoke without tooling: `dotnet run --project tests/PalladiumWallet.Fuzz -- <target> --random 50000`
