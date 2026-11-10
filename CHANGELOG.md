@@ -13,6 +13,8 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- Regtest checks against the real stack, in `tests/regtest/e2e.sh`: PSBT interoperability with Palladium Core as the external party (our PSBT signed by the node, the node's PSBT signed by us), and the GUI view model against a real node and plm-fulcrum, including the broadcast reconciliation through a proxy that lies about broadcasts (ADR 0055). The witness tip clamp is tested through the view model's own witness wiring.
+
 - Fuzz target `headerrange`: the shape check of a `blockchain.block.headers` reply is now a parser of its own (`Core/Spv/HeaderRange.cs`, behaviour unchanged) with a seed corpus and a CI smoke job (ADR 0054).
 - Tests for the paths that had none: the zero and invalid amount through the ViewModel (Send and Donate), a Prepare that fails without a field edit (relay fee rising after the user typed a fee), the broadcast-mismatch reconciliation for the Donate tab and for `sign-psbt --broadcast`, the witness connections closed when the primary is replaced, a notification for an already-used address, and the write-failure path of `ElectrumClient`.
 

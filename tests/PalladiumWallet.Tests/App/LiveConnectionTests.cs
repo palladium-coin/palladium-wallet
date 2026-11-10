@@ -1,5 +1,6 @@
 using Avalonia.Threading;
 using NBitcoin;
+using PalladiumWallet.App.Localization;
 using PalladiumWallet.App.ViewModels;
 using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Crypto;
@@ -13,7 +14,7 @@ namespace PalladiumWallet.Tests.App;
 /// replaces, and it reacts to the server's notifications (a payment to an address the wallet already used).
 /// </summary>
 [Collection("AppPaths")]
-public sealed class LiveConnectionTests : VmTestBase
+public sealed class LiveConnectionTests : VmTestBase, IDisposable
 {
     private async Task<MainWindowViewModel> OpenFundedWallet(HdAccount account, string name)
     {
@@ -101,6 +102,63 @@ public sealed class LiveConnectionTests : VmTestBase
             describe: () => $"rows={vm.History.Count} syncing={vm.IsSyncing} status='{vm.StatusMessage}'");
         Assert.Contains(vm.History, h => h.Txid == second.GetHash().ToString());
         Dispatcher.UIThread.RunJobs();
+    });
+
+    // ----- the witness clamp (ADR 0045), through the wallet's real witness wiring -----
+
+    /// <summary>Opens a wallet whose primary says the tip is 200 while the (only) witness says <paramref name="witnessTip"/>.</summary>
+    private async Task<MainWindowViewModel> OpenWithWitnessTip(int witnessTip)
+    {
+        var witness = new FakeElectrumServer();
+        _extraServers.Add(witness);
+        witness.Handle("blockchain.headers.subscribe", _ => new { height = witnessTip, hex = new string('0', 160) });
+        MainWindowViewModel.ProfileOverride = ChainProfiles.Mainnet with
+        {
+            BootstrapServers = [new ServerEndpoint(witness.Host, witness.Port, witness.Port)],
+            Checkpoints = [],
+        };
+        var account = HdAccount.FromMnemonic(ParseMnemonic(), null, ScriptKind.NativeSegwit, ChainProfiles.Mainnet);
+        WireFundedChain(account.GetReceiveAddress(0), 50_000_000);   // the coin is at height 100; the primary tip is 200
+        var vm = new MainWindowViewModel { ServerHost = _server.Host, ServerPort = _server.Port.ToString() };
+        RestoreFlow(vm, Mnemonic, null, "clamp");
+        await Eventually(() => !vm.IsSyncing && vm.Coins.Count == 1,
+            describe: () => $"syncing={vm.IsSyncing} coins={vm.Coins.Count} status='{vm.StatusMessage}'");
+        return vm;
+    }
+
+    private readonly List<FakeElectrumServer> _extraServers = [];
+
+    public new void Dispose()
+    {
+        foreach (var server in _extraServers)
+            server.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        base.Dispose();
+    }
+
+    [Fact]
+    public Task A_primary_that_inflates_the_tip_cannot_make_a_fresh_coin_spendable() => UiSession.Run(async () =>
+    {
+        // The primary claims 200 (the coin would have 101 confirmations); the witness says 100 (1 confirmation).
+        var vm = await OpenWithWitnessTip(100);
+
+        Assert.False(vm.Coins.Single().IsSelectable, "the coin counted confirmations from the primary's inflated tip");
+        Assert.Equal(Loc.Tr("coins.status.confirming"), vm.Coins.Single().Status);
+    });
+
+    [Fact]
+    public Task A_witness_that_agrees_with_the_primary_leaves_the_coin_spendable() => UiSession.Run(async () =>
+    {
+        var vm = await OpenWithWitnessTip(200);
+
+        Assert.True(vm.Coins.Single().IsSelectable);
+    });
+
+    [Fact]
+    public Task A_witness_a_block_or_two_behind_is_tolerated() => UiSession.Run(async () =>
+    {
+        var vm = await OpenWithWitnessTip(198);                      // within TipSkewTolerance
+
+        Assert.True(vm.Coins.Single().IsSelectable);
     });
 
     /// <summary>The funding transaction WireFundedChain registered, rebuilt the same way (same inputs, same output).</summary>
