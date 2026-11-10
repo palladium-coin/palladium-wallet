@@ -13,6 +13,7 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- **M-of-N multisig wallets** (native SegWit P2WSH, BIP48 keys, `sortedmulti` addresses) from the CLI: `cosigner-key`, `create-multisig`, `combine-psbt`, and `sign-psbt` for a multisig PSBT. Addresses were checked against Palladium Core's descriptors; a 2-of-3 spend was signed by two cosigners and broadcast on regtest. The GUI opens and syncs such a wallet and prepares its PSBT (ADR 0056). Fuzz target `cosignerkey` for the pasted cosigner keys.
 - Regtest checks against the real stack, in `tests/regtest/e2e.sh`: PSBT interoperability with Palladium Core as the external party (our PSBT signed by the node, the node's PSBT signed by us), and the GUI view model against a real node and plm-fulcrum, including the broadcast reconciliation through a proxy that lies about broadcasts (ADR 0055). The witness tip clamp is tested through the view model's own witness wiring.
 
 - Fuzz target `headerrange`: the shape check of a `blockchain.block.headers` reply is now a parser of its own (`Core/Spv/HeaderRange.cs`, behaviour unchanged) with a seed corpus and a CI smoke job (ADR 0054).
@@ -26,6 +27,7 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed.
 - A failed write on a server connection failed the pending requests before marking the connection dead, so a caller woken by the failure could still see it as connected; it is now marked dead first, as the read loop does.
 
 - An unknown `--kind` value (a typo such as `taprot`) silently created a native segwit wallet; it is now an error.

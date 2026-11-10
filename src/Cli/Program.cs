@@ -24,6 +24,9 @@ try
         ["sync", .. var rest] => await Sync(rest),
         ["send", .. var rest] => await Send(rest),
         ["sign-psbt", var psbt, .. var rest] => await SignPsbt(psbt, rest),
+        ["cosigner-key", var words, .. var rest] => CosignerKey(words, rest),
+        ["create-multisig", .. var rest] => CreateMultisig(rest),
+        ["combine-psbt", .. var rest] => await CombinePsbt(rest),
         ["utxos", .. var rest] => Utxos(rest),
         ["freeze", var outpoint, .. var rest] => Freeze(outpoint, rest, frozen: true),
         ["unfreeze", var outpoint, .. var rest] => Freeze(outpoint, rest, frozen: false),
@@ -184,7 +187,15 @@ static int Info(string[] o)
     var (doc, account, path) = OpenWallet(o);
     Console.WriteLine($"file:     {path}");
     Console.WriteLine($"network:  {doc.Network}   kind: {doc.ScriptKind}   watch-only: {doc.IsWatchOnly}");
-    if (doc.AccountXpub is { Length: > 0 })
+    if (account is MultisigAccount multisig)
+    {
+        Console.WriteLine($"multisig: {multisig.Threshold}-of-{multisig.Cosigners.Count}, P2WSH sortedmulti (BIP67)" +
+            (multisig.OwnCosignerIndex is { } own ? $"; this wallet holds cosigner {own + 1}'s key" : "; holds no key (cannot sign)"));
+        for (var i = 0; i < multisig.Cosigners.Count; i++)
+            Console.WriteLine($"cosigner {i + 1}: {multisig.Cosigners[i].ToText(ScriptKind.NativeSegwitMultisig, account.Profile)}");
+        Console.WriteLine($"descriptor: {multisig.ToDescriptor()}");
+    }
+    else if (doc.AccountXpub is { Length: > 0 })
     {
         Console.WriteLine($"path:     m/{doc.AccountPath}");
         Console.WriteLine($"xpub:     {doc.AccountXpub}");
@@ -343,7 +354,15 @@ static async Task<int> Send(string[] o)
 
     if (!built.Signed)
     {
-        Console.WriteLine("Watch-only wallet: PSBT to sign offline (§6.5):");
+        if (account is MultisigAccount ms)
+        {
+            var signed = built.Psbt.Inputs.Count > 0 && built.Psbt.Inputs[0].PartialSigs.Count > 0;
+            Console.WriteLine($"Multisig {ms.Threshold}-of-{ms.Cosigners.Count}: PSBT " +
+                (signed ? "signed by this wallet; pass it to the other cosigners (sign-psbt), then combine-psbt:"
+                        : "to be signed by the cosigners (sign-psbt), then combine-psbt:"));
+        }
+        else
+            Console.WriteLine("Watch-only wallet: PSBT to sign offline (§6.5):");
         Console.WriteLine(built.Psbt.ToBase64());
         return 0;
     }
@@ -356,6 +375,98 @@ static async Task<int> Send(string[] o)
     }
 
     return await BroadcastSigned(client, built.Transaction, network);
+}
+
+/// <summary>Prints the key a cosigner shares with the others: <c>[fingerprint/48'/746'/0'/2']Zpub…</c>.</summary>
+static int CosignerKey(string words, string[] o)
+{
+    if (!Bip39.TryParse(words, out var mnemonic))
+        throw new WalletSpendException("Invalid mnemonic (wrong words or checksum).");
+    var profile = Profile(o);
+    var accountIndex = 0;
+    if (Opt(o, "--account") is { } accountText && (!int.TryParse(accountText, out accountIndex) || accountIndex < 0))
+        throw new WalletSpendException("--account must be a non-negative number.");
+    var root = ExtKey.CreateFromSeed(Bip39.ToSeed(mnemonic!, Opt(o, "--passphrase")));
+    var path = DerivationPaths.AccountPath(ScriptKind.NativeSegwitMultisig, profile, accountIndex);
+    var cosigner = new Cosigner(root.Neuter().PubKey.GetHDFingerPrint(), path, root.Derive(path).Neuter());
+    Console.WriteLine(cosigner.ToText(ScriptKind.NativeSegwitMultisig, profile));
+    return 0;
+}
+
+/// <summary>Every value of a repeated option (<c>--cosigner A --cosigner B</c>).</summary>
+static List<string> OptAll(string[] options, string name)
+{
+    var values = new List<string>();
+    for (var i = 0; i < options.Length - 1; i++)
+        if (options[i] == name)
+            values.Add(options[i + 1]);
+    return values;
+}
+
+/// <summary>Creates an M-of-N P2WSH multisig wallet from the cosigners' keys; with --mnemonic it can sign its own share.</summary>
+static int CreateMultisig(string[] o)
+{
+    var profile = Profile(o);
+    if (!int.TryParse(Opt(o, "--threshold"), out var threshold))
+        throw new WalletSpendException("--threshold M missing (signatures required).");
+    var cosigners = OptAll(o, "--cosigner");
+    if (cosigners.Count == 0)
+        throw new WalletSpendException("--cosigner KEY missing (give all N keys, this wallet's own included; see 'cosigner-key').");
+    (WalletDocument doc, MultisigAccount account) created;
+    try
+    {
+        created = WalletLoader.NewMultisig(threshold, cosigners, Opt(o, "--mnemonic"), Opt(o, "--passphrase"), profile);
+    }
+    catch (InvalidDataException ex)
+    {
+        throw new WalletSpendException(ex.Message);
+    }
+    var path = WalletPath(o, profile);
+    WalletStore.Save(created.doc, path, CliPassword.ForNewWallet(o));
+    Console.WriteLine($"Multisig wallet {created.account.Threshold}-of-{created.account.Cosigners.Count} saved to {path}" +
+        (created.account.IsWatchOnly ? " (holds no key: cannot sign)" : ""));
+    Console.WriteLine($"First address: {created.account.GetReceiveAddress(0)}");
+    return 0;
+}
+
+/// <summary>
+/// Combines the cosigners' copies of one PSBT. The PSBTs are arguments (base64) or <c>-</c> for standard input,
+/// one per line. When the result holds enough signatures it prints the final transaction, and
+/// <c>--broadcast</c> sends it.
+/// </summary>
+static async Task<int> CombinePsbt(string[] args)
+{
+    var network = PalladiumNetworks.For(Profile(args).Kind);
+    var inputs = args.TakeWhile(a => !a.StartsWith("--")).ToList();
+    if (inputs.Contains("-"))
+        inputs = [.. inputs.Where(a => a != "-"), .. Console.In.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+    if (inputs.Count < 2)
+        throw new WalletSpendException("combine-psbt needs at least two PSBTs (base64, or '-' for one per line on stdin).");
+    var psbts = new List<PSBT>();
+    foreach (var text in inputs)
+    {
+        try { psbts.Add(PSBT.Parse(text, network)); }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            throw new WalletSpendException("Not a valid PSBT (base64 for this network expected).");
+        }
+    }
+
+    var (combined, final) = PsbtSigner.Combine(psbts);
+    Console.WriteLine("PSBT:");
+    Console.WriteLine(combined.ToBase64());
+    if (final is null)
+    {
+        Console.WriteLine("Incomplete: not enough signatures yet.");
+        return args.Contains("--broadcast") ? 1 : 0;
+    }
+    Console.WriteLine($"txid:  {final.GetHash()}");
+    Console.WriteLine("Final transaction:");
+    Console.WriteLine(final.ToHex());
+    if (!args.Contains("--broadcast"))
+        return 0;
+    await using var client = await Connect(args, Profile(args));
+    return await BroadcastSigned(client, final, network);
 }
 
 /// <summary>Lists the cached coins with their state (offline: run <c>sync</c> to refresh them).</summary>
@@ -661,6 +772,10 @@ static int Usage()
           utxos         [--net ...] [--file PATH]     list the coins of the last sync (offline)
           freeze        <txid>:<vout> [--net ...] [--file PATH]     keep a coin out of every spend (offline)
           unfreeze      <txid>:<vout> [--net ...] [--file PATH]
+          create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--mnemonic "<words>"]
+                        [--passphrase W] [--net ...] [--file PATH]   M-of-N P2WSH wallet (BIP48, sortedmulti)
+          cosigner-key  "<mnemonic>" [--account N] [--passphrase W] [--net ...]   the key to hand to the other cosigners
+          combine-psbt  <base64|-> <base64> ... [--broadcast --server host[:port] [--ssl]] [--net ...]
           sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
                         sign a PSBT with this wallet's keys (offline half of the watch-only flow)
           servers       [--discover] [--server host[:port]] [--ssl] [--net ...]

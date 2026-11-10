@@ -4,6 +4,7 @@ using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Crypto;
 using PalladiumWallet.Core.Spv;
 using PalladiumWallet.Core.Storage;
+using PalladiumWallet.Core.Wallet;
 using PalladiumWallet.Tests.Net;
 
 namespace PalladiumWallet.Tests.App;
@@ -768,5 +769,144 @@ public sealed class CliTests : IDisposable
 
         Assert.True(exit == 0, output + err);
         Assert.Contains("Broadcast:", output);
+    }
+
+    // ----- multisig (ADR 0056) -----
+
+    private const string Words2 = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    private const string Words3 = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
+    private async Task<string> KeyOf(string words)
+    {
+        var (exit, output, _) = await Cli("cosigner-key", words, "--net", "regtest");
+        Assert.Equal(0, exit);
+        return output.Trim();
+    }
+
+    private async Task<string[]> CreateMultisigWallets(int threshold = 2)
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2), await KeyOf(Words3) };
+        var files = new List<string>();
+        foreach (var (words, n) in new[] { Mnemonic, Words2, Words3 }.Select((w, n) => (w, n)))
+        {
+            var file = WalletFile($"ms{n}.json");
+            var (exit, _, err) = await Cli("create-multisig", "--threshold", threshold.ToString(),
+                "--cosigner", keys[0], "--cosigner", keys[1], "--cosigner", keys[2],
+                "--mnemonic", words, "--net", "regtest", "--no-encryption", "--file", file);
+            Assert.True(exit == 0, err);
+            files.Add(file);
+        }
+        return [.. files];
+    }
+
+    [Fact]
+    public async Task CosignerKey_PrintsTheKeyWithItsOrigin()
+    {
+        var key = await KeyOf(Mnemonic);
+        Assert.StartsWith("[73c5da0a/48'/1'/0'/2']Vpub", key);
+        var (exit, output, _) = await Cli("cosigner-key", Mnemonic, "--account", "1", "--net", "regtest");
+        Assert.Equal(0, exit);
+        Assert.StartsWith("[73c5da0a/48'/1'/1'/2']Vpub", output); // another account of the same seed
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WritesTheSameWalletForEveryCosigner_AndInfoDescribesIt()
+    {
+        var files = await CreateMultisigWallets();
+        var addresses = new List<string>();
+        foreach (var file in files)
+        {
+            var (_, info, _) = await Cli("info", "--net", "regtest", "--file", file);
+            Assert.Contains("kind: NativeSegwitMultisig", info);
+            Assert.Contains("multisig: 2-of-3", info);
+            Assert.Contains("descriptor: wsh(sortedmulti(2,", info);
+            addresses.Add(info.Split('\n').Single(l => l.StartsWith("receive:")).Split(' ', StringSplitOptions.RemoveEmptyEntries)[1]);
+        }
+        Assert.Single(addresses.Distinct());
+        Assert.Equal("rplm1qmv9kucx4tjtyfwddc3698p2flxqvts89n8kllr0hvdv7qs4z476slcdr3q", addresses[0]); // = Palladium Core's
+        var (_, first, _) = await Cli("info", "--net", "regtest", "--file", files[0]);
+        Assert.Contains("holds cosigner 1's key", first);
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WithoutAMnemonic_IsWatchOnly()
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2) };
+        var (exit, output, _) = await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1],
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(0, exit);
+        Assert.Contains("holds no key", output);
+        Assert.True(WalletStore.Load(WalletFile(), null).IsWatchOnly);
+    }
+
+    [Theory]
+    [InlineData("--threshold", "3", "between 1 and 2")]          // 3 of 2
+    [InlineData("--threshold", "0", "between 1 and")]
+    [InlineData("--threshold", "abc", "--threshold M missing")]
+    public async Task CreateMultisig_WithABadThreshold_FailsCleanly(string flag, string value, string expected)
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2) };
+        var (exit, _, err) = await Cli("create-multisig", flag, value, "--cosigner", keys[0], "--cosigner", keys[1],
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains(expected, err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WithAKeyThatDoesNotParse_OrNoCosigners_FailsCleanly()
+    {
+        var (exit, _, err) = await Cli("create-multisig", "--threshold", "2", "--cosigner", "garbage", "--cosigner", await KeyOf(Mnemonic),
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("is not a cosigner key", err);
+
+        (exit, _, err) = await Cli("create-multisig", "--threshold", "2", "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("--cosigner KEY missing", err);
+    }
+
+    [Fact]
+    public async Task SignPsbt_OfAMultisigPsbt_AddsTheWalletsSignature_AndCombineCompletesIt()
+    {
+        var files = await CreateMultisigWallets();
+        var network = PalladiumNetworks.Regtest;
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2), await KeyOf(Words3) };
+        var account = WalletLoader.NewMultisig(2, keys, null, null, ChainProfiles.Regtest).Account;
+
+        // An unsigned PSBT spending one output of the multisig address, as a creator that attaches no witness script makes it.
+        var funding = network.CreateTransaction();
+        funding.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        funding.Outputs.Add(Money.Satoshis(10_000_000), account.GetReceiveAddress(0));
+        var spend = network.CreateTransaction();
+        spend.Inputs.Add(new TxIn(new OutPoint(funding.GetHash(), 0)));
+        spend.Outputs.Add(Money.Satoshis(9_000_000), new Key().PubKey.GetAddress(ScriptPubKeyType.Segwit, network));
+        var psbt = PSBT.FromTransaction(spend, network).AddCoins(new Coin(funding, 0)).ToBase64();
+
+        var (exit1, out1, _) = await Cli("sign-psbt", psbt, "--net", "regtest", "--file", files[0]);
+        Assert.Equal(0, exit1);
+        Assert.Contains("Incomplete", out1);                               // 1 of 2
+        var (exit2, out2, _) = await Cli("sign-psbt", psbt, "--net", "regtest", "--file", files[2]);
+        Assert.Equal(0, exit2);
+        var copy1 = out1.Split('\n').Select(l => l.Trim()).First(l => l.StartsWith("cHNi"));
+        var copy2 = out2.Split('\n').Select(l => l.Trim()).First(l => l.StartsWith("cHNi"));
+
+        var (exit, combined, err) = await Cli("combine-psbt", copy1, copy2, "--net", "regtest");
+
+        Assert.True(exit == 0, err);
+        Assert.Contains("Final transaction:", combined);
+        Assert.DoesNotContain("Incomplete", combined);
+    }
+
+    [Fact]
+    public async Task CombinePsbt_NeedsTwoValidPsbtsOfTheSameTransaction()
+    {
+        var (exit, _, err) = await Cli("combine-psbt", "onlyone", "--net", "regtest");
+        Assert.Equal(1, exit);
+        Assert.Contains("at least two", err);
+
+        (exit, _, err) = await Cli("combine-psbt", "notbase64!", "alsonot", "--net", "regtest");
+        Assert.Equal(1, exit);
+        Assert.Contains("Not a valid PSBT", err);
     }
 }

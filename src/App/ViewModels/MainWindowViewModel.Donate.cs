@@ -105,8 +105,8 @@ public partial class MainWindowViewModel
     {
         var built = _pendingDonate;
         var client = _client;
-        if (built is null || client is null)
-            return;
+        if (built is null || !built.Signed || client is null)
+            return;               // same rule as Send: never broadcast an incomplete transaction
         try
         {
             var txid = await client.BroadcastVerifiedAsync(built.ToHex(), built.Txid);

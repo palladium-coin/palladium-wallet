@@ -121,6 +121,7 @@ The coin type in the derivation path is **746** on mainnet (1 on testnet/regtest
 | HD (BIP39 seed) | Create new / Restore from seed | Yes | The normal case |
 | HD (imported xprv) | Import extended key (xprv/yprv/zprv) | Yes | Full account key, no seed words |
 | Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing (`sign-psbt` signs it on the machine with the seed) |
+| Multisig (M-of-N) | CLI `create-multisig` | Only with `M` cosigners | P2WSH, BIP48 keys, addresses as `sortedmulti`. Created from the command line; the GUI opens, syncs and shows it and prepares the PSBT, but does not create one or broadcast. See [8.8](#88-multisig-wallets). |
 | Imported WIF keys | Import WIF key(s) | Yes | Fixed address list, **no HD derivation and no change chain — change always returns to the first imported address** (this links your coins together; prefer an HD wallet for privacy) |
 
 The extended-key format is **SLIP-132**: `xpub`/`xprv` (Legacy and Taproot), `ypub`/`yprv`
@@ -498,6 +499,41 @@ The **Coins** tab lists every coin (UTXO) of the wallet with its amount, its out
   clears the selection. The selection is not saved: it is gone when you restart the app.
 - If a selected coin stops being spendable (for example, it becomes unconfirmed after a
   chain reorganisation), the send is blocked with a message until you deselect that coin.
+
+### 8.8 Multisig wallets
+
+An **M-of-N multisig** wallet needs `M` signatures out of `N` cosigners to spend. No single device (or
+person) can move the funds alone, and losing up to `N - M` keys does not lose them. This wallet supports
+**native SegWit (P2WSH)** multisig with keys derived as BIP48 (`m/48'/746'/0'/2'`) and addresses built the way
+Bitcoin Core's `wsh(sortedmulti(M, …))` and Sparrow do (keys sorted, BIP67), so **the order in which you enter the
+cosigners does not matter** and the addresses can be checked against any of them.
+
+**Setting it up (command line).** Every cosigner, on its own device and from its own seed:
+
+1. `cosigner-key "<its mnemonic>"` prints its key, `[73c5da0a/48'/746'/0'/2']Zpub…`: the master fingerprint, the path
+   and the public key. It is public; send it to the others by any channel, **then check it out of band** (read the
+   fingerprint aloud): a key swapped in transit would put a stranger among the cosigners.
+2. With all `N` keys, each cosigner runs
+   `create-multisig --threshold M --cosigner KEY1 --cosigner KEY2 … --mnemonic "<its mnemonic>"`.
+   The same keys give the same wallet on every device; `info` shows the first receive address, the cosigners and
+   a descriptor: **compare the address on every device before receiving anything**. A file made without
+   `--mnemonic` is a watch-only copy that can follow the funds and build a PSBT but sign nothing.
+
+**Spending.**
+
+1. One cosigner runs `sync`, then `send --to ADDRESS --amount X`: the output is a PSBT already carrying that
+   cosigner's signature (and, in the PSBT, the key origins and the change output's script, so the other signers can
+   check where the change goes).
+2. Each other cosigner, from the PSBT text and its own file: `sign-psbt <psbt> --file its.json`. It lists the
+   inputs, the outputs (its own change is marked) and the fee before the signed PSBT: **read them: you are signing
+   for the others too**. When `M` signatures are present it also prints the final transaction.
+3. `combine-psbt <psbt-1> <psbt-2> …` merges the cosigners' copies (they must be of the same transaction),
+   prints the final transaction when there are enough signatures, and `--broadcast --server host:port` sends it.
+   `sign-psbt … --broadcast` does the same for the last cosigner.
+
+The GUI shows the same wallet (balance, history, addresses, Coins tab) and its Send tab prepares the PSBT to pass on;
+it never offers to broadcast a transaction that is not complete. Not supported yet: wrapped (P2SH-P2WSH) multisig,
+creating a multisig wallet in the GUI, and hardware signers.
 
 ---
 
@@ -915,6 +951,16 @@ Work offline on the coins of the last `sync` (modelled on Bitcoin Core's `listun
 unconfirmed, awaiting SPV proof) and the frozen total. A **frozen** coin is kept out of every
 spend, automatic or manual, and stays frozen across later syncs. `freeze` and `unfreeze` take a
 coin as printed by `utxos`.
+
+```
+cosigner-key    "<mnemonic>" [--account N] [--passphrase W] [--net N]
+create-multisig --threshold M --cosigner KEY … [--mnemonic "<words>"] [--passphrase W] [--net N] [--file PATH]
+combine-psbt    <base64|-> <base64> … [--broadcast --server ...] [--ssl] [--net N]
+```
+Multisig (see [8.8](#88-multisig-wallets)). `cosigner-key` prints the key to hand to the other cosigners.
+`create-multisig` takes **all `N` keys** (this wallet's included) and, with `--mnemonic`, the seed of one of them,
+found by its fingerprint; a seed that matches no key, the same key twice, `M` outside `1..N` or fewer than two keys are
+refused. `combine-psbt` merges copies of one PSBT (`-` reads them from stdin, one per line).
 
 ```
 sign-psbt  <base64|-> [--scan N] [--broadcast --server ...] [--ssl] [--net N] [--file PATH]

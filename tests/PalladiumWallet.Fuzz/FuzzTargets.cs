@@ -31,6 +31,7 @@ public static class FuzzTargets
             ["encfile"] = EncFile,
             ["peers"] = Peers,
             ["headerrange"] = HeaderRangeReply,
+            ["cosignerkey"] = CosignerKey,
         };
 
     /// <summary>Runs one input through a named target (used by replay and the regression test).</summary>
@@ -157,5 +158,23 @@ public static class FuzzTargets
                 throw new InvalidOperationException("HeaderRange.Split returned a result outside its contract.");
         }
         catch (SpvVerificationException) { }
+    }
+
+    // A cosigner key ([fingerprint/path]xpub) is pasted from another person and never trusted.
+    // Contract: TryParse never throws, for any text, on any network; a result it accepts is consistent
+    // (the origin's depth is the key's depth) and survives a round trip through its text form.
+    private static void CosignerKey(byte[] data)
+    {
+        var text = Utf8(data);
+        foreach (var profile in new[] { ChainProfiles.Mainnet, ChainProfiles.Regtest })
+        {
+            if (!Cosigner.TryParse(text, profile, out var cosigner))
+                continue;
+            if (cosigner!.Xpub.Depth != cosigner.AccountPath.Length)
+                throw new InvalidOperationException("TryParse accepted a key whose origin contradicts its depth.");
+            if (!Cosigner.TryParse(cosigner.ToText(ScriptKind.NativeSegwitMultisig, profile), profile, out var again)
+                || !again!.Xpub.ToBytes().SequenceEqual(cosigner.Xpub.ToBytes()))
+                throw new InvalidOperationException("An accepted cosigner key does not survive its own text form.");
+        }
     }
 }

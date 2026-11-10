@@ -200,6 +200,19 @@ internal static class SeedCorpus
             ("count-overflow", [.. BitConverter.GetBytes(int.MaxValue), .. BitConverter.GetBytes(2000),
                 .. Encoding.UTF8.GetBytes("00")]),
         ],
+        ["cosignerkey"] =
+        [
+            ("valid", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48'/1'/0'/2']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("h-markers", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48h/1h/0h/2h]Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("depth-mismatch", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48'/1'/0']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("huge-index", Encoding.UTF8.GetBytes(
+                "[73c5da0a/99999999999/1'/0'/2']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("no-brackets", Encoding.UTF8.GetBytes("73c5da0a/48'/1'/0'/2'Vpub5n95")),
+            ("empty", []),
+        ],
         ["peers"] =
         [
             ("typical", Encoding.UTF8.GetBytes(

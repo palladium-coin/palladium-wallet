@@ -124,9 +124,11 @@ This is a complement to, not a substitute for, independent human or third-party 
 - No Tor/proxy support (network traffic reveals which addresses are being queried)
 - No multi-server pooling (single point of failure for the indexing server)
 - No hardware wallet integration
-- No coin control (automatic UTXO selection only)
+- Coin control is a manual selection of coins and a freeze flag (ADR 0046), with no privacy-aware selection
 - No RBF/CPFP UI (RBF flag is set on all transactions, but fee bumping is not exposed)
 - No Lightning Network support
-- No multisig (M-of-N) wallets: the network profile defines multisig SLIP-132 header
-  variants, but derivation for them is not implemented — attempting to use one throws
-  rather than silently producing an insecure/incorrect wallet
+- Multisig (M-of-N) is native SegWit (P2WSH) only, created from the CLI, with no hardware signer; wrapped (P2SH-P2WSH)
+  multisig is defined in the profile but not implemented and throws rather than producing a wallet. The cosigner
+  keys are **not authenticated by the wallet**: a key swapped while it travels between the cosigners puts a stranger
+  among them, so every cosigner must compare the first address (and the fingerprints) on its own device before
+  receiving funds (ADR 0056)

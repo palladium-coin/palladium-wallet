@@ -2,7 +2,8 @@
 # Regtest end-to-end check of the CLI against a real Palladium node and plm-fulcrum, in Docker.
 # Covers: sync, dust refusal and boundary (the node runs with -acceptnonstdtxn=0, so it enforces the
 # relay policy), broadcast, coin freezing, taproot and WIF wallets, PSBT interoperability with the node, and the
-# GUI view model against the real node (including a proxy that lies about broadcasts). Starts and removes its own containers and temp data
+# 2-of-3 multisig with the node as the reference for addresses, and the GUI view model against the real node
+# (including a proxy that lies about broadcasts). Starts and removes its own containers and temp data
 # (names plm-e2e-*, port 50111), so it does not touch a running mainnet or regtest setup.
 #   usage: tests/regtest/e2e.sh        needs: docker, the .NET SDK (dotnet on PATH), python3
 #   E2E_KEEP=1 keeps the containers and temp data after the run, to debug a failure
@@ -145,6 +146,34 @@ check "our wallet signs a PSBT made by the node" "signed" echo "$OUT"
 check "and the node recognises the wallet's output as change" "(yours: change)" echo "$OUT"
 FINAL=$(echo "$OUT" | grep -E '^0[0-9a-f]{100,}$' | tail -1)
 check "the node accepts the transaction we signed from its PSBT" '"allowed": true' $CLI testmempoolaccept "[\"$FINAL\"]"
+
+echo "== 2-of-3 multisig (P2WSH sortedmulti): addresses equal the node's, spend signed by two cosigners, broadcast"
+W1="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+W2="zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"
+W3="legal winner thank year wave sausage worth useful legal winner thank yellow"
+K1=$(other cosigner-key "$W1"); K2=$(other cosigner-key "$W2"); K3=$(other cosigner-key "$W3")
+n=0; for words in "$W1" "$W2" "$W3"; do n=$((n+1))
+  other create-multisig --threshold 2 --cosigner "$K1" --cosigner "$K2" --cosigner "$K3" --mnemonic "$words" \
+    --no-encryption --file "$WORK/ms$n.json" >/dev/null 2>&1
+done
+DESCRIPTOR=$(other info --file "$WORK/ms1.json" | sed -n 's/^descriptor: //p')
+NODE_DESCRIPTOR=$($CLI getdescriptorinfo "$DESCRIPTOR" | python3 -c 'import sys,json;print(json.load(sys.stdin)["descriptor"])')
+MS_ADDR=$(other info --file "$WORK/ms1.json" | sed -n 's/^receive: *\([^ ]*\).*/\1/p')
+check "the node derives the same multisig address from the descriptor" "$MS_ADDR" $CLI deriveaddresses "$NODE_DESCRIPTOR" "[0,0]"
+for n in 2 3; do
+  check "cosigner $n derives the same address" "$MS_ADDR" other info --file "$WORK/ms$n.json"
+done
+$CLI sendtoaddress "$MS_ADDR" 1 >/dev/null; $CLI generatetoaddress 2 "$MINER" >/dev/null; sleep 4
+check "the multisig wallet sees the funds" "Balance: 1.00000000 PLM spendable" other sync "${SRV[@]}" --file "$WORK/ms1.json"
+MS_OUT=$(other send --to "$($CLI getnewaddress "" bech32)" --amount 0.3 --feerate 2 "${SRV[@]}" --file "$WORK/ms1.json" 2>&1)
+check "cosigner 1 builds a PSBT that carries its signature" "signed by this wallet" echo "$MS_OUT"
+MS_PSBT=$(echo "$MS_OUT" | tail -1)
+check "one of two signatures is not complete" "Incomplete" other sign-psbt "$MS_PSBT" --file "$WORK/ms1.json"
+COPY3=$(other sign-psbt "$MS_PSBT" --file "$WORK/ms3.json" 2>&1 | grep -E '^cHNi' | head -1)
+check "cosigners 1 and 3 combine their copies into a final transaction" "Final transaction:" other combine-psbt "$MS_PSBT" "$COPY3"
+check "cosigner 2 completes it and the node takes it" "Broadcast:" other sign-psbt "$MS_PSBT" --broadcast "${SRV[@]}" --file "$WORK/ms2.json"
+$CLI generatetoaddress 1 "$MINER" >/dev/null; sleep 3
+check "the multisig spend is mined (mempool empty)" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 
 echo "== GUI view model against the real node (Coins tab, freeze, send, broadcast reconciliation through a lying proxy)"
 GUI_ADDR=$(dotnet "$ROOT/src/Cli/bin/Debug/net10.0/PalladiumWallet.Cli.dll" addresses \

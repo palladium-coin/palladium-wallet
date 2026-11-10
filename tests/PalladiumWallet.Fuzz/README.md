@@ -8,7 +8,7 @@ keys, addresses, amounts).
 Each target encodes the parser's **error contract**: the exception types
 documented as its failure mode are swallowed, anything else escaping is a
 finding. Targets: `header` `merkle` `slip132` `bip39` `address` `coinamount`
-`walletdoc` `encfile` `peers` `headerrange` (see `FuzzTargets.cs` for each contract).
+`walletdoc` `encfile` `peers` `headerrange` `cosignerkey` (see `FuzzTargets.cs` for each contract).
 
 ## Three ways to run
 

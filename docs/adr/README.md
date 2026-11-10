@@ -59,6 +59,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0053 | [Import WIF keys and create taproot wallets from the CLI](0053-import-wif-keys-and-create-taproot-wallets-from-the-cli.md) | Wallet | Accepted |
 | 0054 | [Extract the header-range check into a fuzzed parser](0054-extract-the-header-range-check-into-a-fuzzed-parser.md) | Testing | Accepted |
 | 0055 | [Test the view model and PSBT interoperability against a real regtest node](0055-test-the-view-model-and-psbt-interoperability-against-a-real-regtest-node.md) | Testing | Accepted |
+| 0056 | [Add native SegWit multisig wallets from the CLI](0056-add-native-segwit-multisig-wallets-from-the-cli.md) | Wallet | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

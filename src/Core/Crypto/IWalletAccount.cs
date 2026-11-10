@@ -16,6 +16,12 @@ public interface IWalletAccount
     /// <summary>True if the account cannot sign (no private keys present).</summary>
     bool IsWatchOnly { get; }
 
+    /// <summary>
+    /// True when one wallet holds only some of the keys an input needs (M-of-N multisig): what it builds is
+    /// always a PSBT to pass on, never a transaction complete on its own, even when it can sign its share.
+    /// </summary>
+    bool IsMultiSignature => false;
+
     BitcoinAddress GetAddress(bool isChange, int index);
     BitcoinAddress GetReceiveAddress(int index);
     BitcoinAddress GetChangeAddress(int index);

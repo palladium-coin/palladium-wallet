@@ -275,7 +275,9 @@ public partial class MainWindowViewModel
     {
         var built = _pendingSend;
         var client = _client;
-        if (built is null || client is null)
+        // The button is disabled for these, but the command must not depend on it: a watch-only or multisig wallet
+        // holds a transaction that is not complete (no or too few signatures), and broadcasting it is never right.
+        if (built is null || !built.Signed || client is null)
             return;
         try
         {

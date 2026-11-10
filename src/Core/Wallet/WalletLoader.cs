@@ -20,6 +20,10 @@ public static class WalletLoader
         var kind = Enum.Parse<ScriptKind>(doc.ScriptKind);
         var network = PalladiumNetworks.For(profile.Kind);
 
+        // 0. Multisig: the cosigner keys are in the document; a seed or xprv, if any, is one cosigner's own key
+        if (doc.MultisigThreshold is { } threshold && doc.Cosigners is { Count: > 0 } cosignerTexts)
+            return BuildMultisig(threshold, cosignerTexts, doc.Mnemonic, doc.Passphrase, doc.AccountXprv, profile);
+
         // 1. HD from seed (most common case)
         if (doc.Mnemonic is { } words)
         {
@@ -230,5 +234,72 @@ public static class WalletLoader
             WatchAddresses = addressStrings,
         };
         return (doc, account);
+    }
+
+    /// <summary>
+    /// Creates the document for a new multisig wallet. <paramref name="cosignerKeys"/> are all N keys as
+    /// <c>[fingerprint/path]xpub</c>, the wallet's own included; <paramref name="mnemonic"/>, when given, is the seed
+    /// of exactly one of them (found by its fingerprint) and makes the wallet able to sign its share.
+    /// </summary>
+    /// <exception cref="InvalidDataException">A key that does not parse, a threshold out of range, a seed that matches no (or more than one) cosigner.</exception>
+    public static (WalletDocument Doc, MultisigAccount Account) NewMultisig(
+        int threshold, IReadOnlyList<string> cosignerKeys, string? mnemonic, string? passphrase, ChainProfile profile)
+    {
+        var account = BuildMultisig(threshold, cosignerKeys, mnemonic, passphrase, accountXprv: null, profile);
+        var doc = new WalletDocument
+        {
+            Network = profile.NetName,
+            ScriptKind = ScriptKind.NativeSegwitMultisig.ToString(),
+            MultisigThreshold = threshold,
+            // Re-written from the parsed keys: one canonical text per cosigner, whatever header the input used.
+            Cosigners = [.. account.Cosigners.Select(c => c.ToText(ScriptKind.NativeSegwitMultisig, profile))],
+            Mnemonic = mnemonic?.Trim(),
+            Passphrase = passphrase,
+        };
+        return (doc, account);
+    }
+
+    private static MultisigAccount BuildMultisig(int threshold, IReadOnlyList<string> cosignerTexts,
+        string? mnemonic, string? passphrase, string? accountXprv, ChainProfile profile)
+    {
+        var cosigners = new List<Cosigner>();
+        foreach (var text in cosignerTexts)
+        {
+            if (!Cosigner.TryParse(text, profile, out var cosigner))
+                throw new InvalidDataException(
+                    $"'{(text.Length > 24 ? text[..24] + "…" : text)}' is not a cosigner key for {profile.NetName}: " +
+                    "expected [fingerprint/path]extended-public-key, for example [73c5da0a/48'/746'/0'/2']Zpub….");
+            cosigners.Add(cosigner!);
+        }
+
+        ExtKey? own = null;
+        try
+        {
+            if (mnemonic is not null)
+            {
+                if (!Bip39.TryParse(mnemonic, out var parsed))
+                    throw new InvalidDataException("Invalid mnemonic (wrong words or checksum).");
+                var root = ExtKey.CreateFromSeed(Bip39.ToSeed(parsed!, passphrase));
+                var fingerprint = root.Neuter().PubKey.GetHDFingerPrint();
+                var matches = cosigners.Where(c => c.Fingerprint == fingerprint).ToList();
+                if (matches.Count != 1)
+                    throw new InvalidDataException(matches.Count == 0
+                        ? "None of the cosigner keys comes from this seed (fingerprint " +
+                          $"{Convert.ToHexString(fingerprint.ToBytes()).ToLowerInvariant()})."
+                        : "More than one cosigner key has this seed's fingerprint.");
+                own = root.Derive(matches[0].AccountPath);
+            }
+            else if (accountXprv is not null)
+            {
+                if (!Slip132.TryDecodePrivate(accountXprv, profile, out var xprv, out _))
+                    throw new InvalidDataException("Xprv in wallet file is invalid for this network.");
+                own = xprv;
+            }
+            return new MultisigAccount(threshold, cosigners, own, profile);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidDataException(ex.Message);
+        }
     }
 }

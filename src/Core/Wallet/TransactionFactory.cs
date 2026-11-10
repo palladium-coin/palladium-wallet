@@ -202,13 +202,16 @@ public sealed class TransactionFactory(IWalletAccount account)
         var signingKeys = account.IsWatchOnly
             ? []
             : selectedUtxos.Select(u => account.GetPrivateKey(u.IsChange, u.AddressIndex)).OfType<Key>().ToArray();
-        if (signingKeys.Length > 0)
+        // A multisig wallet holds only its own share of the keys: the transaction it builds is never complete
+        // on its own, it leaves as a PSBT carrying this wallet's signature (if any) for the other cosigners.
+        var completeAlone = !account.IsWatchOnly && !account.IsMultiSignature;
+        if (completeAlone && signingKeys.Length > 0)
             builder.AddKeys(signingKeys);
 
         Transaction tx;
         try
         {
-            tx = builder.BuildTransaction(sign: !account.IsWatchOnly);
+            tx = builder.BuildTransaction(sign: completeAlone);
         }
         catch (NotEnoughFundsException ex) when (ex.Message.Contains("size would be too high", StringComparison.OrdinalIgnoreCase))
         {
@@ -237,7 +240,7 @@ public sealed class TransactionFactory(IWalletAccount account)
             throw new WalletSpendException(
                 $"Send-all leaves {paid.Value.Satoshi} sat for the recipient, below the dust limit ({DustLimitSats(destination.ScriptPubKey, account.Profile)} sat).");
 
-        if (!account.IsWatchOnly)
+        if (completeAlone)
         {
             if (!builder.Verify(tx, out TransactionPolicyError[] errors))
                 throw new WalletSpendException(
@@ -249,8 +252,9 @@ public sealed class TransactionFactory(IWalletAccount account)
             Transaction = tx,
             Fee = GetFee(tx, coins),
             FeeRate = feeRate,
-            Signed = !account.IsWatchOnly,
-            TxidIsFinal = !account.IsWatchOnly || account.Kind == ScriptKind.NativeSegwit,
+            Signed = completeAlone,
+            // A witness-only spend (native segwit, P2WSH multisig) has the same txid before and after signing.
+            TxidIsFinal = completeAlone || account.Kind is ScriptKind.NativeSegwit or ScriptKind.NativeSegwitMultisig,
             // Built from the very transaction returned above. A second BuildPSBT run would assemble
             // another transaction (the builder shuffles output order), so the txid shown to the user
             // would not be the one of the PSBT that gets signed.
@@ -269,6 +273,8 @@ public sealed class TransactionFactory(IWalletAccount account)
         var coin = new Coin(
             new OutPoint(uint256.Parse(u.Txid), (uint)u.Vout),
             transactions[u.Txid].Outputs[u.Vout]);
+        if (account is MultisigAccount multisig)
+            return coin.ToScriptCoin(multisig.GetWitnessScript(u.IsChange, u.AddressIndex));
         return account.Kind == ScriptKind.WrappedSegwit
             && account.GetPublicKey(u.IsChange, u.AddressIndex) is { } key
             ? coin.ToScriptCoin(key.WitHash.ScriptPubKey)
@@ -306,6 +312,8 @@ public sealed class TransactionFactory(IWalletAccount account)
     /// </summary>
     private PSBT WithOrigins(PSBT psbt, IReadOnlyList<CachedUtxo> inputs, int changeIndex)
     {
+        if (account is MultisigAccount multisig)
+            return WithMultisigOrigins(psbt, multisig, inputs, changeIndex);
         if (account is not HdAccount { HasKnownOrigin: true } hd)
             return psbt;
 
@@ -321,6 +329,33 @@ public sealed class TransactionFactory(IWalletAccount account)
                 hd.GetAddress(isChange, index).ScriptPubKey);
         }
         psbt.GlobalXPubs[hd.AccountXpub.GetWif(Network)] = new RootedKeyPath(hd.MasterFingerprint, hd.AccountPath);
+        return psbt;
+    }
+
+    /// <summary>
+    /// The origin of every cosigner key of every involved address (inputs and the change output), the witness
+    /// script of the change output, and the cosigners' account xpubs: what each other cosigner's signer needs to
+    /// recognise its own key, to see that the change returns to the same multisig, and to check the amounts.
+    /// </summary>
+    private PSBT WithMultisigOrigins(PSBT psbt, MultisigAccount multisig, IReadOnlyList<CachedUtxo> inputs, int changeIndex)
+    {
+        var wanted = inputs.Select(u => (u.IsChange, Index: u.AddressIndex))
+            .Append((IsChange: true, Index: changeIndex))
+            .Distinct();
+        foreach (var (isChange, index) in wanted)
+        {
+            var script = multisig.GetAddress(isChange, index).ScriptPubKey;
+            foreach (var (key, origin) in multisig.GetKeyOrigins(isChange, index))
+                psbt.AddKeyPath(key, origin, script);
+        }
+
+        var changeScript = multisig.GetChangeAddress(changeIndex).ScriptPubKey;
+        for (var i = 0; i < psbt.Outputs.Count; i++)
+            if (psbt.GetGlobalTransaction().Outputs[i].ScriptPubKey == changeScript)
+                psbt.Outputs[i].WitnessScript = multisig.GetWitnessScript(true, changeIndex);
+
+        foreach (var c in multisig.Cosigners)
+            psbt.GlobalXPubs[c.Xpub.GetWif(Network)] = new RootedKeyPath(c.Fingerprint, c.AccountPath);
         return psbt;
     }
 

@@ -73,8 +73,15 @@ public static class DerivationPaths
     {
         if (account < 0)
             throw new ArgumentOutOfRangeException(nameof(account));
+        // BIP48 adds a fourth level for the script type: 1' P2SH-P2WSH, 2' P2WSH.
+        var scriptType = kind switch
+        {
+            ScriptKind.NativeSegwitMultisig => "/2'",
+            ScriptKind.WrappedSegwitMultisig => "/1'",
+            _ => "",
+        };
         return new KeyPath(
-            $"{PurposeFor(kind)}'/{profile.Bip44CoinType}'/{account}'");
+            $"{PurposeFor(kind)}'/{profile.Bip44CoinType}'/{account}'{scriptType}");
     }
 
     /// <summary>Non-hardened change/index sub-path under the account (change=0 receiving, change=1 change).</summary>

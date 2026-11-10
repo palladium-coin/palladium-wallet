@@ -61,6 +61,8 @@ public static class PsbtSigner
             Verified: i.NonWitnessUtxo is not null)).ToList();
 
         var (keys, mine) = KeysAndScripts(account, scan);
+        if (account is MultisigAccount multisig)
+            AddWitnessScripts(psbt, multisig, scan);
         psbt.SignWithKeys([.. keys]);
 
         var inputs = new List<PsbtInputInfo>();
@@ -86,6 +88,46 @@ public static class PsbtSigner
             final = psbt.ExtractTransaction();
 
         return new PsbtSignResult { Psbt = psbt, Inputs = inputs, Outputs = outputs, FeeSats = fee, FinalTransaction = final };
+    }
+
+    /// <summary>
+    /// A PSBT from another creator may not carry the witness script of a multisig input. The wallet knows it
+    /// for each of its own addresses, so it fills in the ones whose output script it recognises.
+    /// </summary>
+    private static void AddWitnessScripts(PSBT psbt, MultisigAccount account, int scan)
+    {
+        var scripts = new Dictionary<Script, Script>();
+        foreach (var isChange in new[] { false, true })
+            for (var index = 0; index < scan; index++)
+                scripts[account.GetAddress(isChange, index).ScriptPubKey] = account.GetWitnessScript(isChange, index);
+        foreach (var input in psbt.Inputs)
+            if (input.WitnessScript is null
+                && input.GetTxOut()?.ScriptPubKey is { } spk
+                && scripts.TryGetValue(spk, out var witnessScript))
+                input.WitnessScript = witnessScript;
+    }
+
+    /// <summary>
+    /// Merges the signatures of several PSBTs of the same transaction (the cosigners' copies) into one, and
+    /// finalises it when it holds enough of them.
+    /// </summary>
+    /// <exception cref="WalletSpendException">The PSBTs are not of the same transaction.</exception>
+    public static (PSBT Combined, Transaction? Final) Combine(IReadOnlyList<PSBT> psbts)
+    {
+        if (psbts.Count == 0)
+            throw new WalletSpendException("Nothing to combine.");
+        var combined = psbts[0].Clone();
+        foreach (var other in psbts.Skip(1))
+        {
+            if (other.GetGlobalTransaction().GetHash() != combined.GetGlobalTransaction().GetHash())
+                throw new WalletSpendException(
+                    "These PSBTs are not of the same transaction: refusing to combine them.");
+            combined.Combine(other);
+        }
+        // Finalising a clone keeps the combined PSBT itself open, so it can still be passed on to a cosigner.
+        var attempt = combined.Clone();
+        Transaction? final = attempt.TryFinalize(out _) ? attempt.ExtractTransaction() : null;
+        return (combined, final);
     }
 
     private static (List<Key> Keys, HashSet<Script> Mine) KeysAndScripts(IWalletAccount account, int scan)

@@ -43,6 +43,18 @@ public sealed class WalletDocument
     /// <summary>Watch-only addresses with no associated private key (pure address import).</summary>
     public List<string>? WatchAddresses { get; set; }
 
+    /// <summary>
+    /// Multisig wallet (ScriptKind NativeSegwitMultisig): signatures required, M. Null for every other wallet.
+    /// The wallet's own key, when it holds one, is the <see cref="Mnemonic"/> (or <see cref="AccountXprv"/>) of one cosigner.
+    /// </summary>
+    public int? MultisigThreshold { get; set; }
+
+    /// <summary>
+    /// Multisig wallet: the N cosigner keys as <c>[fingerprint/path]Zpub…</c>, the wallet's own included.
+    /// Public data only, so a file without a seed is a watch-only copy of the same wallet.
+    /// </summary>
+    public List<string>? Cosigners { get; set; }
+
     /// <summary>Gap limit for address scanning (§5), configurable.</summary>
     public int GapLimit { get; set; } = 20;
 
