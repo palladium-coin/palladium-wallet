@@ -27,7 +27,7 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
-- Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed.
+- Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed and tells the user so ("Transaction not complete: more signatures are needed. Nothing was sent…") instead of doing nothing.
 - A failed write on a server connection failed the pending requests before marking the connection dead, so a caller woken by the failure could still see it as connected; it is now marked dead first, as the read loop does.
 
 - An unknown `--kind` value (a typo such as `taprot`) silently created a native segwit wallet; it is now an error.

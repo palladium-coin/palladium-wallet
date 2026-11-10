@@ -1,4 +1,5 @@
 using NBitcoin;
+using PalladiumWallet.App.Localization;
 using PalladiumWallet.App.ViewModels;
 using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Crypto;
@@ -66,6 +67,7 @@ public sealed class MultisigGuiTests : VmTestBase
         Assert.Equal(1, psbt.Inputs[0].PartialSigs.Count);   // this wallet's own signature is already in
         await vm.ConfirmSendCommand.ExecuteAsync(null);
         Assert.Equal(0, _server.CallCount("blockchain.transaction.broadcast"));
+        Assert.Equal(Loc.Tr("msg.confirm.incomplete"), vm.SendPreview);   // and the user is told why
     });
 
     [Fact]
