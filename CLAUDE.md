@@ -76,7 +76,7 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) â†
 - Debug apk: `JAVA_HOME=<jdk> dotnet build src/App.Android -c Debug -t:SignAndroidPackage -p:AndroidSdkDirectory=$HOME/android-sdk` â†’ `src/App.Android/bin/Debug/net10.0-android/*-Signed.apk`
 - Head is an app, not a library (`<OutputType>Exe</OutputType>`); min SDK 23 (AndroidX requirement)
 
-**CLI** (`src/Cli`): `create`/`restore`/`restore-xpub`/`info`; `sync`/`send`/`servers`/`reset-certs` (`--server host:port [--ssl]`); `newseed`/`addresses`. Default wallet file `~/.palladium-wallet/<network>/wallets/default.wallet.json` (`--file` to change it).
+**CLI** (`src/Cli`): `create`/`restore`/`restore-xpub`/`info`; `sync`/`send`/`servers`/`reset-certs` (`--server host:port [--ssl]`); `newseed`/`addresses`; `utxos`/`freeze`/`unfreeze` (coins), `restore-wif`; PSBT and multisig: `sign-psbt`, `combine-psbt` (files `.psbt`, base64 or hex; `--psbt-out`), `cosigner-key`, `create-multisig` (`--wrapped`, `--config`, `--expect-id`), `export-multisig`. Default wallet file `~/.palladium-wallet/<network>/wallets/default.wallet.json` (`--file` to change it).
 
 ## Architecture (points that require reading multiple files)
 
