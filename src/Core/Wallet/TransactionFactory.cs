@@ -255,6 +255,7 @@ public sealed class TransactionFactory(IWalletAccount account)
             Signed = completeAlone,
             // A witness-only spend (native segwit, P2WSH multisig) has the same txid before and after signing.
             TxidIsFinal = completeAlone || account.Kind is ScriptKind.NativeSegwit or ScriptKind.NativeSegwitMultisig,
+            // (a wrapped multisig is not: its scriptSig, which holds the redeem script, joins the transaction on finalisation)
             // Built from the very transaction returned above. A second BuildPSBT run would assemble
             // another transaction (the builder shuffles output order), so the txid shown to the user
             // would not be the one of the PSBT that gets signed.
@@ -352,7 +353,10 @@ public sealed class TransactionFactory(IWalletAccount account)
         var changeScript = multisig.GetChangeAddress(changeIndex).ScriptPubKey;
         for (var i = 0; i < psbt.Outputs.Count; i++)
             if (psbt.GetGlobalTransaction().Outputs[i].ScriptPubKey == changeScript)
+            {
                 psbt.Outputs[i].WitnessScript = multisig.GetWitnessScript(true, changeIndex);
+                psbt.Outputs[i].RedeemScript = multisig.GetRedeemScript(true, changeIndex);
+            }
 
         foreach (var c in multisig.Cosigners)
             psbt.GlobalXPubs[c.Xpub.GetWif(Network)] = new RootedKeyPath(c.Fingerprint, c.AccountPath);

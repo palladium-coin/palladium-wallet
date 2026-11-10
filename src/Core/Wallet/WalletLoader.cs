@@ -22,7 +22,7 @@ public static class WalletLoader
 
         // 0. Multisig: the cosigner keys are in the document; a seed or xprv, if any, is one cosigner's own key
         if (doc.MultisigThreshold is { } threshold && doc.Cosigners is { Count: > 0 } cosignerTexts)
-            return BuildMultisig(threshold, cosignerTexts, doc.Mnemonic, doc.Passphrase, doc.AccountXprv, profile);
+            return BuildMultisig(threshold, cosignerTexts, doc.Mnemonic, doc.Passphrase, doc.AccountXprv, profile, kind);
 
         // 1. HD from seed (most common case)
         if (doc.Mnemonic is { } words)
@@ -243,16 +243,17 @@ public static class WalletLoader
     /// </summary>
     /// <exception cref="InvalidDataException">A key that does not parse, a threshold out of range, a seed that matches no (or more than one) cosigner.</exception>
     public static (WalletDocument Doc, MultisigAccount Account) NewMultisig(
-        int threshold, IReadOnlyList<string> cosignerKeys, string? mnemonic, string? passphrase, ChainProfile profile)
+        int threshold, IReadOnlyList<string> cosignerKeys, string? mnemonic, string? passphrase, ChainProfile profile,
+        ScriptKind kind = ScriptKind.NativeSegwitMultisig)
     {
-        var account = BuildMultisig(threshold, cosignerKeys, mnemonic, passphrase, accountXprv: null, profile);
+        var account = BuildMultisig(threshold, cosignerKeys, mnemonic, passphrase, accountXprv: null, profile, kind);
         var doc = new WalletDocument
         {
             Network = profile.NetName,
-            ScriptKind = ScriptKind.NativeSegwitMultisig.ToString(),
+            ScriptKind = kind.ToString(),
             MultisigThreshold = threshold,
             // Re-written from the parsed keys: one canonical text per cosigner, whatever header the input used.
-            Cosigners = [.. account.Cosigners.Select(c => c.ToText(ScriptKind.NativeSegwitMultisig, profile))],
+            Cosigners = [.. account.Cosigners.Select(c => c.ToText(kind, profile))],
             Mnemonic = mnemonic?.Trim(),
             Passphrase = passphrase,
         };
@@ -260,7 +261,7 @@ public static class WalletLoader
     }
 
     private static MultisigAccount BuildMultisig(int threshold, IReadOnlyList<string> cosignerTexts,
-        string? mnemonic, string? passphrase, string? accountXprv, ChainProfile profile)
+        string? mnemonic, string? passphrase, string? accountXprv, ChainProfile profile, ScriptKind kind)
     {
         var cosigners = new List<Cosigner>();
         foreach (var text in cosignerTexts)
@@ -295,7 +296,7 @@ public static class WalletLoader
                     throw new InvalidDataException("Xprv in wallet file is invalid for this network.");
                 own = xprv;
             }
-            return new MultisigAccount(threshold, cosigners, own, profile);
+            return new MultisigAccount(threshold, cosigners, own, profile, kind);
         }
         catch (ArgumentException ex)
         {

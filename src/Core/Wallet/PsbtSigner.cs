@@ -112,6 +112,13 @@ public static class PsbtSigner
             input.WitnessScript ??= witnessScript;
             if (input.WitnessScript != witnessScript)
                 throw new WalletSpendException($"Input {i} carries a witness script that is not this wallet's own: refusing to sign.");
+            if (account.IsWrapped)
+            {
+                var redeem = witnessScript.WitHash.ScriptPubKey;
+                input.RedeemScript ??= redeem;
+                if (input.RedeemScript != redeem)
+                    throw new WalletSpendException($"Input {i} carries a redeem script that is not this wallet's own: refusing to sign.");
+            }
         }
     }
 

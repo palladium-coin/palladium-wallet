@@ -189,10 +189,10 @@ static int Info(string[] o)
     Console.WriteLine($"network:  {doc.Network}   kind: {doc.ScriptKind}   watch-only: {doc.IsWatchOnly}");
     if (account is MultisigAccount multisig)
     {
-        Console.WriteLine($"multisig: {multisig.Threshold}-of-{multisig.Cosigners.Count}, P2WSH sortedmulti (BIP67)" +
+        Console.WriteLine($"multisig: {multisig.Threshold}-of-{multisig.Cosigners.Count}, {(multisig.IsWrapped ? "P2SH-P2WSH" : "P2WSH")} sortedmulti (BIP67)" +
             (multisig.OwnCosignerIndex is { } own ? $"; this wallet holds cosigner {own + 1}'s key" : "; holds no key (cannot sign)"));
         for (var i = 0; i < multisig.Cosigners.Count; i++)
-            Console.WriteLine($"cosigner {i + 1}: {multisig.Cosigners[i].ToText(ScriptKind.NativeSegwitMultisig, account.Profile)}");
+            Console.WriteLine($"cosigner {i + 1}: {multisig.Cosigners[i].ToText(multisig.Kind, account.Profile)}");
         Console.WriteLine($"wallet id: {multisig.WalletId}   (compare it with every other cosigner)");
         Console.WriteLine($"descriptor: {multisig.ToDescriptor()}");
     }
@@ -388,11 +388,16 @@ static int CosignerKey(string words, string[] o)
     if (Opt(o, "--account") is { } accountText && (!int.TryParse(accountText, out accountIndex) || accountIndex < 0))
         throw new WalletSpendException("--account must be a non-negative number.");
     var root = ExtKey.CreateFromSeed(Bip39.ToSeed(mnemonic!, Opt(o, "--passphrase")));
-    var path = DerivationPaths.AccountPath(ScriptKind.NativeSegwitMultisig, profile, accountIndex);
+    var kind = MultisigKind(o);
+    var path = DerivationPaths.AccountPath(kind, profile, accountIndex);
     var cosigner = new Cosigner(root.Neuter().PubKey.GetHDFingerPrint(), path, root.Derive(path).Neuter());
-    Console.WriteLine(cosigner.ToText(ScriptKind.NativeSegwitMultisig, profile));
+    Console.WriteLine(cosigner.ToText(kind, profile));
     return 0;
 }
+
+/// <summary>P2SH-P2WSH when --wrapped is given, else native P2WSH.</summary>
+static ScriptKind MultisigKind(string[] o) =>
+    o.Contains("--wrapped") ? ScriptKind.WrappedSegwitMultisig : ScriptKind.NativeSegwitMultisig;
 
 /// <summary>Every value of a repeated option (<c>--cosigner A --cosigner B</c>).</summary>
 static List<string> OptAll(string[] options, string name)
@@ -416,7 +421,7 @@ static int CreateMultisig(string[] o)
     (WalletDocument doc, MultisigAccount account) created;
     try
     {
-        created = WalletLoader.NewMultisig(threshold, cosigners, Opt(o, "--mnemonic"), Opt(o, "--passphrase"), profile);
+        created = WalletLoader.NewMultisig(threshold, cosigners, Opt(o, "--mnemonic"), Opt(o, "--passphrase"), profile, MultisigKind(o));
     }
     catch (InvalidDataException ex)
     {
@@ -787,9 +792,9 @@ static int Usage()
           utxos         [--net ...] [--file PATH]     list the coins of the last sync (offline)
           freeze        <txid>:<vout> [--net ...] [--file PATH]     keep a coin out of every spend (offline)
           unfreeze      <txid>:<vout> [--net ...] [--file PATH]
-          create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--mnemonic "<words>"]
-                        [--passphrase W] [--expect-id ID] [--net ...] [--file PATH]   M-of-N P2WSH wallet (BIP48, sortedmulti)
-          cosigner-key  "<mnemonic>" [--account N] [--passphrase W] [--net ...]   the key to hand to the other cosigners
+          create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--wrapped] [--mnemonic "<words>"]
+                        [--passphrase W] [--expect-id ID] [--net ...] [--file PATH]   M-of-N wallet (BIP48, sortedmulti): P2WSH, or P2SH-P2WSH with --wrapped
+          cosigner-key  "<mnemonic>" [--wrapped] [--account N] [--passphrase W] [--net ...]   the key to hand to the other cosigners
           combine-psbt  <base64|-> <base64> ... [--broadcast --server host[:port] [--ssl]] [--net ...]
           sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
                         sign a PSBT with this wallet's keys (offline half of the watch-only flow)

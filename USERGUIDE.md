@@ -121,7 +121,7 @@ The coin type in the derivation path is **746** on mainnet (1 on testnet/regtest
 | HD (BIP39 seed) | Create new / Restore from seed | Yes | The normal case |
 | HD (imported xprv) | Import extended key (xprv/yprv/zprv) | Yes | Full account key, no seed words |
 | Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing (`sign-psbt` signs it on the machine with the seed) |
-| Multisig (M-of-N) | CLI `create-multisig` | Only with `M` cosigners | P2WSH, BIP48 keys, addresses as `sortedmulti`. Created from the command line; the GUI opens, syncs and shows it and prepares the PSBT, but does not create one or broadcast. See [8.8](#88-multisig-wallets). |
+| Multisig (M-of-N) | Wizard *Multisig wallet*, or CLI `create-multisig` | Only with `M` cosigners | P2WSH or P2SH-P2WSH, BIP48 keys, addresses as `sortedmulti`. The GUI creates, opens, syncs and shows it and prepares the PSBT, but never broadcasts an incomplete transaction. See [8.8](#88-multisig-wallets). |
 | Imported WIF keys | Import WIF key(s) | Yes | Fixed address list, **no HD derivation and no change chain — change always returns to the first imported address** (this links your coins together; prefer an HD wallet for privacy) |
 
 The extended-key format is **SLIP-132**: `xpub`/`xprv` (Legacy and Taproot), `ypub`/`yprv`
@@ -504,9 +504,18 @@ The **Coins** tab lists every coin (UTXO) of the wallet with its amount, its out
 
 An **M-of-N multisig** wallet needs `M` signatures out of `N` cosigners to spend. No single device (or
 person) can move the funds alone, and losing up to `N - M` keys does not lose them. This wallet supports
-**native SegWit (P2WSH)** multisig with keys derived as BIP48 (`m/48'/746'/0'/2'`) and addresses built the way
+**native SegWit (P2WSH)** multisig with keys derived as BIP48 (`m/48'/746'/0'/2'`), or the older **P2SH-P2WSH** form
+(`…/1'`, for signers that cannot read bech32 addresses; pass `--wrapped`, or tick the box in the GUI), and addresses built the way
 Bitcoin Core's `wsh(sortedmulti(M, …))` and Sparrow do (keys sorted, BIP67), so **the order in which you enter the
 cosigners does not matter** and the addresses can be checked against any of them.
+
+**Setting it up in the GUI.** On the first screen choose *Multisig wallet*. Enter the threshold `M`, paste all `N`
+keys (yours too, one per line), and either type your own seed or press *New seed* (it is kept in the encrypted
+wallet file; read it again under Wallet information). *Show my key* prints the key to hand to the others; tick
+*P2SH-P2WSH* first if the wallet is the wrapped type, since the key differs. Next comes the **wallet ID**, shown
+large: type the ID the other cosigners read (see step 3 below). A different one is refused and nothing is
+saved; leaving it empty creates the wallet but warns that it is **not verified**. Without a seed the wallet
+only follows the funds and prepares PSBTs.
 
 **Setting it up (command line).** Every cosigner, on its own device and from its own seed:
 
@@ -541,8 +550,9 @@ refuses a PSBT whose witness script is not its own.)
    `sign-psbt … --broadcast` does the same for the last cosigner.
 
 The GUI shows the same wallet (balance, history, addresses, Coins tab) and its Send tab prepares the PSBT to pass on;
-it never offers to broadcast a transaction that is not complete. Not supported yet: wrapped (P2SH-P2WSH) multisig,
-creating a multisig wallet in the GUI, and hardware signers.
+it never offers to broadcast a transaction that is not complete. Not supported yet: hardware signers; PSBTs
+exchanged with other software wallets (Sparrow, Electrum) are untested, only Palladium Core has been checked as the
+other party.
 
 ---
 
@@ -962,8 +972,8 @@ spend, automatic or manual, and stays frozen across later syncs. `freeze` and `u
 coin as printed by `utxos`.
 
 ```
-cosigner-key    "<mnemonic>" [--account N] [--passphrase W] [--net N]
-create-multisig --threshold M --cosigner KEY … [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
+cosigner-key    "<mnemonic>" [--wrapped] [--account N] [--passphrase W] [--net N]
+create-multisig --threshold M --cosigner KEY … [--wrapped] [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
 combine-psbt    <base64|-> <base64> … [--broadcast --server ...] [--ssl] [--net N]
 ```
 Multisig (see [8.8](#88-multisig-wallets)). `cosigner-key` prints the key to hand to the other cosigners.

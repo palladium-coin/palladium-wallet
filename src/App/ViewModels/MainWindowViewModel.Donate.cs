@@ -14,6 +14,9 @@ public partial class MainWindowViewModel
 {
     public const string DevAddress = "plm1qdq3gu2zvg9lyr8gxd6yln4wavc5tlp8prmvfay";
 
+    /// <summary>Test seam: the fixed address is a mainnet one, so a regtest run pays another one instead.</summary>
+    internal static string? DonationAddressOverride { get; set; }
+
     [ObservableProperty]
     private string donateAmount = "";
 
@@ -54,7 +57,7 @@ public partial class MainWindowViewModel
         }
         try
         {
-            var destination = BitcoinAddress.Create(DevAddress, PalladiumNetworks.For(Net));
+            var destination = BitcoinAddress.Create(DonationAddressOverride ?? DevAddress, PalladiumNetworks.For(Net));
             if (!CoinAmount.TryParseIn(DonateAmount.Trim(), _config.Unit, out var amount) || amount <= 0)
             {
                 DonatePreview = Loc.Tr("msg.amount.invalid");

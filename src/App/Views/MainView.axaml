@@ -102,6 +102,9 @@
                     <Button Content="{Binding Loc[wiz.importaddress.btn]}" FontSize="16"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{Binding WizardStartImportAddressCommand}"/>
+                    <Button Content="{Binding Loc[wiz.multisig.btn]}" FontSize="16"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{Binding WizardStartMultisigCommand}"/>
                 </StackPanel>
 
                 <!-- Step: choose wallet (multiple files present) -->
@@ -231,6 +234,45 @@
                         <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
                         <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
                                 Command="{Binding WizardNextFromImportAddressCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Step: multisig wallet (M-of-N), keys of all cosigners -->
+                <StackPanel IsVisible="{Binding IsStepMultisig}" Spacing="12">
+                    <TextBlock Text="{Binding Loc[wiz.multisig.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.threshold]}" FontWeight="SemiBold" FontSize="13"/>
+                    <TextBox Text="{Binding MultisigThresholdInput}" Width="80" HorizontalAlignment="Left"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.keys.placeholder]}"
+                             Text="{Binding MultisigKeysInput}" AcceptsReturn="True" Height="110"
+                             FontFamily="monospace" FontSize="12"/>
+                    <CheckBox IsChecked="{Binding MultisigWrapped}" Content="{Binding Loc[wiz.multisig.wrapped]}"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.seed.placeholder]}"
+                             Text="{Binding MultisigMnemonicInput}" AcceptsReturn="True" Height="60"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.multisig.generate]}" Command="{Binding GenerateMultisigSeedCommand}"/>
+                        <Button Content="{Binding Loc[wiz.multisig.showkey]}" Command="{Binding ShowMultisigOwnKeyCommand}"/>
+                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding MultisigOwnKey}" IsVisible="{Binding HasMultisigOwnKey}"
+                                         TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                                Command="{Binding WizardNextFromMultisigCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Step: compare the wallet ID with the other cosigners -->
+                <StackPanel IsVisible="{Binding IsStepMultisigVerify}" Spacing="12">
+                    <TextBlock Text="{Binding Loc[wiz.multisig.verify.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.verify.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <SelectableTextBlock Text="{Binding MultisigWalletId}" FontFamily="monospace" FontSize="28" FontWeight="Bold"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.verify.placeholder]}"
+                             Text="{Binding MultisigExpectedIdInput}" FontFamily="monospace"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                                Command="{Binding WizardNextFromMultisigVerifyCommand}"/>
                     </StackPanel>
                 </StackPanel>
 

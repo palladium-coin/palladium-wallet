@@ -61,6 +61,9 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0055 | [Test the view model and PSBT interoperability against a real regtest node](0055-test-the-view-model-and-psbt-interoperability-against-a-real-regtest-node.md) | Testing | Accepted |
 | 0056 | [Add native SegWit multisig wallets from the CLI](0056-add-native-segwit-multisig-wallets-from-the-cli.md) | Wallet | Accepted |
 | 0057 | [Make the cosigner key check a wallet ID the cosigners compare](0057-make-the-cosigner-key-check-a-wallet-id-the-cosigners-compare.md) | Wallet | Accepted |
+| 0058 | [Add P2SH-wrapped multisig](0058-add-p2sh-wrapped-multisig.md) | Wallet | Accepted |
+| 0059 | [Create multisig wallets in the GUI](0059-create-multisig-wallets-in-the-gui.md) | UI | Accepted |
+| 0060 | [Run the regtest end-to-end in CI, and exercise Donate on regtest](0060-run-the-regtest-end-to-end-in-ci-and-donate-on-regtest.md) | Testing | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

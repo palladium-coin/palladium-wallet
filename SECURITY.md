@@ -127,13 +127,13 @@ This is a complement to, not a substitute for, independent human or third-party 
 - Coin control is a manual selection of coins and a freeze flag (ADR 0046), with no privacy-aware selection
 - No RBF/CPFP UI (RBF flag is set on all transactions, but fee bumping is not exposed)
 - No Lightning Network support
-- Multisig (M-of-N) is native SegWit (P2WSH) only, created from the CLI, with no hardware signer; wrapped (P2SH-P2WSH)
-  multisig is defined in the profile but not implemented and throws rather than producing a wallet. A cosigner
+- Multisig (M-of-N) is native SegWit (P2WSH) or P2SH-wrapped (P2SH-P2WSH), created from the CLI or the GUI, with no
+  hardware signer; only Palladium Core has been exercised as the external party for PSBTs. A cosigner
   key cannot be authenticated by the wallet (there is no PKI; the key is just a public key): a key swapped while it
   travels between the cosigners would put a stranger among them. What the wallet does is make the check cheap and
   enforceable: the **wallet ID** (the BIP380 checksum of the descriptor, covering every key and the threshold,
-  independent of entry order) is printed at creation, shown in `info` and in the GUI wallet information, and
-  `create-multisig --expect-id` refuses to write a wallet whose ID differs from the one another cosigner saw. The
+  independent of entry order) is printed at creation, shown in `info` and in the GUI (in the creation flow, where a
+  mismatching ID typed in writes nothing, and in the wallet information), and `create-multisig --expect-id` refuses to write a wallet whose ID differs from the one another cosigner saw. The
   comparison itself must happen over a channel the attacker does not control; without `--expect-id` the wallet says
   `NOT VERIFIED`. A multisig wallet also signs only inputs it recognises as its own addresses and refuses a PSBT whose
-  witness script is not its own (ADR 0057)
+  witness (or redeem) script is not its own (ADRs 0057, 0058, 0059)

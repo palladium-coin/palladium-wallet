@@ -29,8 +29,10 @@ public partial class MainWindowViewModel
     public const string StepImportWif = "import-wif";
     public const string StepImportAddress = "import-address";
     public const string StepPassword = "password";
+    public const string StepMultisig = "multisig";
+    public const string StepMultisigVerify = "multisig-verify";
 
-    private enum WizardFlowKind { New, Restore, ImportXkey, ImportWif, ImportAddress }
+    private enum WizardFlowKind { New, Restore, ImportXkey, ImportWif, ImportAddress, Multisig }
     private WizardFlowKind _wizardFlow;
 
     [ObservableProperty]
@@ -47,6 +49,8 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsStepImportWif))]
     [NotifyPropertyChangedFor(nameof(IsStepImportAddress))]
     [NotifyPropertyChangedFor(nameof(IsStepPassword))]
+    [NotifyPropertyChangedFor(nameof(IsStepMultisig))]
+    [NotifyPropertyChangedFor(nameof(IsStepMultisigVerify))]
     private string setupStep = StepStart;
 
     public bool IsStepDataLocation => SetupStep == StepDataLocation;
@@ -62,6 +66,8 @@ public partial class MainWindowViewModel
     public bool IsStepImportWif     => SetupStep == StepImportWif;
     public bool IsStepImportAddress => SetupStep == StepImportAddress;
     public bool IsStepPassword      => SetupStep == StepPassword;
+    public bool IsStepMultisig      => SetupStep == StepMultisig;
+    public bool IsStepMultisigVerify => SetupStep == StepMultisigVerify;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLegacySelected))]
@@ -408,7 +414,8 @@ public partial class MainWindowViewModel
         SetupStep = SetupStep switch
         {
             StepOpen => WalletList.Count > 1 ? StepChooseWallet : StepStart,
-            StepChooseWallet or StepShowSeed or StepWords or StepImportXkey or StepImportWif or StepImportAddress => StepStart,
+            StepChooseWallet or StepShowSeed or StepWords or StepImportXkey or StepImportWif or StepImportAddress or StepMultisig => StepStart,
+            StepMultisigVerify => StepMultisig,
             StepConfirmSeed => StepShowSeed,
             StepPassphrase => _wizardFlow == WizardFlowKind.Restore ? StepWords : StepConfirmSeed,
             StepScriptType => _wizardFlow == WizardFlowKind.ImportWif ? StepImportWif : StepPassphrase,
@@ -416,6 +423,7 @@ public partial class MainWindowViewModel
             {
                 WizardFlowKind.ImportXkey => StepImportXkey,
                 WizardFlowKind.ImportAddress => StepImportAddress,
+                WizardFlowKind.Multisig => StepMultisigVerify,
                 _ => StepScriptType,
             },
             _ => StepStart,
@@ -469,6 +477,12 @@ public partial class MainWindowViewModel
                         var (d, a) = WalletLoader.NewFromXprv(input, Profile, SelectedScriptKind, accountPath, fingerprint);
                         (doc, account) = (d, a);
                     }
+                    break;
+                }
+                case WizardFlowKind.Multisig:
+                {
+                    var (d, a) = NewMultisigFromInputs();
+                    (doc, account) = (d, a);
                     break;
                 }
                 case WizardFlowKind.ImportWif:
@@ -595,6 +609,7 @@ public partial class MainWindowViewModel
         MnemonicInput = ConfirmMnemonicInput = PassphraseInput = PasswordInput = ConfirmPasswordInput = WalletNameInput = "";
         ImportXkeyInput = ImportWifInput = ImportAddressInput = ImportXkeyDetectedKind = "";
         ImportFingerprintInput = ImportPathInput = "";
+        ResetMultisigInputs();
         SetupStep = StepStart;
         OnPropertyChanged(nameof(IsWatchOnlyAccount));
 

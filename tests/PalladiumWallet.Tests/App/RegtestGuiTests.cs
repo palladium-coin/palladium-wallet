@@ -8,11 +8,11 @@ namespace PalladiumWallet.Tests.App;
 
 /// <summary>
 /// The GUI's view model against a real regtest node and plm-fulcrum, driven by tests/regtest/e2e.sh (which starts
-/// both, funds the wallet of <see cref="VmTestBase.Mnemonic"/> with three coins and sets the variables). Does nothing
+/// both, funds the wallet of <see cref="VmTestBase.Mnemonic"/> with four coins (one per test) and sets the variables). Does nothing
 /// (passes) when they are not set, like the live-server tests, so the default run stays offline.
 ///   PALLADIUM_TEST_REGTEST_SERVER=host:port   the plm-fulcrum tcp endpoint
 ///   PALLADIUM_TEST_REGTEST_DEST=ADDRESS       a regtest address to pay
-/// The Donate tab pays a fixed mainnet address, so it cannot run on regtest; its flow is the Send tab's.
+/// The Donate tab pays a fixed mainnet address; here <c>DonationAddressOverride</c> points it at <c>DEST</c>.
 /// </summary>
 [Collection("AppPaths")]
 public sealed class RegtestGuiTests : VmTestBase
@@ -126,5 +126,31 @@ public sealed class RegtestGuiTests : VmTestBase
         await vm.ConfirmSendCommand.ExecuteAsync(null);
         Assert.StartsWith(Loc.Tr("msg.broadcasted"), vm.SendPreview);
         Assert.False(vm.HasPendingSend);
+    });
+
+    [Fact]
+    public Task A_donation_is_broadcast_to_the_real_node() => UiSession.Run(async () =>
+    {
+        if (!Enabled) return;
+        var (host, port) = Split(Server!);
+        var vm = await Open(host, port, "gui-donate");
+        MainWindowViewModel.DonationAddressOverride = Dest;
+        try
+        {
+            vm.ClearCoinSelectionCommand.Execute(null);
+            var coin = NextFreshCoin(vm);
+            lock (SpentFundingTxids)
+                SpentFundingTxids.Add(coin.Txid);
+            vm.ToggleCoinSelectedCommand.Execute(coin);
+            vm.DonateAmount = "0.1";
+            vm.SendFeeRate = "2";
+            await vm.PrepareDonateCommand.ExecuteAsync(null);
+            Assert.True(vm.HasPendingDonate, vm.DonatePreview);
+
+            await vm.ConfirmDonateCommand.ExecuteAsync(null);
+            Assert.StartsWith(Loc.Tr("msg.donate.thanks"), vm.DonatePreview);
+            Assert.False(vm.HasPendingDonate);
+        }
+        finally { MainWindowViewModel.DonationAddressOverride = null; }
     });
 }

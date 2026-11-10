@@ -226,4 +226,30 @@ public class MultisigSpendTests
         var ex = Assert.Throws<WalletSpendException>(() => PsbtSigner.Sign(psbt, mine));
         Assert.Contains("not this wallet's own", ex.Message);
     }
+
+    /// <summary>
+    /// The shape other wallets and hardware signers export: the spent output only as witness_utxo (no previous
+    /// transaction), no global xpubs, no key origins, no scripts. Our signer must still recognise its inputs by
+    /// the output script, add the scripts itself and produce a valid signature.
+    /// </summary>
+    [Fact]
+    public void ABarePsbtInTheShapeOfOtherWalletsIsSignedAndCompletes()
+    {
+        var first = MultisigAccountTests.Account(ownWords: MultisigAccountTests.Words1);
+        var (utxos, txs, funding) = Fund(first, 100_000_000);
+        var psbt = Build(first, utxos, txs).Psbt;
+        var bare = PSBT.FromTransaction(psbt.GetGlobalTransaction(), Net);
+        bare.Inputs[0].WitnessUtxo = funding.Outputs[0];
+
+        var result = PsbtSigner.Sign(bare, MultisigAccountTests.Account(ownWords: MultisigAccountTests.Words2));
+        Assert.Single(result.Psbt.Inputs[0].PartialSigs);
+        Assert.Equal(100_000_000 - result.Outputs.Sum(o => o.AmountSats), result.FeeSats);   // the amount comes from witness_utxo
+
+        // Cosigner 1's signature, made on the original PSBT, joins it: the transaction is complete and valid.
+        var (_, final) = PsbtSigner.Combine([result.Psbt, psbt]);
+        Assert.NotNull(final);
+        var builder = Net.CreateTransactionBuilder();
+        builder.AddCoins(new ScriptCoin(new Coin(funding, 0), first.GetWitnessScript(false, 0)));
+        Assert.True(builder.Verify(final!, out var errors), string.Join("; ", errors.Select(e => e.ToString())));
+    }
 }

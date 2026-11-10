@@ -96,3 +96,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check docs
         run: ./docs/check-docs.sh
+
+  regtest-e2e:
+    name: Regtest end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # Starts its own Palladium Core + plm-fulcrum containers (public ghcr.io images, pinned in the script)
+      # and drives the CLI and the GUI view model against them; about 75 s plus the image pulls and the build.
+      - name: Regtest end-to-end
+        run: tests/regtest/e2e.sh

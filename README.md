@@ -9,7 +9,7 @@ Unlike generic wallets adapted to many coins, Palladium Wallet is designed aroun
 - **Lightweight SPV**: syncs against an indexing server (ElectrumX-like protocol) without downloading the full chain.
 - **Security**: seed and private keys encrypted on disk (AES-GCM, PBKDF2-SHA512), never in plaintext in logs or on the wire; every server response is validated with Merkle proofs + checkpoints.
 - **HD wallet** (BIP39/BIP32), SegWit/wrapped/legacy addresses, watch-only from xpub or from plain addresses (no key material at all).
-- **PSBT-centric**: signing flows go through PSBT (offline / air-gapped); watch-only wallets export an unsigned PSBT for offline signing. M-of-N **multisig** (P2WSH, BIP48, `sortedmulti`) is supported from the CLI: cosigners exchange public keys, each builds the same wallet, and a PSBT collects the signatures (`create-multisig`, `cosigner-key`, `sign-psbt`, `combine-psbt`); addresses are checked against Palladium Core.
+- **PSBT-centric**: signing flows go through PSBT (offline / air-gapped); watch-only wallets export an unsigned PSBT for offline signing. M-of-N **multisig** (P2WSH or P2SH-P2WSH, BIP48, `sortedmulti`) is supported from the CLI and the GUI wizard: cosigners exchange public keys, each builds the same wallet, and a PSBT collects the signatures (`create-multisig`, `cosigner-key`, `sign-psbt`, `combine-psbt`); addresses are checked against Palladium Core.
 - **Multi-network**: mainnet, testnet, regtest in the core and the CLI (`--net`); the GUI works on mainnet only. Testnet and regtest ship without bootstrap servers or checkpoints, so pass `--server host:port`.
 - **Cross-platform**: desktop (Windows/Linux) and Android share one Avalonia UI; a **CLI** runs on the same core.
 - **Multilingual**: Italian, English, Spanish, French, Portuguese, German, Chinese (Simplified).
@@ -377,7 +377,7 @@ dotnet run --project src/Cli -- restore         "<mnemonic>" [...]
 dotnet run --project src/Cli -- restore-xpub    <slip132-key> [--net ...] [--no-encryption] [--fingerprint HEX8 --path m/...]
 dotnet run --project src/Cli -- restore-wif     <wif1,wif2,...|-> [--kind ...] [--net ...] [--no-encryption]   # spendable, no seed
 dotnet run --project src/Cli -- cosigner-key    "<mnemonic>" [--net ...]                                            # key to share with the other cosigners
-dotnet run --project src/Cli -- create-multisig --threshold M --cosigner KEY ... [--mnemonic "<words>"] [--expect-id ID]   # M-of-N P2WSH wallet; the ID is what the cosigners compare
+dotnet run --project src/Cli -- create-multisig --threshold M --cosigner KEY ... [--wrapped] [--mnemonic "<words>"] [--expect-id ID]   # M-of-N P2WSH (or P2SH-P2WSH) wallet; the ID is what the cosigners compare
 dotnet run --project src/Cli -- combine-psbt    <base64> <base64> ... [--broadcast]                                  # merge the cosigners' signatures
 dotnet run --project src/Cli -- restore-address <addr1,addr2,...> [--net ...] [--no-encryption]
 dotnet run --project src/Cli -- info            [--net ...]

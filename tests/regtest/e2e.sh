@@ -178,18 +178,40 @@ check "cosigner 2 completes it and the node takes it" "Broadcast:" other sign-ps
 $CLI generatetoaddress 1 "$MINER" >/dev/null; sleep 3
 check "the multisig spend is mined (mempool empty)" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 
-echo "== GUI view model against the real node (Coins tab, freeze, send, broadcast reconciliation through a lying proxy)"
+echo "== 2-of-3 wrapped multisig (P2SH-P2WSH): address and wallet ID equal the node's, spend signed by two cosigners, broadcast"
+WK1=$(other cosigner-key "$W1" --wrapped); WK2=$(other cosigner-key "$W2" --wrapped); WK3=$(other cosigner-key "$W3" --wrapped)
+n=0; for words in "$W1" "$W2" "$W3"; do n=$((n+1))
+  other create-multisig --threshold 2 --wrapped --cosigner "$WK1" --cosigner "$WK2" --cosigner "$WK3" --mnemonic "$words" \
+    --no-encryption --file "$WORK/wms$n.json" >/dev/null 2>&1
+done
+WDESC=$(other info --file "$WORK/wms1.json" | sed -n 's/^descriptor: //p')
+WMS_ADDR=$(other info --file "$WORK/wms1.json" | sed -n 's/^receive: *\([^ ]*\).*/\1/p')
+check "the descriptor is a sh(wsh(...))" "sh(wsh(sortedmulti(2," echo "$WDESC"
+check "the node derives the same wrapped multisig address" "$WMS_ADDR" $CLI deriveaddresses "$($CLI getdescriptorinfo "$WDESC" | python3 -c 'import sys,json;print(json.load(sys.stdin)["descriptor"])')" "[0,0]"
+check "the wallet ID is the checksum the node computes for the descriptor" \
+  "$($CLI getdescriptorinfo "$WDESC" | python3 -c 'import sys,json;print(json.load(sys.stdin)["checksum"])')" \
+  other info --file "$WORK/wms1.json"
+$CLI sendtoaddress "$WMS_ADDR" 1 >/dev/null; $CLI generatetoaddress 2 "$MINER" >/dev/null; sleep 4
+check "the wrapped multisig wallet sees the funds" "Balance: 1.00000000 PLM spendable" other sync "${SRV[@]}" --file "$WORK/wms1.json"
+WMS_OUT=$(other send --to "$($CLI getnewaddress "" bech32)" --amount 0.3 --feerate 2 "${SRV[@]}" --file "$WORK/wms1.json" 2>&1)
+check "cosigner 1 builds a PSBT that carries its signature" "signed by this wallet" echo "$WMS_OUT"
+WMS_PSBT=$(echo "$WMS_OUT" | tail -1)
+check "cosigner 2 completes it and the node takes it (redeem script and witness)" "Broadcast:" other sign-psbt "$WMS_PSBT" --broadcast "${SRV[@]}" --file "$WORK/wms2.json"
+$CLI generatetoaddress 1 "$MINER" >/dev/null; sleep 3
+check "the wrapped multisig spend is mined (mempool empty)" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
+
+echo "== GUI view model against the real node (Coins tab, freeze, send, donate, broadcast reconciliation through a lying proxy)"
 GUI_ADDR=$(dotnet "$ROOT/src/Cli/bin/Debug/net10.0/PalladiumWallet.Cli.dll" addresses \
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --net regtest --count 1 \
   | sed -n 's/^ *receiving\/0: *//p')
-for _ in 1 2 3; do $CLI sendtoaddress "$GUI_ADDR" 1 >/dev/null; done
+for _ in 1 2 3 4; do $CLI sendtoaddress "$GUI_ADDR" 1 >/dev/null; done
 $CLI generatetoaddress 2 "$MINER" >/dev/null; sleep 4
 check "no transaction waits in the mempool before the GUI run" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 GUI_RESULT=$(PALLADIUM_TEST_REGTEST_SERVER="127.0.0.1:$PORT" PALLADIUM_TEST_REGTEST_DEST="$($CLI getnewaddress "" bech32)" \
   dotnet test "$ROOT/tests/PalladiumWallet.Tests" --filter "FullyQualifiedName~RegtestGuiTests" 2>&1 | tail -15 || true)
 [[ $GUI_RESULT == *"Passed!"* ]] || echo "$GUI_RESULT"
 check "the GUI tests pass" "Passed!" echo "$GUI_RESULT"
-check "the GUI broadcast three transactions to the node" '"size": 3' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
+check "the GUI broadcast four transactions to the node" '"size": 4' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 
 echo
 if [[ $fail == 0 ]]; then echo "regtest e2e: all checks passed"; else echo "regtest e2e: FAILED"; exit 1; fi

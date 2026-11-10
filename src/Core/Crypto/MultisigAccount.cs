@@ -4,7 +4,9 @@ using PalladiumWallet.Core.Chain;
 namespace PalladiumWallet.Core.Crypto;
 
 /// <summary>
-/// M-of-N native segwit (P2WSH) multisig account. Addresses are <c>wsh(sortedmulti(M, key₁…keyₙ))</c>:
+/// M-of-N segwit multisig account, native (P2WSH, <c>wsh(sortedmulti(M, key₁…keyₙ))</c>) or wrapped in P2SH
+/// (<c>sh(wsh(sortedmulti(…)))</c>, BIP48 script type 1'; for signers and services that cannot pay to a bech32 address).
+/// Addresses are built like this:
 /// every cosigner contributes the key at <c>change/index</c> under its account xpub, the keys are sorted
 /// (BIP67), so the address does not depend on the order in which the cosigners were entered, and the
 /// script is wrapped in a witness-script-hash output. The wallet holds the private key of at most one cosigner;
@@ -17,7 +19,10 @@ public sealed class MultisigAccount : IWalletAccount
 
     private readonly ExtKey? _ownAccountXprv;
 
-    public ScriptKind Kind => ScriptKind.NativeSegwitMultisig;
+    public ScriptKind Kind { get; }
+
+    /// <summary>True for the P2SH-wrapped form: the output is a P2SH of the witness program, so the input carries a redeem script.</summary>
+    public bool IsWrapped => Kind == ScriptKind.WrappedSegwitMultisig;
     public ChainProfile Profile { get; }
 
     /// <summary>Signatures required to spend.</summary>
@@ -38,9 +43,14 @@ public sealed class MultisigAccount : IWalletAccount
     /// <param name="threshold">M, between 1 and the number of cosigners.</param>
     /// <param name="cosigners">All N keys, the wallet's own included.</param>
     /// <param name="ownAccountXprv">The account key of one cosigner (spendable), or null for a watch-only wallet.</param>
+    /// <param name="kind">NativeSegwitMultisig (default) or WrappedSegwitMultisig.</param>
     /// <exception cref="ArgumentException">Inconsistent parameters; the message says which.</exception>
-    public MultisigAccount(int threshold, IReadOnlyList<Cosigner> cosigners, ExtKey? ownAccountXprv, ChainProfile profile)
+    public MultisigAccount(int threshold, IReadOnlyList<Cosigner> cosigners, ExtKey? ownAccountXprv, ChainProfile profile,
+        ScriptKind kind = ScriptKind.NativeSegwitMultisig)
     {
+        if (kind is not (ScriptKind.NativeSegwitMultisig or ScriptKind.WrappedSegwitMultisig))
+            throw new ArgumentException("A multisig wallet is either native or wrapped segwit.", nameof(kind));
+        Kind = kind;
         if (cosigners.Count < 2 || cosigners.Count > MaxCosigners)
             throw new ArgumentException($"A multisig wallet needs between 2 and {MaxCosigners} cosigners.", nameof(cosigners));
         if (threshold < 1 || threshold > cosigners.Count)
@@ -75,8 +85,14 @@ public sealed class MultisigAccount : IWalletAccount
     public Script GetWitnessScript(bool isChange, int index) =>
         PayToMultiSigTemplate.Instance.GenerateScriptPubKey(Threshold, [.. GetSortedPubKeys(isChange, index)]);
 
+    /// <summary>The redeem script of a wrapped address (the witness program of the witness script); null for a native one.</summary>
+    public Script? GetRedeemScript(bool isChange, int index) =>
+        IsWrapped ? GetWitnessScript(isChange, index).WitHash.ScriptPubKey : null;
+
     public BitcoinAddress GetAddress(bool isChange, int index) =>
-        GetWitnessScript(isChange, index).WitHash.GetAddress(PalladiumNetworks.For(Profile.Kind));
+        GetRedeemScript(isChange, index) is { } redeem
+            ? redeem.Hash.GetAddress(PalladiumNetworks.For(Profile.Kind))
+            : GetWitnessScript(isChange, index).WitHash.GetAddress(PalladiumNetworks.For(Profile.Kind));
 
     public BitcoinAddress GetReceiveAddress(int index) => GetAddress(false, index);
     public BitcoinAddress GetChangeAddress(int index) => GetAddress(true, index);
@@ -97,7 +113,7 @@ public sealed class MultisigAccount : IWalletAccount
     }
 
     /// <summary>
-    /// The output descriptor of the wallet, <c>wsh(sortedmulti(M,[fp/path]xpub/0/*,…))</c> with the chain's standard
+    /// The output descriptor of the wallet, <c>wsh(sortedmulti(M,[fp/path]xpub/0/*,…))</c> (inside <c>sh(…)</c> when wrapped) with the chain's standard
     /// extended-key header, for the receive chain (<paramref name="isChange"/> false) or the change chain.
     /// Importable as a watch-only descriptor by Bitcoin-Core-derived nodes (which also add the checksum).
     /// </summary>
@@ -108,7 +124,8 @@ public sealed class MultisigAccount : IWalletAccount
         // depend on the order in which each cosigner happened to enter the keys. The addresses never did.
         var keys = string.Join(",", Cosigners.OrderBy(c => Convert.ToHexString(c.Xpub.ToBytes()), StringComparer.Ordinal)
             .Select(c => $"{c.ToDescriptorKey(network)}/{(isChange ? 1 : 0)}/*"));
-        return $"wsh(sortedmulti({Threshold},{keys}))";
+        var inner = $"wsh(sortedmulti({Threshold},{keys}))";
+        return IsWrapped ? $"sh({inner})" : inner;
     }
 
     /// <summary>

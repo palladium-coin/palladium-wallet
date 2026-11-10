@@ -54,6 +54,17 @@ public sealed record Cosigner(HDFingerprint Fingerprint, KeyPath AccountPath, Ex
         return true;
     }
 
+    /// <summary>The key a seed contributes to a multisig wallet of <paramref name="kind"/> (BIP48 account path).</summary>
+    /// <exception cref="ArgumentException">Not a valid mnemonic.</exception>
+    public static Cosigner FromMnemonic(string words, string? passphrase, ScriptKind kind, ChainProfile profile, int account = 0)
+    {
+        if (!Bip39.TryParse(words, out var mnemonic))
+            throw new ArgumentException("Invalid mnemonic (wrong words or checksum).", nameof(words));
+        var root = ExtKey.CreateFromSeed(Bip39.ToSeed(mnemonic!, passphrase));
+        var path = DerivationPaths.AccountPath(kind, profile, account);
+        return new Cosigner(root.Neuter().PubKey.GetHDFingerPrint(), path, root.Derive(path).Neuter());
+    }
+
     /// <summary>The key-origin text of this cosigner, in the SLIP-132 form of <paramref name="kind"/> (Zpub/Vpub for P2WSH).</summary>
     public string ToText(ScriptKind kind, ChainProfile profile) =>
         $"[{Convert.ToHexString(Fingerprint.ToBytes()).ToLowerInvariant()}/{AccountPath}]{Slip132.Encode(Xpub, kind, profile)}";
