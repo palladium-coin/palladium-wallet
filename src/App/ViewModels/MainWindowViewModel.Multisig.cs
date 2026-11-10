@@ -29,9 +29,44 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string multisigMnemonicInput = "";
 
+    /// <summary>Optional BIP39 passphrase of the own seed.</summary>
+    [ObservableProperty]
+    private string multisigPassphraseInput = "";
+
+    /// <summary>The account number the own key is derived at (BIP48 <c>account'</c>); 0 unless the seed serves several wallets.</summary>
+    [ObservableProperty]
+    private string multisigAccountInput = "0";
+
+    /// <summary>Words typed again to confirm a seed that was generated here (shown only for a generated seed).</summary>
+    [ObservableProperty]
+    private string multisigConfirmWordsInput = "";
+
+    [ObservableProperty]
+    private bool multisigSeedGenerated;
+
+    private bool _settingGeneratedSeed;
+
+    // A seed the user types or pastes is theirs already (written down elsewhere): only a generated one is confirmed.
+    partial void OnMultisigMnemonicInputChanged(string value)
+    {
+        if (!_settingGeneratedSeed)
+            MultisigSeedGenerated = false;
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMultisigOwnKey))]
     private string multisigOwnKey = "";
+
+    [ObservableProperty]
+    private Avalonia.Media.Imaging.Bitmap? multisigOwnKeyQr;
+
+    // The key as a QR, for a device or a person that scans it instead of typing 110 characters.
+    partial void OnMultisigOwnKeyChanged(string value)
+    {
+        var previous = MultisigOwnKeyQr;
+        MultisigOwnKeyQr = string.IsNullOrEmpty(value) ? null : GenerateQr(value);
+        previous?.Dispose();
+    }
 
     public bool HasMultisigOwnKey => MultisigOwnKey.Length > 0;
 
@@ -48,6 +83,9 @@ public partial class MainWindowViewModel
     {
         MultisigThresholdInput = "2";
         MultisigKeysInput = MultisigMnemonicInput = MultisigOwnKey = MultisigWalletId = MultisigExpectedIdInput = "";
+        MultisigPassphraseInput = MultisigConfirmWordsInput = "";
+        MultisigAccountInput = "0";
+        MultisigSeedGenerated = false;
         MultisigWrapped = false;
     }
 
@@ -67,7 +105,11 @@ public partial class MainWindowViewModel
     private void GenerateMultisigSeed()
     {
         // Kept in the wallet file (encrypted), so it can be read again under Wallet information.
+        _settingGeneratedSeed = true;
         MultisigMnemonicInput = Bip39.Generate(MnemonicLength.Twelve).ToString();
+        _settingGeneratedSeed = false;
+        MultisigSeedGenerated = true;
+        MultisigConfirmWordsInput = "";
         MultisigOwnKey = "";
     }
 
@@ -75,9 +117,16 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void ShowMultisigOwnKey()
     {
+        if (!int.TryParse(MultisigAccountInput.Trim(), out var account) || account < 0)
+        {
+            MultisigOwnKey = "";
+            StatusMessage = Loc.Tr("msg.multisig.account");
+            return;
+        }
         try
         {
-            MultisigOwnKey = Cosigner.FromMnemonic(MultisigMnemonicInput.Trim(), null, MultisigKind, Profile).ToText(MultisigKind, Profile);
+            var passphrase = string.IsNullOrEmpty(MultisigPassphraseInput) ? null : MultisigPassphraseInput;
+            MultisigOwnKey = Cosigner.FromMnemonic(MultisigMnemonicInput.Trim(), passphrase, MultisigKind, Profile, account).ToText(MultisigKind, Profile);
             StatusMessage = "";
         }
         catch (ArgumentException)
@@ -95,12 +144,22 @@ public partial class MainWindowViewModel
         if (!int.TryParse(MultisigThresholdInput.Trim(), out var threshold))
             throw new InvalidOperationException(Loc.Tr("msg.multisig.threshold"));
         var words = string.IsNullOrWhiteSpace(MultisigMnemonicInput) ? null : MultisigMnemonicInput.Trim();
-        return WalletLoader.NewMultisig(threshold, MultisigKeyLines(), words, null, Profile, MultisigKind);
+        var passphrase = string.IsNullOrEmpty(MultisigPassphraseInput) ? null : MultisigPassphraseInput;
+        return WalletLoader.NewMultisig(threshold, MultisigKeyLines(), words, passphrase, Profile, MultisigKind);
     }
 
     [RelayCommand]
     private void WizardNextFromMultisig()
     {
+        if (MultisigSeedGenerated)
+        {
+            var typed = string.Join(' ', MultisigConfirmWordsInput.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            if (!string.Equals(typed, MultisigMnemonicInput, StringComparison.OrdinalIgnoreCase))
+            {
+                StatusMessage = Loc.Tr("msg.seed.mismatch");
+                return;
+            }
+        }
         try
         {
             MultisigWalletId = NewMultisigFromInputs().Account.WalletId;
@@ -129,5 +188,22 @@ public partial class MainWindowViewModel
         EncryptWallet = true;
         SetupStep = StepPassword;
         StatusMessage = expected.Length > 0 ? "" : Loc.Tr("msg.multisig.unverified");
+    }
+
+    /// <summary>Fills the step from a configuration file another tool exported (ADR 0061); the keys can then be checked and the seed added.</summary>
+    public void ApplyMultisigConfig(string text)
+    {
+        try
+        {
+            var (threshold, kind, cosigners) = MultisigConfig.Parse(text, Profile);
+            MultisigThresholdInput = threshold.ToString();
+            MultisigWrapped = kind == ScriptKind.WrappedSegwitMultisig;
+            MultisigKeysInput = string.Join("\n", cosigners);
+            StatusMessage = "";
+        }
+        catch (InvalidDataException ex)
+        {
+            StatusMessage = $"{Loc.Tr("msg.multisig.config.invalid")}: {ex.Message}";
+        }
     }
 }

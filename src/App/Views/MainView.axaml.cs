@@ -7,7 +7,9 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
+using PalladiumWallet.App.Localization;
 using PalladiumWallet.App.ViewModels;
+using PalladiumWallet.Core.Wallet;
 
 namespace PalladiumWallet.App.Views;
 
@@ -102,6 +104,81 @@ public partial class MainView : UserControl
         }
     }
 
+    private void OnPsbtOverlayBackdropTapped(object? sender, TappedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Source, sender)) return;
+        if (DataContext is MainWindowViewModel vm)
+            vm.ClosePsbtCommand.Execute(null);
+    }
+
+    // File and clipboard access needs the TopLevel, which a UserControl reaches only from here (the view model has none).
+    private async void OnOpenPsbtFileClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions { AllowMultiple = false });
+        if (files.FirstOrDefault() is not { } file) return;
+        await using var stream = await file.OpenReadAsync();
+        // Bounded read: a PSBT is small, and whatever the file is must not be loaded whole.
+        var buffer = new byte[PsbtFormat.MaxBytes + 1];
+        var read = 0;
+        int n;
+        while (read < buffer.Length && (n = await stream.ReadAsync(buffer.AsMemory(read))) > 0)
+            read += n;
+        vm.LoadPsbtBytes(buffer[..read]);
+    }
+
+    private async void OnSavePsbtFileClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.SignedPsbtBytes() is not { } bytes) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            SuggestedFileName = "signed.psbt",
+            DefaultExtension = "psbt",
+        });
+        if (file is null) return;
+        await using var stream = await file.OpenWriteAsync();
+        await stream.WriteAsync(bytes);
+    }
+
+    private async void OnCopySignedPsbtClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm || string.IsNullOrEmpty(vm.SignedPsbtBase64)) return;
+        if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(vm.SignedPsbtBase64);
+    }
+
+    private async void OnSaveMultisigConfigClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm || string.IsNullOrEmpty(vm.MultisigConfigText)) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            SuggestedFileName = "multisig.txt",
+            DefaultExtension = "txt",
+        });
+        if (file is null) return;
+        await using var stream = await file.OpenWriteAsync();
+        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(vm.MultisigConfigText));
+    }
+
+    private async void OnLoadMultisigConfigClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel vm) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions { AllowMultiple = false });
+        if (files.FirstOrDefault() is not { } file) return;
+        await using var stream = await file.OpenReadAsync();
+        var buffer = new byte[65_537];                      // a configuration is a few kilobytes at most
+        var read = 0;
+        int n;
+        while (read < buffer.Length && (n = await stream.ReadAsync(buffer.AsMemory(read))) > 0)
+            read += n;
+        if (read > 65_536) { vm.StatusMessage = Loc.Tr("msg.multisig.config.invalid"); return; }
+        vm.ApplyMultisigConfig(System.Text.Encoding.UTF8.GetString(buffer, 0, read));
+    }
+
     private async void OnCopyPsbtClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm || string.IsNullOrEmpty(vm.PendingPsbtBase64))
@@ -177,6 +254,7 @@ public partial class MainView : UserControl
     {
         if ((e.Key == Key.Escape || e.Key == Key.Back) && DataContext is MainWindowViewModel vm)
         {
+            if (vm.IsPsbtOpen) { vm.ClosePsbtCommand.Execute(null); e.Handled = true; return; }
             if (vm.IsTxDetailsOpen) { vm.CloseTransactionDetailsCommand.Execute(null); e.Handled = true; return; }
             if (vm.IsPrivKeyPromptOpen) { vm.CancelPrivKeyPromptCommand.Execute(null); e.Handled = true; return; }
             if (vm.AddressInfo is not null) { vm.CloseAddressInfoCommand.Execute(null); e.Handled = true; return; }

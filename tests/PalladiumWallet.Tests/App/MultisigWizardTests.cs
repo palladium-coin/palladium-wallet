@@ -196,4 +196,112 @@ public sealed class MultisigWizardTests : VmTestBase
         Assert.True(vm.IsStepMultisig);
         await Task.CompletedTask;
     });
+
+    [Fact]
+    public Task A_configuration_file_fills_the_step_and_a_bad_one_says_why() => UiSession.Run(async () =>
+    {
+        var vm = Start();
+        var wrapped = new[] { MultisigAccountTests.Words1, MultisigAccountTests.Words2, MultisigAccountTests.Words3 }
+            .Select(w => Cosigner.FromMnemonic(w, null, ScriptKind.WrappedSegwitMultisig, ChainProfiles.Regtest)
+                .ToText(ScriptKind.WrappedSegwitMultisig, ChainProfiles.Regtest)).ToList();
+        var account = WalletLoader.NewMultisig(2, wrapped, null, null, ChainProfiles.Regtest, ScriptKind.WrappedSegwitMultisig).Account;
+
+        vm.ApplyMultisigConfig(MultisigConfig.ToText(account, "x"));
+
+        Assert.Equal("2", vm.MultisigThresholdInput);
+        Assert.True(vm.MultisigWrapped);
+        Assert.Equal(3, vm.MultisigKeysInput.Split('\n').Length);
+        vm.WizardNextFromMultisigCommand.Execute(null);
+        Assert.Equal(account.WalletId, vm.MultisigWalletId);              // the file alone rebuilds the same wallet
+
+        var other = Start();
+        other.ApplyMultisigConfig("Policy: 2 of 3\n");
+        Assert.Contains(Loc.Tr("msg.multisig.config.invalid"), other.StatusMessage);
+        Assert.Equal("", other.MultisigKeysInput);
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task The_passphrase_and_the_account_change_the_key_and_a_bad_account_is_refused() => UiSession.Run(async () =>
+    {
+        var vm = Start();
+        vm.MultisigMnemonicInput = MultisigAccountTests.Words1;
+        vm.ShowMultisigOwnKeyCommand.Execute(null);
+        var plain = vm.MultisigOwnKey;
+        Assert.NotNull(vm.MultisigOwnKeyQr);                              // the key as a QR as well
+
+        vm.MultisigPassphraseInput = "secret";
+        vm.ShowMultisigOwnKeyCommand.Execute(null);
+        Assert.NotEqual(plain, vm.MultisigOwnKey);
+
+        vm.MultisigPassphraseInput = "";
+        vm.MultisigAccountInput = "1";
+        vm.ShowMultisigOwnKeyCommand.Execute(null);
+        Assert.Contains("/48'/1'/1'/2']", vm.MultisigOwnKey);
+
+        vm.MultisigAccountInput = "-1";
+        vm.ShowMultisigOwnKeyCommand.Execute(null);
+        Assert.Equal("", vm.MultisigOwnKey);
+        Assert.Null(vm.MultisigOwnKeyQr);
+        Assert.Equal(Loc.Tr("msg.multisig.account"), vm.StatusMessage);
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task A_passphrase_is_kept_in_the_wallet_so_it_signs_with_the_same_key() => UiSession.Run(async () =>
+    {
+        var vm = Start();
+        vm.MultisigMnemonicInput = MultisigAccountTests.Words1;
+        vm.MultisigPassphraseInput = "secret";
+        vm.ShowMultisigOwnKeyCommand.Execute(null);
+        var own = vm.MultisigOwnKey;
+        Fill(vm, keys: [own, MultisigAccountTests.KeyOf(MultisigAccountTests.Words2)]);
+        vm.MultisigMnemonicInput = MultisigAccountTests.Words1;
+        vm.MultisigPassphraseInput = "secret";
+
+        vm.WizardNextFromMultisigCommand.Execute(null);
+        Assert.True(vm.IsStepMultisigVerify, vm.StatusMessage);           // the seed with its passphrase is one of the keys
+        vm.WizardNextFromMultisigVerifyCommand.Execute(null);
+        vm.EncryptWallet = false;
+        vm.CreateOrRestoreCommand.Execute(null);
+
+        var doc = WalletStore.Load(WalletFile, null);
+        Assert.Equal("secret", doc.Passphrase);
+        Assert.False(WalletLoader.ToAccount(doc).IsWatchOnly);
+
+        var without = Start();
+        Fill(without, own: null, keys: [own, MultisigAccountTests.KeyOf(MultisigAccountTests.Words2)]);
+        without.WizardNextFromMultisigCommand.Execute(null);               // no seed: fine, watch-only
+        Assert.True(without.IsStepMultisigVerify);
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task A_generated_seed_must_be_typed_again_but_a_typed_one_need_not() => UiSession.Run(async () =>
+    {
+        var vm = Start();
+        vm.GenerateMultisigSeedCommand.Execute(null);
+        Assert.True(vm.MultisigSeedGenerated);
+        var own = Cosigner.FromMnemonic(vm.MultisigMnemonicInput, null, ScriptKind.NativeSegwitMultisig, ChainProfiles.Regtest)
+            .ToText(ScriptKind.NativeSegwitMultisig, ChainProfiles.Regtest);
+        vm.MultisigKeysInput = own + "\n" + MultisigAccountTests.KeyOf(MultisigAccountTests.Words2);
+
+        vm.WizardNextFromMultisigCommand.Execute(null);                    // not confirmed yet
+        Assert.True(vm.IsStepMultisig);
+        Assert.Equal(Loc.Tr("msg.seed.mismatch"), vm.StatusMessage);
+
+        vm.MultisigConfirmWordsInput = "  " + vm.MultisigMnemonicInput.ToUpperInvariant() + " ";
+        vm.WizardNextFromMultisigCommand.Execute(null);
+        Assert.True(vm.IsStepMultisigVerify, vm.StatusMessage);
+
+        // Typing a seed over a generated one makes it the user's own: no confirmation asked.
+        var typed = Start();
+        typed.GenerateMultisigSeedCommand.Execute(null);
+        typed.MultisigMnemonicInput = MultisigAccountTests.Words1;
+        Assert.False(typed.MultisigSeedGenerated);
+        Fill(typed);
+        typed.WizardNextFromMultisigCommand.Execute(null);
+        Assert.True(typed.IsStepMultisigVerify, typed.StatusMessage);
+        await Task.CompletedTask;
+    });
 }

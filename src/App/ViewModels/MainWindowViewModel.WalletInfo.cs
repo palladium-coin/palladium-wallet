@@ -1,4 +1,5 @@
 using PalladiumWallet.Core.Crypto;
+using PalladiumWallet.Core.Wallet;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -54,6 +55,22 @@ public partial class MainWindowViewModel
         ? $"{m.Threshold}-of-{m.Cosigners.Count} · ID {m.WalletId}"
         : "";
 
+    public bool WalletInfoIsMultisig => _account is MultisigAccount;
+
+    /// <summary>The configuration file text (Coldcard/Sparrow form) a signer registers the wallet from (ADR 0061).</summary>
+    public string MultisigConfigText => _account is MultisigAccount m
+        ? MultisigConfig.ToText(m, Path.GetFileNameWithoutExtension(_walletPath ?? "multisig"))
+        : "";
+
+    /// <summary>The receive and change descriptors with their checksums.</summary>
+    public string MultisigDescriptorsText => _account is MultisigAccount m ? DescriptorLines(m) : "";
+
+    private static string DescriptorLines(MultisigAccount m)
+    {
+        var (receive, change) = MultisigConfig.Descriptors(m);
+        return receive + "\n" + change;
+    }
+
     public string WalletInfoFingerprint => _doc?.MasterFingerprint ?? "";
 
     public bool WalletInfoHasSeed => _doc?.Mnemonic is not null;
@@ -77,6 +94,9 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(WalletInfoDerivPath));
         OnPropertyChanged(nameof(WalletInfoXpub));
         OnPropertyChanged(nameof(WalletInfoMultisigId));
+        OnPropertyChanged(nameof(WalletInfoIsMultisig));
+        OnPropertyChanged(nameof(MultisigConfigText));
+        OnPropertyChanged(nameof(MultisigDescriptorsText));
         OnPropertyChanged(nameof(WalletInfoFingerprint));
         OnPropertyChanged(nameof(WalletInfoHasSeed));
         OnPropertyChanged(nameof(WalletInfoSeedNeedsPassword));

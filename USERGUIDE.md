@@ -552,6 +552,12 @@ refuses a PSBT whose witness script is not its own.)
 The GUI shows the same wallet (balance, history, addresses, Coins tab) and its Send tab prepares the PSBT to pass on;
 it never offers to broadcast a transaction that is not complete.
 
+**In the GUI.** The Send tab has a **Sign a PSBT…** button: paste the PSBT (base64 or hex) or *Open file…* (a binary
+`.psbt` too), press *Sign*, and read what it shows (inputs, outputs with your own change marked, the fee) before you pass
+it on. The result can be copied or saved as a `.psbt` file; when the signatures are enough, *Broadcast* sends it. The wallet
+information screen of a multisig wallet shows its descriptors and saves the configuration file for a signer, and the creation
+step can load such a file, takes an optional seed passphrase and an account number, and shows your own key as a QR code.
+
 **Hardware signers and other wallets.** `sign-psbt` and `combine-psbt` take a `.psbt` file (the binary file a signer
 reads from and writes to an SD card, or one Sparrow saves), base64 or hex text, or `-`; add `--psbt-out FILE` to
 `send`, `sign-psbt` or `combine-psbt` to also write the binary file. `export-multisig --out FILE` writes the

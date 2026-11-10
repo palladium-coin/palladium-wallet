@@ -246,15 +246,28 @@
                     <TextBox PlaceholderText="{Binding Loc[wiz.multisig.keys.placeholder]}"
                              Text="{Binding MultisigKeysInput}" AcceptsReturn="True" Height="110"
                              FontFamily="monospace" FontSize="12"/>
+                    <Button Content="{Binding Loc[wiz.multisig.loadconfig]}" Click="OnLoadMultisigConfigClick"
+                            HorizontalAlignment="Left"/>
                     <CheckBox IsChecked="{Binding MultisigWrapped}" Content="{Binding Loc[wiz.multisig.wrapped]}"/>
                     <TextBox PlaceholderText="{Binding Loc[wiz.multisig.seed.placeholder]}"
                              Text="{Binding MultisigMnemonicInput}" AcceptsReturn="True" Height="60"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.confirm]}"
+                             Text="{Binding MultisigConfirmWordsInput}" AcceptsReturn="True" Height="60"
+                             IsVisible="{Binding MultisigSeedGenerated}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBox PlaceholderText="{Binding Loc[wiz.multisig.passphrase]}"
+                                 Text="{Binding MultisigPassphraseInput}" MinWidth="220"/>
+                        <TextBlock Text="{Binding Loc[wiz.multisig.account]}" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding MultisigAccountInput}" Width="70"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <Button Content="{Binding Loc[wiz.multisig.generate]}" Command="{Binding GenerateMultisigSeedCommand}"/>
                         <Button Content="{Binding Loc[wiz.multisig.showkey]}" Command="{Binding ShowMultisigOwnKeyCommand}"/>
                     </StackPanel>
                     <SelectableTextBlock Text="{Binding MultisigOwnKey}" IsVisible="{Binding HasMultisigOwnKey}"
                                          TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
+                    <Image Source="{Binding MultisigOwnKeyQr}" Width="200" Height="200" HorizontalAlignment="Left"
+                           IsVisible="{Binding MultisigOwnKeyQr, Converter={x:Static ObjectConverters.IsNotNull}}"/>
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
                         <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
@@ -503,7 +516,7 @@
 
                         <!-- ── DESKTOP: Recipient | Amount side-by-side ── -->
                         <Grid IsVisible="{Binding IsDesktop}"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
 
                             <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="14">
                                 <!-- Recipient card -->
@@ -620,6 +633,9 @@
                                         IsEnabled="{Binding HasPendingSend}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                             </Grid>
+                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
+                            <Button Grid.Row="5" Content="{Binding Loc[psbt.open.btn]}"
+                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
                         </Grid>
 
                         <!-- ── MOBILE: vertical stack ── -->
@@ -755,6 +771,10 @@
                                     FontSize="15"/>
                             <Button Content="{Binding Loc[send.prepare]}"
                                     Command="{Binding PrepareSendCommand}"
+                                    MinHeight="48"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            <Button Content="{Binding Loc[psbt.open.btn]}"
+                                    Command="{Binding OpenPsbtCommand}"
                                     MinHeight="48"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
 
@@ -1525,6 +1545,48 @@
             </Border>
         </Border>
 
+        <!-- ============ SIGN A PSBT OVERLAY ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="3"
+                Background="{DynamicResource ScrimBrush}"
+                Tapped="OnPsbtOverlayBackdropTapped"
+                IsVisible="{Binding IsPsbtOpen}">
+            <Border Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+                    MaxWidth="640" Margin="16"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <ScrollViewer MaxHeight="640">
+                <StackPanel Margin="24" Spacing="12">
+                    <TextBlock Text="{Binding Loc[psbt.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[psbt.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox PlaceholderText="{Binding Loc[psbt.placeholder]}" Text="{Binding PsbtInput}"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="90"
+                             FontFamily="monospace" FontSize="11"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[psbt.openfile]}" Click="OnOpenPsbtFileClick"/>
+                        <Button Content="{Binding Loc[psbt.sign]}" Classes="accent" Command="{Binding SignPsbtCommand}"/>
+                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding PsbtSummary}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12"
+                                         IsVisible="{Binding PsbtSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <StackPanel Spacing="6"
+                                IsVisible="{Binding SignedPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Loc[psbt.result]}" Classes="label"/>
+                        <TextBox Text="{Binding SignedPsbtBase64}" IsReadOnly="True" AcceptsReturn="True"
+                                 TextWrapping="Wrap" Height="90" FontFamily="monospace" FontSize="11"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="{Binding Loc[send.psbt.copy]}" Click="OnCopySignedPsbtClick"/>
+                            <Button Content="{Binding Loc[psbt.savefile]}" Click="OnSavePsbtFileClick"/>
+                            <Button Content="{Binding Loc[psbt.broadcast]}" Classes="accent"
+                                    Command="{Binding BroadcastPsbtCommand}" IsEnabled="{Binding HasFinalPsbt}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Content="{Binding Loc[addr.close]}" HorizontalAlignment="Right"
+                            Command="{Binding ClosePsbtCommand}"/>
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Border>
+
         <!-- ============ WALLET INFO OVERLAY ============ -->
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
@@ -1586,6 +1648,16 @@
                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
                         <SelectableTextBlock Text="{Binding WalletInfoMultisigId}"
                                              FontFamily="monospace" FontSize="14" FontWeight="SemiBold"/>
+                    </StackPanel>
+
+                    <!-- Multisig: the configuration a signer or another wallet registers the wallet from -->
+                    <StackPanel Spacing="6" IsVisible="{Binding WalletInfoIsMultisig}">
+                        <TextBlock Text="{Binding Loc[walletinfo.multisig.config]}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <SelectableTextBlock Text="{Binding MultisigDescriptorsText}" TextWrapping="Wrap"
+                                             FontFamily="monospace" FontSize="10"/>
+                        <Button Content="{Binding Loc[walletinfo.multisig.save]}" Click="OnSaveMultisigConfigClick"
+                                HorizontalAlignment="Left"/>
                     </StackPanel>
 
                     <!-- Master fingerprint (only if present) -->
