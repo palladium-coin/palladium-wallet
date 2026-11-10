@@ -93,7 +93,12 @@ public abstract class VmTestBase : IDisposable
     /// One funding transaction paying <paramref name="outputs"/> to <paramref name="to"/>, one output
     /// each, in order: output n is vout n, so the wallet holds one coin per value.
     /// </summary>
-    protected (Transaction Funding, string TxHex) WireFundedChain(BitcoinAddress to, params long[] outputs)
+    protected (Transaction Funding, string TxHex) WireFundedChain(BitcoinAddress to, params long[] outputs) =>
+        WireFundedChainOn(_server, to, outputs);
+
+    /// <summary>The same wiring on another fake server (a test with two servers: a primary and a witness).</summary>
+    protected static (Transaction Funding, string TxHex) WireFundedChainOn(
+        FakeElectrumServer server, BitcoinAddress to, params long[] outputs)
     {
         var net = PalladiumNetworks.Mainnet;
         var tx = net.CreateTransaction();
@@ -114,15 +119,15 @@ public abstract class VmTestBase : IDisposable
             return Convert.ToHexString(header.ToBytes()).ToLowerInvariant();
         }
 
-        _server.Handle("blockchain.headers.subscribe", _ => new { height = 200, hex = Header(uint256.One, 200) });
-        _server.Handle("blockchain.scripthash.subscribe", _ => null);
-        _server.Handle("blockchain.scripthash.get_history", p =>
+        server.Handle("blockchain.headers.subscribe", _ => new { height = 200, hex = Header(uint256.One, 200) });
+        server.Handle("blockchain.scripthash.subscribe", _ => null);
+        server.Handle("blockchain.scripthash.get_history", p =>
             p[0].GetString() == scripthash ? new[] { new { tx_hash = txid.ToString(), height = 100 } } : Array.Empty<object>());
-        _server.Handle("blockchain.transaction.get", _ => tx.ToHex());
-        _server.Handle("blockchain.transaction.get_merkle",
+        server.Handle("blockchain.transaction.get", _ => tx.ToHex());
+        server.Handle("blockchain.transaction.get_merkle",
             _ => new { block_height = 100, pos = 0, merkle = Array.Empty<string>() });
-        _server.Handle("blockchain.block.header", _ => Header(txid, 100));
-        _server.Handle("blockchain.block.headers", _ => new { count = 0, hex = "" });
+        server.Handle("blockchain.block.header", _ => Header(txid, 100));
+        server.Handle("blockchain.block.headers", _ => new { count = 0, hex = "" });
         return (tx, tx.ToHex());
     }
 }

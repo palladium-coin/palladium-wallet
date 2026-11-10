@@ -222,11 +222,13 @@ public sealed class ElectrumClient : IAsyncDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            foreach (var (_, pending) in _pending)
-                pending.TrySetException(ex);
             // A failed write leaves the connection unusable: mark it dead now instead of letting
             // it look alive until the request timeout. The read loop then ends and reports Disconnected.
+            // Dead first, then fail the pending requests (as the read loop does): a caller woken by the
+            // failure must already see IsConnected == false, and nothing can register a request meanwhile.
             try { _cts.Cancel(); } catch (ObjectDisposedException) { }
+            foreach (var (_, pending) in _pending)
+                pending.TrySetException(ex);
         }
     }
 

@@ -186,6 +186,20 @@ internal static class SeedCorpus
                 """{"Format":"other","Iterations":2,"Salt":"","Nonce":"","Tag":"","Data":""}""")),
             ("not-json", Encoding.UTF8.GetBytes("hello")),
         ],
+        ["headerrange"] =
+        [
+            ("two-headers", [.. BitConverter.GetBytes(2), .. BitConverter.GetBytes(2),
+                .. Encoding.UTF8.GetBytes(new string('0', 320))]),
+            ("count-zero", [.. BitConverter.GetBytes(0), .. BitConverter.GetBytes(10), .. Encoding.UTF8.GetBytes("")]),
+            ("more-than-requested", [.. BitConverter.GetBytes(3), .. BitConverter.GetBytes(2),
+                .. Encoding.UTF8.GetBytes(new string('0', 480))]),
+            ("negative-count", [.. BitConverter.GetBytes(-1), .. BitConverter.GetBytes(5), .. Encoding.UTF8.GetBytes("00")]),
+            ("hex-too-short", [.. BitConverter.GetBytes(1), .. BitConverter.GetBytes(1),
+                .. Encoding.UTF8.GetBytes(new string('0', 159))]),
+            // Regression-style boundary: a count whose count * 160 overflows int must be rejected, not wrap into a match.
+            ("count-overflow", [.. BitConverter.GetBytes(int.MaxValue), .. BitConverter.GetBytes(2000),
+                .. Encoding.UTF8.GetBytes("00")]),
+        ],
         ["peers"] =
         [
             ("typical", Encoding.UTF8.GetBytes(

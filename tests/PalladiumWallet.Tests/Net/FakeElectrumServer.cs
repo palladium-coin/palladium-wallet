@@ -60,6 +60,14 @@ public sealed class FakeElectrumServer : IAsyncDisposable
     public void Handle(string method, Func<JsonElement, object?> handler) =>
         _handlers[method] = handler;
 
+    private int _accepted, _connected;
+
+    /// <summary>Connections accepted since the server started (TLS handshake completed, if any).</summary>
+    public int AcceptedCount => Volatile.Read(ref _accepted);
+
+    /// <summary>Connections currently open: a client that disposed its connection no longer counts.</summary>
+    public int ConnectedCount => Volatile.Read(ref _connected);
+
     public int CallCount(string method) => _callCounts.GetValueOrDefault(method);
 
     public void ResetCallCounts() => _callCounts.Clear();
@@ -133,6 +141,7 @@ public sealed class FakeElectrumServer : IAsyncDisposable
 
     private async Task ServeClientAsync(TcpClient tcp)
     {
+        var counted = false;
         try
         {
             Stream stream = tcp.GetStream();
@@ -145,6 +154,9 @@ public sealed class FakeElectrumServer : IAsyncDisposable
 
             var writeLock = new SemaphoreSlim(1, 1);
             _clients.Add((stream, writeLock, tcp));
+            Interlocked.Increment(ref _accepted);
+            Interlocked.Increment(ref _connected);
+            counted = true;
 
             using var reader = new StreamReader(stream, Encoding.UTF8, false, 4096, leaveOpen: true);
             while (!_cts.IsCancellationRequested)
@@ -158,6 +170,11 @@ public sealed class FakeElectrumServer : IAsyncDisposable
         catch (Exception)
         {
             // Client went away or TLS failed (e.g. rejected pin): normal in tests.
+        }
+        finally
+        {
+            if (counted)
+                Interlocked.Decrement(ref _connected);
         }
     }
 

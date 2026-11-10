@@ -400,4 +400,47 @@ public class ElectrumClientTests
             }
         }
     }
+
+    /// <summary>A stream whose writes fail, to reach the client's write-failure path deterministically.</summary>
+    private sealed class FailingWriteStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("write failed");
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) =>
+            ValueTask.FromException(new IOException("write failed"));
+        public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Una_scrittura_fallita_chiude_la_connessione_e_fa_fallire_subito_la_richiesta()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => "mai risposto");
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+        var disconnected = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += ex => disconnected.TrySetResult(ex);
+
+        // From now on the write loop cannot write; the read loop still has the healthy socket, so the only
+        // thing that can end this request early is the write-failure path itself (not an EOF on the read side).
+        typeof(ElectrumClient).GetField("_stream", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(client, new FailingWriteStream());
+
+        var started = DateTime.UtcNow;
+        var ex = await Assert.ThrowsAsync<IOException>(() => client.BannerAsync());
+
+        Assert.Equal("write failed", ex.Message);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5),
+            "the failed write must fail the request at once, not after the request timeout");
+        Assert.False(client.IsConnected);                        // dead now, not "alive until the timeout"
+        await disconnected.Task.WaitAsync(Timeout);               // and the owner is told, so it can reconnect
+        await Assert.ThrowsAnyAsync<IOException>(() => client.BannerAsync()); // later requests fail at once too
+    }
 }

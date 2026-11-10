@@ -131,4 +131,114 @@ public sealed class PreparedTransactionSnapshotTests : VmTestBase
         Assert.False(vm.HasPendingDonate);
         Assert.Equal("", vm.DonatePreview);
     });
+
+    // ----- amount validation, through the ViewModel (the Core check is tested in TransactionFactoryLimitsTests) -----
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("0.00000000")]
+    [InlineData("-1")]
+    [InlineData("abc")]
+    [InlineData("")]
+    public Task A_zero_or_invalid_amount_is_refused_before_anything_is_built(string amount) => UiSession.Run(async () =>
+    {
+        var (vm, account) = await Open(50_000_000);
+        vm.SendAll = false;
+        vm.SendTo = account.GetReceiveAddress(7).ToString();
+        vm.SendAmount = amount;
+        vm.SendFeeRate = "1";
+
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasPendingSend);
+        Assert.Equal(Loc.Tr("msg.amount.invalid"), vm.SendPreview);
+    });
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-0.5")]
+    [InlineData("x")]
+    public Task A_zero_or_invalid_donation_is_refused_before_anything_is_built(string amount) => UiSession.Run(async () =>
+    {
+        var (vm, _) = await Open(50_000_000);
+        vm.DonateAmount = amount;
+
+        await vm.PrepareDonateCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasPendingDonate);
+        Assert.Equal(Loc.Tr("msg.amount.invalid"), vm.DonatePreview);
+    });
+
+    [Fact]
+    public Task Send_all_needs_no_amount() => UiSession.Run(async () =>
+    {
+        var (vm, account) = await Open(50_000_000);
+        vm.SendAll = true;
+        vm.SendTo = account.GetReceiveAddress(7).ToString();
+        vm.SendAmount = "0";                                      // ignored: the amount is "everything minus the fee"
+        vm.SendFeeRate = "1";
+
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasPendingSend, vm.SendPreview);
+    });
+
+    // ----- a Prepare that fails for a reason other than a field edit leaves nothing confirmable (ADR 0048) -----
+
+    /// <summary>
+    /// The relay fee arrives from the server after the user typed a fee: no field changed, so no edit hook
+    /// discarded the prepared transaction, and the next Prepare is rejected for a reason unrelated to any edit.
+    /// </summary>
+    private async Task RelayFeeRisesTo(MainWindowViewModel vm, decimal satPerVByte)
+    {
+        _server.Handle("blockchain.relayfee", _ => satPerVByte / 100_000m);   // PLM/kB
+        _server.Handle("blockchain.estimatefee", _ => satPerVByte / 100_000m);
+        _server.DropClients();                                    // estimates are fetched when a connection is made
+        await Eventually(() => !vm.IsConnected, describe: () => "waiting for the drop to be noticed");
+        await vm.ConnectAndSyncCommand.ExecuteAsync(null);
+        await Eventually(() => !vm.IsSyncing && vm.IsConnected && vm.HasFeeEstimates,
+            describe: () => $"syncing={vm.IsSyncing} estimates={vm.HasFeeEstimates}");
+    }
+
+    [Fact]
+    public Task A_send_that_fails_to_prepare_leaves_no_earlier_transaction_confirmable() => UiSession.Run(async () =>
+    {
+        var (vm, account) = await Open(50_000_000);
+        await Prepare(vm, account);
+        // A rate the user typed (different from the default, so it counts as typed): estimates never overwrite it.
+        vm.SendFeeRate = "2";
+        await vm.PrepareSendCommand.ExecuteAsync(null);
+        Assert.True(vm.HasPendingSend, vm.SendPreview);           // prepared at 2 sat/vB, confirmable
+
+        await RelayFeeRisesTo(vm, 5);                             // nothing the user typed changed
+        Assert.True(vm.HasPendingSend, "a relay-fee update alone must not touch the snapshot; preview=" + vm.SendPreview);
+
+        await vm.PrepareSendCommand.ExecuteAsync(null);           // same fields, now below the relay fee
+
+        Assert.False(vm.HasPendingSend);
+        Assert.Equal(string.Format(Loc.Tr("msg.feerate.belowrelay"), "5"), vm.SendPreview);
+        var calls = _server.CallCount("blockchain.transaction.broadcast");
+        await vm.ConfirmSendCommand.ExecuteAsync(null);           // and confirming sends nothing
+        Assert.Equal(calls, _server.CallCount("blockchain.transaction.broadcast"));
+    });
+
+    [Fact]
+    public Task A_donation_that_fails_to_prepare_leaves_no_earlier_transaction_confirmable() => UiSession.Run(async () =>
+    {
+        var (vm, _) = await Open(50_000_000);
+        vm.SendFeeRate = "2";                                     // typed by the user: estimates never overwrite it
+        vm.DonateAmount = "0.01";
+        await vm.PrepareDonateCommand.ExecuteAsync(null);
+        Assert.True(vm.HasPendingDonate, vm.DonatePreview);
+
+        await RelayFeeRisesTo(vm, 5);
+        Assert.True(vm.HasPendingDonate, "a relay-fee update alone must not touch the snapshot");
+        await vm.PrepareDonateCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasPendingDonate);
+        Assert.Equal(string.Format(Loc.Tr("msg.feerate.belowrelay"), "5"), vm.DonatePreview);
+        var calls = _server.CallCount("blockchain.transaction.broadcast");
+        await vm.ConfirmDonateCommand.ExecuteAsync(null);
+        Assert.Equal(calls, _server.CallCount("blockchain.transaction.broadcast"));
+    });
 }

@@ -30,6 +30,7 @@ public static class FuzzTargets
             ["walletdoc"] = WalletDoc,
             ["encfile"] = EncFile,
             ["peers"] = Peers,
+            ["headerrange"] = HeaderRangeReply,
         };
 
     /// <summary>Runs one input through a named target (used by replay and the regression test).</summary>
@@ -137,5 +138,24 @@ public static class FuzzTargets
         catch (JsonException) { return; }
         using (doc)
             ElectrumApi.ParsePeers(doc.RootElement);
+    }
+
+    // blockchain.block.headers replies are attacker-controlled: a count and a hex string.
+    // Input layout: int32 count, int32 requested, then the hex text. Contract: HeaderRange.Split returns
+    // exactly `count` headers of 160 characters within the request, or throws SpvVerificationException.
+    private static void HeaderRangeReply(byte[] data)
+    {
+        if (data.Length < 8)
+            return;
+        var count = BitConverter.ToInt32(data, 0);
+        var requested = Math.Abs(BitConverter.ToInt32(data, 4) % 2001);
+        var hex = Utf8(data[8..]);
+        try
+        {
+            var headers = HeaderRange.Split(new HeaderRangeResponse(count, hex), requested, 0);
+            if (headers.Length != count || count < 1 || count > requested || headers.Any(h => h.Length != BlockHeaderInfo.Size * 2))
+                throw new InvalidOperationException("HeaderRange.Split returned a result outside its contract.");
+        }
+        catch (SpvVerificationException) { }
     }
 }

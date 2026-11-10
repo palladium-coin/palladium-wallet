@@ -745,19 +745,10 @@ public sealed class WalletSynchronizer(IWalletAccount account, ElectrumClient cl
 
             var requested = Math.Min(HeaderBatchSize, toHeightInclusive - h + 1);
             var range = await client.GetBlockHeadersAsync(h, requested, ct);
-            if (range.Count == 0)
-                throw new SpvVerificationException(
-                    $"Server returned no headers starting at height {h}: server is not trustworthy.");
-            // More headers than asked, or a hex string that is not exactly count * 80 bytes, is a
-            // broken or hostile reply: never slice it, never let it spill past the requested range.
-            if (range.Count < 0 || range.Count > requested
-                || range.Hex is null || range.Hex.Length != range.Count * BlockHeaderInfo.Size * 2)
-                throw new SpvVerificationException(
-                    $"Malformed header range at height {h} (count {range.Count}, requested {requested}): server is not trustworthy.");
-
-            for (var i = 0; i < range.Count; i++)
-                result[h - fromHeight + i] = range.Hex.Substring(i * BlockHeaderInfo.Size * 2, BlockHeaderInfo.Size * 2);
-            h += range.Count;
+            var headers = HeaderRange.Split(range, requested, h); // shape-checked: never slice an untrusted reply
+            for (var i = 0; i < headers.Length; i++)
+                result[h - fromHeight + i] = headers[i];
+            h += headers.Length;
         }
         return result;
     }

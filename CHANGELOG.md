@@ -13,6 +13,9 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- Fuzz target `headerrange`: the shape check of a `blockchain.block.headers` reply is now a parser of its own (`Core/Spv/HeaderRange.cs`, behaviour unchanged) with a seed corpus and a CI smoke job (ADR 0054).
+- Tests for the paths that had none: the zero and invalid amount through the ViewModel (Send and Donate), a Prepare that fails without a field edit (relay fee rising after the user typed a fee), the broadcast-mismatch reconciliation for the Donate tab and for `sign-psbt --broadcast`, the witness connections closed when the primary is replaced, a notification for an already-used address, and the write-failure path of `ElectrumClient`.
+
 - CLI `restore-wif` (import WIF private keys as a spendable wallet, `-` reads them from stdin) and `--kind taproot` (BIP86); taproot and WIF wallets were checked end to end on regtest: sync, spend, broadcast and mined by a node that enforces relay policy (ADR 0053).
 
 - The total of the frozen coins is shown under the balance, so a forgotten freeze is visible; the Send tab shows the coin-control summary on the phone layout too (ADR 0052).
@@ -20,6 +23,8 @@ release and covers the full history from the initial commit.
 - CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
 
 ### Fixed
+
+- A failed write on a server connection failed the pending requests before marking the connection dead, so a caller woken by the failure could still see it as connected; it is now marked dead first, as the read loop does.
 
 - An unknown `--kind` value (a typo such as `taprot`) silently created a native segwit wallet; it is now an error.
 - `info` printed an empty path and extended key for an imported-key wallet; it now says what was imported.

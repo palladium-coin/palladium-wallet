@@ -688,4 +688,85 @@ public sealed class CliTests : IDisposable
         await CliWithStdin("pw\n", "restore-wif", NewWif(), "--net", "regtest", "--password-stdin", "--file", WalletFile());
         Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
     }
+
+    // ----- sign-psbt --broadcast shares BroadcastSigned with send, with its own entry point -----
+
+    /// <summary>A PSBT that spends one 0.1 PLM output of the wallet of <see cref="Mnemonic"/>, ready for sign-psbt.</summary>
+    private static string UnsignedPsbt(HdAccount account)
+    {
+        var net = PalladiumNetworks.Regtest;
+        var funding = net.CreateTransaction();
+        funding.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        funding.Outputs.Add(Money.Satoshis(10_000_000), account.GetReceiveAddress(0));
+        var spend = net.CreateTransaction();
+        spend.Inputs.Add(new TxIn(new OutPoint(funding.GetHash(), 0)));
+        spend.Outputs.Add(Money.Satoshis(9_000_000), account.GetReceiveAddress(9));
+        return PSBT.FromTransaction(spend, net).AddCoins(new Coin(funding, 0)).ToBase64();
+    }
+
+    private async Task<(FakeElectrumServer Server, string Psbt)> SignPsbtServer()
+    {
+        var server = new FakeElectrumServer();
+        server.Handle("server.features", _ => new { genesis_hash = ChainProfiles.Regtest.GenesisHash });
+        server.Handle("blockchain.headers.subscribe", _ => new { height = 300, hex = RegtestHeader(300) });
+        Assert.True(Bip39.TryParse(Mnemonic, out var mnemonic));
+        var account = HdAccount.FromMnemonic(mnemonic!, null, ScriptKind.NativeSegwit, ChainProfiles.Regtest);
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        return (server, UnsignedPsbt(account));
+    }
+
+    [Fact]
+    public async Task SignPsbtBroadcast_WithAWrongTxidReply_AndTheTransactionNotInTheNetwork_PrintsTheHex_AndFails()
+    {
+        var (server, psbt) = await SignPsbtServer();
+        await using var _ = server;
+        server.Handle("blockchain.transaction.broadcast", _ => WrongTxid);
+        server.Handle("blockchain.transaction.get",
+            _ => throw new FakeElectrumError(2, "No such mempool or blockchain transaction"));
+
+        var (exit, output, err) = await Cli("sign-psbt", psbt, "--broadcast", "--server", $"{server.Host}:{server.Port}",
+            "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("is not in the network", err);
+        var hex = output.Split('\n', StringSplitOptions.TrimEntries).Last(l => l.Length > 100 && l.All(Uri.IsHexDigit));
+        var tx = Transaction.Parse(hex, PalladiumNetworks.Regtest);
+        Assert.Contains(tx.GetHash().ToString(), err);
+        Assert.Contains(tx.Outputs, o => o.Value == Money.Satoshis(9_000_000));
+    }
+
+    [Fact]
+    public async Task SignPsbtBroadcast_WithAWrongTxidReply_AndTheTransactionInTheNetwork_SucceedsAndReportsTheServer()
+    {
+        var (server, psbt) = await SignPsbtServer();
+        await using var _ = server;
+        string? sent = null;
+        server.Handle("blockchain.transaction.broadcast", p => { sent = p[0].GetString(); return WrongTxid; });
+        server.Handle("blockchain.transaction.get", p =>
+            sent is not null && Transaction.Parse(sent, PalladiumNetworks.Regtest).GetHash().ToString() == p[0].GetString() ? sent
+            : throw new FakeElectrumError(2, "No such mempool or blockchain transaction"));
+
+        var (exit, output, _) = await Cli("sign-psbt", psbt, "--broadcast", "--server", $"{server.Host}:{server.Port}",
+            "--net", "regtest", "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        var ourTxid = Transaction.Parse(sent!, PalladiumNetworks.Regtest).GetHash().ToString();
+        Assert.Contains($"{ourTxid} is in the network", output);
+        Assert.Contains(WrongTxid, output);
+    }
+
+    [Fact]
+    public async Task SignPsbtBroadcast_WithAMatchingReply_PrintsTheTxid()
+    {
+        var (server, psbt) = await SignPsbtServer();
+        await using var _ = server;
+        server.Handle("blockchain.transaction.broadcast",
+            p => Transaction.Parse(p[0].GetString()!, PalladiumNetworks.Regtest).GetHash().ToString());
+
+        var (exit, output, err) = await Cli("sign-psbt", psbt, "--broadcast", "--server", $"{server.Host}:{server.Port}",
+            "--net", "regtest", "--file", WalletFile());
+
+        Assert.True(exit == 0, output + err);
+        Assert.Contains("Broadcast:", output);
+    }
 }

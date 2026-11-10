@@ -57,6 +57,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0051 | [Expose coin listing and freezing in the CLI](0051-expose-coin-listing-and-freezing-in-the-cli.md) | Wallet | Accepted |
 | 0052 | [Show the frozen total and the coin selection on every layout](0052-show-the-frozen-total-and-the-coin-selection-on-every-layout.md) | UI | Accepted |
 | 0053 | [Import WIF keys and create taproot wallets from the CLI](0053-import-wif-keys-and-create-taproot-wallets-from-the-cli.md) | Wallet | Accepted |
+| 0054 | [Extract the header-range check into a fuzzed parser](0054-extract-the-header-range-check-into-a-fuzzed-parser.md) | Testing | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.
