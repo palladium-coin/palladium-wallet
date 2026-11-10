@@ -128,7 +128,7 @@ This is a complement to, not a substitute for, independent human or third-party 
 - No RBF/CPFP UI (RBF flag is set on all transactions, but fee bumping is not exposed)
 - No Lightning Network support
 - Multisig (M-of-N) is native SegWit (P2WSH) or P2SH-wrapped (P2SH-P2WSH), created from the CLI or the GUI, with no
-  hardware signer; only Palladium Core has been exercised as the external party for PSBTs. A cosigner
+  hardware signer integration; PSBT files and the multisig configuration file are exchanged in the formats such signers use (ADR 0061), but only Palladium Core has been exercised as the external party. A cosigner
   key cannot be authenticated by the wallet (there is no PKI; the key is just a public key): a key swapped while it
   travels between the cosigners would put a stranger among them. What the wallet does is make the check cheap and
   enforceable: the **wallet ID** (the BIP380 checksum of the descriptor, covering every key and the threshold,

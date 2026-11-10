@@ -10,7 +10,7 @@
 #   ./fuzz.sh header
 #   ./fuzz.sh peers -V 3600          # time-limited campaign (seconds)
 #
-# Targets: header merkle slip132 bip39 address coinamount walletdoc encfile peers headerrange cosignerkey
+# Targets: header merkle slip132 bip39 address coinamount walletdoc encfile peers headerrange cosignerkey psbt multisigconfig
 #
 # Findings land in findings/<target>/crashes/: replay one with
 #   dotnet run -- <target> findings/<target>/crashes/<file>

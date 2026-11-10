@@ -954,4 +954,112 @@ public sealed class CliTests : IDisposable
         Assert.Contains("not the ones the other cosigner saw", err);
         Assert.False(File.Exists(WalletFile()));
     }
+
+    // ----- interchange with other tools: .psbt files, the multisig configuration file -----
+
+    [Fact]
+    public async Task ExportMultisig_WritesAFileThatCreatesTheSameWalletElsewhere()
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2), await KeyOf(Words3) };
+        await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1], "--cosigner", keys[2],
+            "--mnemonic", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        var config = Path.Combine(_dir, "vault.txt");
+
+        var (exit, output, _) = await Cli("export-multisig", "--name", "Vault", "--out", config, "--net", "regtest", "--file", WalletFile());
+        Assert.Equal(0, exit);
+        var id = MultisigAccountOf(WalletFile()).WalletId;
+        Assert.Contains($"wallet ID {id}", output);
+        Assert.Contains("Policy: 2 of 3", File.ReadAllText(config));
+
+        // Another device builds its wallet from the file alone (and its own seed): same wallet ID.
+        var (exit2, created, _) = await Cli("create-multisig", "--config", config, "--mnemonic", Words2, "--expect-id", id,
+            "--net", "regtest", "--no-encryption", "--file", WalletFile("b.json"));
+        Assert.Equal(0, exit2);
+        Assert.Contains("matches the one you were given", created);
+        Assert.False(MultisigAccountOf(WalletFile("b.json")).IsWatchOnly);
+    }
+
+    private static MultisigAccount MultisigAccountOf(string file) =>
+        Assert.IsType<MultisigAccount>(WalletLoader.ToAccount(WalletStore.Load(file, null)));
+
+    [Fact]
+    public async Task ExportMultisig_AsDescriptors_PrintsBothChains_AndRefusesAWalletThatIsNotMultisig()
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2) };
+        await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1],
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        var (exit, output, _) = await Cli("export-multisig", "--format", "descriptor", "--net", "regtest", "--file", WalletFile());
+        Assert.Equal(0, exit);
+        Assert.Matches(@"receive: wsh\(sortedmulti\(2,.*#[a-z0-9]{8}", output);
+        Assert.Contains("change:", output);
+
+        await Cli("restore", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile("single.json"));
+        var (exit2, _, err) = await Cli("export-multisig", "--net", "regtest", "--file", WalletFile("single.json"));
+        Assert.Equal(1, exit2);
+        Assert.Contains("not a multisig wallet", err);
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WithABadConfigFile_FailsCleanlyAndWritesNothing()
+    {
+        var config = Path.Combine(_dir, "bad.txt");
+        File.WriteAllText(config, "Policy: 2 of 3\n");
+        var (exit, _, err) = await Cli("create-multisig", "--config", config, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("Cannot use the configuration file", err);
+        Assert.False(File.Exists(WalletFile()));
+
+        var (exit2, _, err2) = await Cli("create-multisig", "--config", Path.Combine(_dir, "missing.txt"), "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit2);
+        Assert.Contains("Cannot use the configuration file", err2);
+    }
+
+    [Fact]
+    public async Task SignPsbt_ReadsABinaryPsbtFile_AndWritesOne()
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2) };
+        foreach (var (name, words) in new[] { ("a.json", Mnemonic), ("b.json", Words2) })
+            await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1], "--mnemonic", words,
+                "--net", "regtest", "--no-encryption", "--file", WalletFile(name));
+
+        // A PSBT as another tool would save it: binary, witness_utxo only, no scripts.
+        var account = MultisigAccountOf(WalletFile("a.json"));
+        var net = PalladiumNetworks.Regtest;
+        var funding = net.CreateTransaction();
+        funding.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        funding.Outputs.Add(Money.Satoshis(10_000_000), account.GetReceiveAddress(0));
+        var spend = net.CreateTransaction();
+        spend.Inputs.Add(new TxIn(new OutPoint(funding.GetHash(), 0)));
+        spend.Outputs.Add(Money.Satoshis(9_990_000), new Key().PubKey.GetAddress(ScriptPubKeyType.Segwit, net));
+        var psbt = PSBT.FromTransaction(spend, net);
+        psbt.Inputs[0].WitnessUtxo = funding.Outputs[0];
+        var inFile = Path.Combine(_dir, "in.psbt");
+        File.WriteAllBytes(inFile, PsbtFormat.ToBinary(psbt));
+        var outFile = Path.Combine(_dir, "out.psbt");
+
+        var (exit, output, _) = await Cli("sign-psbt", inFile, "--psbt-out", outFile, "--net", "regtest", "--file", WalletFile("a.json"));
+
+        Assert.Equal(0, exit);
+        Assert.Contains($"PSBT written to {outFile}", output);
+        var signed = PsbtFormat.Parse(File.ReadAllBytes(outFile), net);           // the file is a real binary PSBT
+        Assert.Single(signed.Inputs[0].PartialSigs);
+
+        // The second cosigner signs that file and the result is complete.
+        var (exit2, output2, _) = await Cli("sign-psbt", outFile, "--net", "regtest", "--file", WalletFile("b.json"));
+        Assert.Equal(0, exit2);
+        Assert.Contains("Final transaction", output2);
+    }
+
+    [Fact]
+    public async Task SignPsbt_AcceptsHexText_AndSaysWhenTheFileIsNoPsbt()
+    {
+        var keys = new[] { await KeyOf(Mnemonic), await KeyOf(Words2) };
+        await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1], "--mnemonic", Mnemonic,
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        var junk = Path.Combine(_dir, "junk.psbt");
+        File.WriteAllBytes(junk, [1, 2, 3]);
+        var (exit, _, err) = await Cli("sign-psbt", junk, "--net", "regtest", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("Not a valid PSBT", err);
+    }
 }

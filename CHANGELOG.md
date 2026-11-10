@@ -13,6 +13,7 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- **Exchange with signers and other wallets**: binary `.psbt` files (read by `sign-psbt`/`combine-psbt`, written with `--psbt-out`), hex PSBT text, `export-multisig` (the Coldcard/Sparrow configuration text, or the descriptors with checksums) and `create-multisig --config FILE`. Fuzz targets `psbt` and `multisigconfig`; the first run found a non-canonical-varint `InvalidDataException` from NBitcoin on a binary PSBT, now mapped to `FormatException`. No real device, Sparrow or Electrum was available to try (ADR 0061).
 - **P2SH-wrapped multisig** (`sh(wsh(sortedmulti(…)))`, BIP48 script type 1'): `--wrapped` on `cosigner-key` and `create-multisig`. Addresses and wallet ID checked against Palladium Core; a 2-of-3 wrapped spend was signed by two cosigners, broadcast and mined on regtest (ADR 0058).
 - **Create a multisig wallet in the GUI**: a wizard flow for the threshold, the N keys, an optional own seed (typed or generated) and the wrapped switch, then a step that shows the wallet ID and asks for the one the other cosigners read; a different ID writes nothing (ADR 0059).
 - The regtest end-to-end runs in CI (`regtest-e2e` job), and Donate is exercised against a real node through a test seam for its address (ADR 0060). A PSBT in the bare shape other wallets export (witness_utxo only, no scripts, no origins) is tested to sign and complete.

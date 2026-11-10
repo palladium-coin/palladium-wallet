@@ -26,6 +26,7 @@ try
         ["sign-psbt", var psbt, .. var rest] => await SignPsbt(psbt, rest),
         ["cosigner-key", var words, .. var rest] => CosignerKey(words, rest),
         ["create-multisig", .. var rest] => CreateMultisig(rest),
+        ["export-multisig", .. var rest] => ExportMultisig(rest),
         ["combine-psbt", .. var rest] => await CombinePsbt(rest),
         ["utxos", .. var rest] => Utxos(rest),
         ["freeze", var outpoint, .. var rest] => Freeze(outpoint, rest, frozen: true),
@@ -365,6 +366,7 @@ static async Task<int> Send(string[] o)
         else
             Console.WriteLine("Watch-only wallet: PSBT to sign offline (§6.5):");
         Console.WriteLine(built.Psbt.ToBase64());
+        WritePsbtFile(built.Psbt, o);
         return 0;
     }
 
@@ -395,6 +397,34 @@ static int CosignerKey(string words, string[] o)
     return 0;
 }
 
+/// <summary>
+/// Prints a multisig wallet's configuration for other tools: the text file a signer registers (Coldcard, Sparrow), or
+/// the descriptors with their checksums. <c>--out FILE</c> writes the text file instead of printing it.
+/// </summary>
+static int ExportMultisig(string[] o)
+{
+    var (_, account, _) = OpenWallet(o);
+    if (account is not MultisigAccount multisig)
+        throw new WalletSpendException("This wallet is not a multisig wallet.");
+    var name = Opt(o, "--name") ?? "Palladium multisig";
+    if (Opt(o, "--format") is "descriptor")
+    {
+        var (receive, change) = MultisigConfig.Descriptors(multisig);
+        Console.WriteLine($"receive: {receive}");
+        Console.WriteLine($"change:  {change}");
+        return 0;
+    }
+    var text = MultisigConfig.ToText(multisig, name);
+    if (Opt(o, "--out") is { } file)
+    {
+        File.WriteAllText(file, text);
+        Console.WriteLine($"Configuration written to {file} (wallet ID {multisig.WalletId})");
+    }
+    else
+        Console.Write(text);
+    return 0;
+}
+
 /// <summary>P2SH-P2WSH when --wrapped is given, else native P2WSH.</summary>
 static ScriptKind MultisigKind(string[] o) =>
     o.Contains("--wrapped") ? ScriptKind.WrappedSegwitMultisig : ScriptKind.NativeSegwitMultisig;
@@ -413,15 +443,30 @@ static List<string> OptAll(string[] options, string name)
 static int CreateMultisig(string[] o)
 {
     var profile = Profile(o);
-    if (!int.TryParse(Opt(o, "--threshold"), out var threshold))
+    var threshold = 0;
+    if (Opt(o, "--config") is null && !int.TryParse(Opt(o, "--threshold"), out threshold))
         throw new WalletSpendException("--threshold M missing (signatures required).");
     var cosigners = OptAll(o, "--cosigner");
+    ScriptKind? configKind = null;
+    if (Opt(o, "--config") is { } configFile)
+    {
+        // The text file other tools export: it carries the policy, the format and the keys, and replaces those options.
+        try
+        {
+            var (m, kind, keys) = MultisigConfig.Parse(File.ReadAllText(configFile), profile);
+            (threshold, configKind, cosigners) = (m, kind, [.. keys]);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            throw new WalletSpendException($"Cannot use the configuration file: {ex.Message}");
+        }
+    }
     if (cosigners.Count == 0)
         throw new WalletSpendException("--cosigner KEY missing (give all N keys, this wallet's own included; see 'cosigner-key').");
     (WalletDocument doc, MultisigAccount account) created;
     try
     {
-        created = WalletLoader.NewMultisig(threshold, cosigners, Opt(o, "--mnemonic"), Opt(o, "--passphrase"), profile, MultisigKind(o));
+        created = WalletLoader.NewMultisig(threshold, cosigners, Opt(o, "--mnemonic"), Opt(o, "--passphrase"), profile, configKind ?? MultisigKind(o));
     }
     catch (InvalidDataException ex)
     {
@@ -462,19 +507,12 @@ static async Task<int> CombinePsbt(string[] args)
         inputs = [.. inputs.Where(a => a != "-"), .. Console.In.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
     if (inputs.Count < 2)
         throw new WalletSpendException("combine-psbt needs at least two PSBTs (base64, or '-' for one per line on stdin).");
-    var psbts = new List<PSBT>();
-    foreach (var text in inputs)
-    {
-        try { psbts.Add(PSBT.Parse(text, network)); }
-        catch (Exception ex) when (ex is FormatException or ArgumentException)
-        {
-            throw new WalletSpendException("Not a valid PSBT (base64 for this network expected).");
-        }
-    }
+    var psbts = inputs.Select(text => ReadPsbt(text, network)).ToList();
 
     var (combined, final) = PsbtSigner.Combine(psbts);
     Console.WriteLine("PSBT:");
     Console.WriteLine(combined.ToBase64());
+    WritePsbtFile(combined, args);
     if (final is null)
     {
         Console.WriteLine("Incomplete: not enough signatures yet.");
@@ -572,18 +610,42 @@ static async Task<int> BroadcastSigned(ElectrumClient client, Transaction tx, Ne
     }
 }
 
+/// <summary>
+/// A PSBT given as an argument: the path of a file (binary <c>.psbt</c>, or one holding base64 or hex), or the text
+/// itself (base64 or hex), or <c>-</c> for standard input.
+/// </summary>
+static PSBT ReadPsbt(string arg, Network network)
+{
+    try
+    {
+        if (arg == "-")
+            return PsbtFormat.Parse(Console.In.ReadToEnd(), network);
+        if (arg.Length < 1000 && File.Exists(arg))
+            return PsbtFormat.Parse(File.ReadAllBytes(arg), network);
+        return PsbtFormat.Parse(arg, network);
+    }
+    catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
+    {
+        throw new WalletSpendException(ex is FormatException
+            ? "Not a valid PSBT (a .psbt file, or base64 or hex text, for this network expected)."
+            : $"Cannot read the PSBT file: {ex.Message}");
+    }
+}
+
+/// <summary>With <c>--psbt-out FILE</c> also writes the PSBT as a binary <c>.psbt</c> file, which signers read from an SD card.</summary>
+static void WritePsbtFile(PSBT psbt, string[] o)
+{
+    if (Opt(o, "--psbt-out") is not { } file)
+        return;
+    File.WriteAllBytes(file, PsbtFormat.ToBinary(psbt));
+    Console.WriteLine($"PSBT written to {file}");
+}
+
 static async Task<int> SignPsbt(string text, string[] o)
 {
     var (doc, account, _) = OpenWallet(o);
     var network = PalladiumNetworks.For(account.Profile.Kind);
-    if (text == "-")
-        text = Console.In.ReadToEnd();
-    PSBT psbt;
-    try { psbt = PSBT.Parse(text.Trim(), network); }
-    catch (Exception ex) when (ex is FormatException or ArgumentException)
-    {
-        throw new WalletSpendException("Not a valid PSBT (base64 for this network expected).");
-    }
+    var psbt = ReadPsbt(text, network);
 
     var scan = Opt(o, "--scan") is { } scanText
         ? int.TryParse(scanText, out var scanCount) && scanCount is > 0 and <= 100_000
@@ -610,6 +672,7 @@ static async Task<int> SignPsbt(string text, string[] o)
 
     Console.WriteLine("PSBT:");
     Console.WriteLine(result.Psbt.ToBase64());
+    WritePsbtFile(result.Psbt, o);
     if (result.FinalTransaction is not { } final)
     {
         Console.WriteLine("Incomplete: not every input could be signed by this wallet.");
@@ -792,11 +855,12 @@ static int Usage()
           utxos         [--net ...] [--file PATH]     list the coins of the last sync (offline)
           freeze        <txid>:<vout> [--net ...] [--file PATH]     keep a coin out of every spend (offline)
           unfreeze      <txid>:<vout> [--net ...] [--file PATH]
-          create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--wrapped] [--mnemonic "<words>"]
+          create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--wrapped] [--config FILE] [--mnemonic "<words>"]
                         [--passphrase W] [--expect-id ID] [--net ...] [--file PATH]   M-of-N wallet (BIP48, sortedmulti): P2WSH, or P2SH-P2WSH with --wrapped
           cosigner-key  "<mnemonic>" [--wrapped] [--account N] [--passphrase W] [--net ...]   the key to hand to the other cosigners
+          export-multisig [--format descriptor] [--name N] [--out FILE] [--net ...] [--file PATH]   the configuration for a signer or another wallet
           combine-psbt  <base64|-> <base64> ... [--broadcast --server host[:port] [--ssl]] [--net ...]
-          sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
+          sign-psbt     <base64|hex|file.psbt|-> [--psbt-out FILE] [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]
                         sign a PSBT with this wallet's keys (offline half of the watch-only flow)
           servers       [--discover] [--server host[:port]] [--ssl] [--net ...]
           reset-certs   [--net ...]

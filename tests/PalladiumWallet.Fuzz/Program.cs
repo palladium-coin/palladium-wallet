@@ -213,6 +213,27 @@ internal static class SeedCorpus
             ("no-brackets", Encoding.UTF8.GetBytes("73c5da0a/48'/1'/0'/2'Vpub5n95")),
             ("empty", []),
         ],
+        ["psbt"] =
+        [
+            ("base64", Encoding.UTF8.GetBytes("cHNidP8BAFwCAAAAAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////AegDAAAAAAAAFgAUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")),
+            ("magic-only", [0x70, 0x73, 0x62, 0x74, 0xff]),
+            ("magic-truncated", [0x70, 0x73, 0x62, 0x74, 0xff, 0x01, 0x00]),
+            ("hex-magic", Encoding.UTF8.GetBytes("70736274ff0100")),
+            // Regression: NBitcoin throws InvalidDataException (non-canonical varint) on a binary PSBT; PsbtFormat now maps it to FormatException.
+            ("regression-noncanonical-varint", Convert.FromHexString("70736274ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+            ("empty", []),
+        ],
+        ["multisigconfig"] =
+        [
+            ("valid", Encoding.UTF8.GetBytes(
+                "Name: x\nPolicy: 1 of 1\nFormat: P2WSH\n\nDerivation: m/48'/1'/0'/2'\n" +
+                "73C5DA0A: tpubDFH9dgzveyD8yHQb8VrpG8FYAuwcLMHMje2CCcbBo1FpaGzYVtJeYYxcYgRqSTta5utUFts8nPPHs9C2bqoxrey5jia6Dwf9mpwrPq7YvcJ\n")),
+            ("policy-only", Encoding.UTF8.GetBytes("Policy: 2 of 3\n")),
+            ("policy-overflow", Encoding.UTF8.GetBytes("Policy: 99999999999 of 3\nFormat: P2WSH\n")),
+            ("key-before-derivation", Encoding.UTF8.GetBytes("Policy: 1 of 1\nFormat: P2WSH\n73C5DA0A: tpub\n")),
+            ("no-colon", Encoding.UTF8.GetBytes("garbage")),
+            ("empty", []),
+        ],
         ["peers"] =
         [
             ("typical", Encoding.UTF8.GetBytes(

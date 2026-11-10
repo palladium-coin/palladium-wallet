@@ -550,9 +550,16 @@ refuses a PSBT whose witness script is not its own.)
    `sign-psbt … --broadcast` does the same for the last cosigner.
 
 The GUI shows the same wallet (balance, history, addresses, Coins tab) and its Send tab prepares the PSBT to pass on;
-it never offers to broadcast a transaction that is not complete. Not supported yet: hardware signers; PSBTs
-exchanged with other software wallets (Sparrow, Electrum) are untested, only Palladium Core has been checked as the
-other party.
+it never offers to broadcast a transaction that is not complete.
+
+**Hardware signers and other wallets.** `sign-psbt` and `combine-psbt` take a `.psbt` file (the binary file a signer
+reads from and writes to an SD card, or one Sparrow saves), base64 or hex text, or `-`; add `--psbt-out FILE` to
+`send`, `sign-psbt` or `combine-psbt` to also write the binary file. `export-multisig --out FILE` writes the
+configuration text a signer registers a multisig wallet from (Coldcard, Sparrow), and `export-multisig --format
+descriptor` prints the descriptors with their checksums; `create-multisig --config FILE` builds the wallet from such a
+file, with your own `--mnemonic`. **These formats are implemented to what the tools document, but no real signer,
+Sparrow or Electrum has been tried against them**: only Palladium Core has. Check the first transaction with a small
+amount, and compare the wallet ID or first address shown by the device.
 
 ---
 
@@ -973,8 +980,9 @@ coin as printed by `utxos`.
 
 ```
 cosigner-key    "<mnemonic>" [--wrapped] [--account N] [--passphrase W] [--net N]
-create-multisig --threshold M --cosigner KEY … [--wrapped] [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
-combine-psbt    <base64|-> <base64> … [--broadcast --server ...] [--ssl] [--net N]
+create-multisig (--threshold M --cosigner KEY … | --config FILE) [--wrapped] [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
+export-multisig [--format descriptor] [--name N] [--out FILE] [--net N] [--file PATH]
+combine-psbt    <base64|hex|file.psbt|-> <psbt> … [--psbt-out FILE] [--broadcast --server ...] [--ssl] [--net N]
 ```
 Multisig (see [8.8](#88-multisig-wallets)). `cosigner-key` prints the key to hand to the other cosigners.
 `create-multisig` takes **all `N` keys** (this wallet's included) and, with `--mnemonic`, the seed of one of them,
