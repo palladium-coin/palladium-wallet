@@ -132,6 +132,13 @@ public sealed record ChainProfile
     /// <summary>Minimum confirmations required for a regular UTXO to be spendable.</summary>
     public required int MinConfirmations { get; init; }
 
+    /// <summary>
+    /// Dust relay fee of the nodes, in sat/vB (Core's <c>DUST_RELAY_TX_FEE</c>, 3000 sat/kvB;
+    /// Palladium Core v2.1.0, <c>src/policy/policy.h</c>). It is node relay policy, not consensus:
+    /// an output below <see cref="DustLimitSats"/> is refused by the network, so the wallet refuses it first.
+    /// </summary>
+    public required int DustRelaySatPerVByte { get; init; }
+
     /// <summary>BIP32/SLIP-132 headers for each script type.</summary>
     public required IReadOnlyDictionary<ScriptKind, ExtKeyHeaders> ExtKeyHeaders { get; init; }
 

@@ -7,6 +7,10 @@ release and covers the full history from the initial commit.
 
 ## [Unreleased]
 
+### Changed
+
+- The dust relay rate (3 sat/vB) moved from a literal in `TransactionFactory` to `ChainProfile.DustRelaySatPerVByte`; the thresholds (P2PKH 546, P2SH 540, P2WPKH 294, P2WSH 330 sat) were verified against Palladium Core v2.1.0 with `testmempoolaccept` (ADR 0049).
+
 ### Fixed
 
 - The PSBT of a watch-only wallet could hold a different transaction (another output order) from the one whose txid and fee had just been shown: it is now built from that very transaction (ADR 0045).

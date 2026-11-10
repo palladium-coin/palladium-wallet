@@ -67,7 +67,7 @@ public sealed class TransactionFactory(IWalletAccount account)
         {
             if (amountSats <= 0)
                 throw new WalletSpendException("Amount must be greater than zero.");
-            var dust = DustLimitSats(destination.ScriptPubKey);
+            var dust = DustLimitSats(destination.ScriptPubKey, account.Profile);
             if (amountSats < dust)
                 throw new WalletSpendException($"Amount is below the dust limit ({dust} sat).");
         }
@@ -233,9 +233,9 @@ public sealed class TransactionFactory(IWalletAccount account)
 
         // Send-all computes the amount inside the builder, so its dust check runs on the result.
         if (sendAll && tx.Outputs.FirstOrDefault(o => o.ScriptPubKey == destination.ScriptPubKey) is { } paid
-            && paid.Value.Satoshi < DustLimitSats(destination.ScriptPubKey))
+            && paid.Value.Satoshi < DustLimitSats(destination.ScriptPubKey, account.Profile))
             throw new WalletSpendException(
-                $"Send-all leaves {paid.Value.Satoshi} sat for the recipient, below the dust limit ({DustLimitSats(destination.ScriptPubKey)} sat).");
+                $"Send-all leaves {paid.Value.Satoshi} sat for the recipient, below the dust limit ({DustLimitSats(destination.ScriptPubKey, account.Profile)} sat).");
 
         if (!account.IsWatchOnly)
         {
@@ -342,12 +342,11 @@ public sealed class TransactionFactory(IWalletAccount account)
     /// <summary>
     /// Smallest payment output worth relaying, computed as Bitcoin Core does: the cost of spending
     /// the output (serialized output plus the input that would spend it) at the 3 sat/vB dust
-    /// relay rate. That gives 546 sat for P2PKH and 294 sat for P2WPKH. Palladium's relay policy is
-    /// assumed to match; a node with a different policy would reject a transaction that passes here.
+    /// relay rate of the profile (3 sat/vB, confirmed against Palladium Core v2.1.0 with
+    /// <c>testmempoolaccept</c>): 546 sat for P2PKH, 540 for P2SH, 294 for P2WPKH, 330 for P2WSH.
     /// </summary>
-    internal static long DustLimitSats(Script scriptPubKey)
+    internal static long DustLimitSats(Script scriptPubKey, ChainProfile profile)
     {
-        const int DustRelaySatPerVByte = 3;
         var script = scriptPubKey.ToBytes();
         var outputSize = 8 + 1 + script.Length; // value, script length (single byte), script
         // Witness program: version opcode (OP_0 or OP_1..OP_16) then one push of the whole program.
@@ -355,7 +354,7 @@ public sealed class TransactionFactory(IWalletAccount account)
             && (script[0] == 0x00 || script[0] is >= 0x51 and <= 0x60)
             && script[1] == script.Length - 2;
         var inputSize = isWitness ? 67 : 148;
-        return DustRelaySatPerVByte * (outputSize + inputSize);
+        return profile.DustRelaySatPerVByte * (outputSize + inputSize);
     }
 
     private static Money GetFee(Transaction tx, IReadOnlyList<Coin> coins)

@@ -54,7 +54,7 @@ public class TransactionFactoryLimitsTests
         var account = Account();
         var (utxos, txs) = Fund(account, 1, 100_000);
         var to = account.GetReceiveAddress(5);
-        Assert.Equal(294, TransactionFactory.DustLimitSats(to.ScriptPubKey)); // P2WPKH
+        Assert.Equal(294, TransactionFactory.DustLimitSats(to.ScriptPubKey, account.Profile)); // P2WPKH
 
         var ex = Assert.Throws<WalletSpendException>(() => new TransactionFactory(account).Build(
             utxos, txs, to, amountSats: 293,
@@ -76,12 +76,31 @@ public class TransactionFactoryLimitsTests
         Assert.Contains(built.Transaction.Outputs, o => o.Value.Satoshi == 294 && o.ScriptPubKey == to.ScriptPubKey);
     }
 
+    // Golden values measured on Palladium Core v2.1.0 (regtest, -acceptnonstdtxn=0, testmempoolaccept):
+    // P2PKH 545 refused / 546 accepted, P2SH 539 / 540, P2WPKH 293 / 294.
     [Fact]
-    public void DustLimit_MatchesBitcoinCore_ForP2pkhAndP2wpkh()
+    public void DustLimit_MatchesPalladiumCore_PerScriptType()
     {
         var account = Account();
-        Assert.Equal(294, TransactionFactory.DustLimitSats(account.GetReceiveAddress(0).ScriptPubKey));
-        Assert.Equal(546, TransactionFactory.DustLimitSats(new Key().PubKey.Hash.ScriptPubKey));
+        var profile = account.Profile;
+        Assert.Equal(294, TransactionFactory.DustLimitSats(account.GetReceiveAddress(0).ScriptPubKey, profile));
+        Assert.Equal(546, TransactionFactory.DustLimitSats(new Key().PubKey.Hash.ScriptPubKey, profile));
+        Assert.Equal(540, TransactionFactory.DustLimitSats(new Key().PubKey.Hash.ScriptPubKey.Hash.ScriptPubKey, profile));
+        Assert.Equal(330, TransactionFactory.DustLimitSats(new Key().PubKey.GetScriptPubKey(ScriptPubKeyType.Segwit).WitHash.ScriptPubKey, profile));
+    }
+
+    [Fact]
+    public void DustLimit_ScalesWithTheProfileRelayRate()
+    {
+        var profile = ChainProfiles.Mainnet with { DustRelaySatPerVByte = 6 };
+        Assert.Equal(1092, TransactionFactory.DustLimitSats(new Key().PubKey.Hash.ScriptPubKey, profile));
+    }
+
+    [Fact]
+    public void EveryProfile_DeclaresThePalladiumDustRelayRate()
+    {
+        Assert.All(new[] { ChainProfiles.Mainnet, ChainProfiles.Testnet, ChainProfiles.Regtest },
+            p => Assert.Equal(3, p.DustRelaySatPerVByte));
     }
 
     [Fact]
