@@ -19,6 +19,7 @@ try
         ["restore", var words, .. var rest] => Restore(words, rest),
         ["restore-xpub", var xpub, .. var rest] => RestoreXpub(xpub, rest),
         ["restore-address", var addrs, .. var rest] => RestoreAddress(addrs, rest),
+        ["restore-wif", var keys, .. var rest] => RestoreWif(keys, rest),
         ["info", .. var rest] => Info(rest),
         ["sync", .. var rest] => await Sync(rest),
         ["send", .. var rest] => await Send(rest),
@@ -153,13 +154,46 @@ static int RestoreAddress(string addrsText, string[] o)
     return 0;
 }
 
+/// <summary>
+/// Imports one or more WIF private keys as a spendable wallet (no seed, no derivation). The keys are
+/// the argument, comma separated, or <c>-</c> to read them from standard input (one per line or comma
+/// separated), which keeps them out of the process list and the shell history.
+/// </summary>
+static int RestoreWif(string keysArg, string[] o)
+{
+    var profile = Profile(o);
+    var text = keysArg == "-" ? Console.In.ReadToEnd() : keysArg;
+    var keys = text.Split([',', '\n', '\r', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    WalletDocument doc;
+    try
+    {
+        (doc, _) = WalletLoader.NewFromWif(keys, Kind(o), profile);
+    }
+    catch (InvalidDataException ex)
+    {
+        throw new WalletSpendException(ex.Message);
+    }
+    var path = WalletPath(o, profile);
+    WalletStore.Save(doc, path, CliPassword.ForNewWallet(o));
+    Console.WriteLine($"Wallet saved to {path} ({doc.WifKeys?.Count ?? 0} key(s), {doc.ScriptKind})");
+    return 0;
+}
+
 static int Info(string[] o)
 {
     var (doc, account, path) = OpenWallet(o);
     Console.WriteLine($"file:     {path}");
     Console.WriteLine($"network:  {doc.Network}   kind: {doc.ScriptKind}   watch-only: {doc.IsWatchOnly}");
-    Console.WriteLine($"path:     m/{doc.AccountPath}");
-    Console.WriteLine($"xpub:     {doc.AccountXpub}");
+    if (doc.AccountXpub is { Length: > 0 })
+    {
+        Console.WriteLine($"path:     m/{doc.AccountPath}");
+        Console.WriteLine($"xpub:     {doc.AccountXpub}");
+    }
+    else
+    {
+        // Imported keys or addresses: nothing is derived, so there is no path or extended key to show.
+        Console.WriteLine($"imported: {(doc.WifKeys?.Count > 0 ? $"{doc.WifKeys.Count} private key(s)" : "addresses only")}");
+    }
     if (doc.Cache is { } cache)
     {
         Console.WriteLine($"balance:  {CoinAmount.Format(cache.SpendableSats, account.Profile.CoinUnit)} spendable"
@@ -495,11 +529,14 @@ static ChainProfile Profile(string[] o) => Opt(o, "--net") switch
     _ => ChainProfiles.Mainnet,
 };
 
+// An unknown value is an error, never a silent default: a typo must not create a wallet of another type.
 static ScriptKind Kind(string[] o) => Opt(o, "--kind") switch
 {
+    null or "segwit" => ScriptKind.NativeSegwit,
     "legacy" => ScriptKind.Legacy,
     "wrapped" => ScriptKind.WrappedSegwit,
-    _ => ScriptKind.NativeSegwit,
+    "taproot" => ScriptKind.Taproot,
+    var other => throw new WalletSpendException($"--kind '{other}' is not one of segwit, wrapped, legacy, taproot."),
 };
 
 static string WalletPath(string[] o, ChainProfile profile) =>
@@ -601,10 +638,12 @@ static int Usage()
         PalladiumWallet CLI
 
         Wallet:
-          create        [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest]
+          create        [--words 12|24] [--kind segwit|wrapped|legacy|taproot] [--net mainnet|testnet|regtest]
                         [--passphrase W] [--no-encryption] [--file PATH]
           restore       "<mnemonic>" [same options as create] [--path m/...]
           restore-xpub  <slip132 xpub> [--net ...] [--file PATH] [--fingerprint HEX8 --path m/...]   (watch-only)
+          restore-wif   <wif1,wif2,...|-> [--kind segwit|wrapped|legacy|taproot] [--net ...] [--file PATH]
+                        import WIF private keys (spendable, no seed); '-' reads them from stdin
           restore-address <addr1,addr2,...> [--net ...] [--file PATH]   (watch-only, no keys)
           info          [--net ...] [--file PATH]
 

@@ -372,9 +372,10 @@ validation rule, troubleshooting) see [USERGUIDE.md](USERGUIDE.md).
 ### CLI in brief
 ```bash
 # Wallet
-dotnet run --project src/Cli -- create          [--words 12|24] [--kind segwit|wrapped|legacy] [--net mainnet|testnet|regtest] [--no-encryption]
+dotnet run --project src/Cli -- create          [--words 12|24] [--kind segwit|wrapped|legacy|taproot] [--net mainnet|testnet|regtest] [--no-encryption]
 dotnet run --project src/Cli -- restore         "<mnemonic>" [...]
 dotnet run --project src/Cli -- restore-xpub    <slip132-key> [--net ...] [--no-encryption] [--fingerprint HEX8 --path m/...]
+dotnet run --project src/Cli -- restore-wif     <wif1,wif2,...|-> [--kind ...] [--net ...] [--no-encryption]   # spendable, no seed
 dotnet run --project src/Cli -- restore-address <addr1,addr2,...> [--net ...] [--no-encryption]
 dotnet run --project src/Cli -- info            [--net ...]
 

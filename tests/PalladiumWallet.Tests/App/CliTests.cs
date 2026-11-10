@@ -611,4 +611,81 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, exit);
         Assert.Contains("--scan must be", err);
     }
+
+    // ----- WIF import and taproot (ADR 0053) -----
+
+    private static string NewWif() => new Key().GetBitcoinSecret(PalladiumNetworks.Regtest).ToString();
+
+    [Fact]
+    public async Task Create_WithKindTaproot_ProducesABech32mWalletThatInfoReads()
+    {
+        var (exit, output, _) = await Cli("create", "--kind", "taproot", "--net", "regtest", "--no-encryption",
+            "--file", WalletFile());
+        Assert.Equal(0, exit);
+        Assert.Contains("First address: rplm1p", output); // witness v1: bech32m, 'p'
+        var (_, info, _) = await Cli("info", "--net", "regtest", "--file", WalletFile());
+        Assert.Contains("kind: Taproot", info);
+        Assert.Contains("m/86'", info); // BIP86
+    }
+
+    [Fact]
+    public async Task AnUnknownKind_IsRejected_NeverDefaultedToSegwit()
+    {
+        var (exit, _, err) = await Cli("create", "--kind", "taprot", "--net", "regtest", "--no-encryption",
+            "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("is not one of segwit, wrapped, legacy, taproot", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Theory]
+    [InlineData("segwit", "rplm1q")]
+    [InlineData("taproot", "rplm1p")]
+    [InlineData("legacy", "")]
+    public async Task RestoreWif_ImportsASpendableWalletOfTheRequestedKind(string kind, string prefix)
+    {
+        var wif = NewWif();
+        var (exit, output, _) = await Cli("restore-wif", wif, "--kind", kind, "--net", "regtest", "--no-encryption",
+            "--file", WalletFile());
+        Assert.Equal(0, exit);
+        Assert.Contains("1 key(s)", output);
+        var doc = WalletStore.Load(WalletFile(), null);
+        Assert.False(doc.IsWatchOnly);
+        Assert.Equal([wif], doc.WifKeys);
+        var (_, info, _) = await Cli("info", "--net", "regtest", "--file", WalletFile());
+        Assert.Contains("imported: 1 private key(s)", info);
+        Assert.Contains($"receive:  {prefix}", info);
+        Assert.DoesNotContain("xpub:", info);
+    }
+
+    [Fact]
+    public async Task RestoreWif_ReadsTheKeysFromStdin_AndCollapsesDuplicates()
+    {
+        var wif = NewWif();
+        var (exit, output, _) = await CliWithStdin($"{wif}\n{NewWif()}\n{wif}\n", "restore-wif", "-",
+            "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(0, exit);
+        Assert.Contains("2 key(s)", output);
+    }
+
+    [Fact]
+    public async Task RestoreWif_WithAnInvalidKeyOrAnotherNetwork_FailsWithoutWritingAFile()
+    {
+        var (exit, _, err) = await Cli("restore-wif", "notakey", "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("Invalid WIF key", err);
+
+        var mainnetWif = new Key().GetBitcoinSecret(PalladiumNetworks.Mainnet).ToString();
+        (exit, _, err) = await Cli("restore-wif", mainnetWif, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+        Assert.Equal(1, exit);
+        Assert.Contains("Invalid WIF key", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
+
+    [Fact]
+    public async Task RestoreWif_Encrypts_WhenAPasswordIsGiven()
+    {
+        await CliWithStdin("pw\n", "restore-wif", NewWif(), "--net", "regtest", "--password-stdin", "--file", WalletFile());
+        Assert.True(EncryptedFile.IsEncrypted(File.ReadAllText(WalletFile())));
+    }
 }

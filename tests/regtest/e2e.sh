@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Regtest end-to-end check of the CLI against a real Palladium node and plm-fulcrum, in Docker.
 # Covers: sync, dust refusal and boundary (the node runs with -acceptnonstdtxn=0, so it enforces the
-# relay policy), broadcast, coin freezing. Starts and removes its own containers and temp data
+# relay policy), broadcast, coin freezing, taproot and WIF wallets. Starts and removes its own containers and temp data
 # (names plm-e2e-*, port 50111), so it does not touch a running mainnet or regtest setup.
 #   usage: tests/regtest/e2e.sh        needs: docker, the .NET SDK (dotnet on PATH), python3
 set -euo pipefail
@@ -99,6 +99,25 @@ check "freeze a coin" "Frozen: $COIN" plm freeze "$COIN"
 check "a frozen coin is not spent" "No spendable UTXOs" plm send --to "$P2WPKH" --amount 0.0001 "${SRV[@]}"
 check "unfreeze the coin" "Unfrozen: $COIN" plm unfreeze "$COIN"
 check "the coin can be spent again" "Signed transaction" plm send --to "$P2WPKH" --amount 0.0001 "${SRV[@]}"
+
+echo "== taproot (BIP86) and imported WIF keys: fund, sync, spend, confirmed by the node"
+other() { dotnet "$ROOT/src/Cli/bin/Debug/net10.0/PalladiumWallet.Cli.dll" "$@" --net regtest; }
+fund_and_spend() { # fund_and_spend description wallet-file
+  local what=$1 file=$2 addr
+  addr=$(other info --file "$file" | sed -n 's/^receive: *\([^ ]*\).*/\1/p')
+  $CLI sendtoaddress "$addr" 1 >/dev/null; $CLI generatetoaddress 2 "$MINER" >/dev/null; sleep 4
+  check "$what: sync sees the funds" "Balance: 1.00000000 PLM spendable" other sync "${SRV[@]}" --file "$file"
+  check "$what: spend broadcast and accepted" "Broadcast:" \
+    other send --to "$($CLI getnewaddress "" bech32)" --amount 0.1 --feerate 2 --broadcast "${SRV[@]}" --file "$file"
+  $CLI generatetoaddress 1 "$MINER" >/dev/null; sleep 3
+  check "$what: the spend is mined (mempool empty)" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
+}
+other create --kind taproot --no-encryption --file "$WORK/taproot.json" >/dev/null 2>&1
+check "taproot address is bech32m (witness v1)" "receive:  rplm1p" other info --file "$WORK/taproot.json"
+fund_and_spend "taproot" "$WORK/taproot.json"
+$CLI dumpprivkey "$($CLI getnewaddress "" bech32)" | other restore-wif - --no-encryption --file "$WORK/wif.json" >/dev/null 2>&1
+check "WIF wallet is spendable" "imported: 1 private key(s)" other info --file "$WORK/wif.json"
+fund_and_spend "WIF" "$WORK/wif.json"
 
 echo
 if [[ $fail == 0 ]]; then echo "regtest e2e: all checks passed"; else echo "regtest e2e: FAILED"; exit 1; fi

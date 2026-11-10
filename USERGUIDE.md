@@ -819,8 +819,8 @@ with the explicit `--no-encryption`** (a warning is printed); forgetting the pas
 longer produces a plaintext wallet. Examples:
 `printf '%s\n' "$PW" | dotnet run --project src/Cli -- restore "<words>" --password-stdin`,
 `PLM_PW=… dotnet run --project src/Cli -- info --password-env PLM_PW`.
-`--kind legacy|wrapped|segwit` selects the script type (default Native SegWit — note that
-only the literal values `legacy` and `wrapped` switch away from the default). Errors print
+`--kind segwit|wrapped|legacy|taproot` selects the script type (default Native SegWit; `taproot`
+is BIP86, key-path only). Any other value is an error, never a silent default. Errors print
 to stderr and set exit code 1.
 
 ### Wallet commands
@@ -841,6 +841,17 @@ restore).
 restore  "<mnemonic>" [same options as create]
 ```
 Restores from an existing mnemonic (quoted, words space-separated).
+
+```
+restore-wif  <wif1,wif2,...|-> [--kind K] [--net N] [--no-encryption] [--file PATH]
+```
+Imports one or more **WIF private keys** as a spendable wallet: no seed, nothing is derived,
+so only those keys' addresses are tracked, and the same key twice is stored once. `-` reads
+the keys from standard input (one per line or comma separated), which keeps them out of the
+process list and the shell history. The script type (`--kind`) decides which address each key
+yields, and must match the type the funds were sent to. A key of another network is refused.
+The keys are stored in the wallet file, so give it a password (the default) or
+`--no-encryption` on purpose.
 
 ```
 restore-xpub <slip132-key> [--net N] [--no-encryption] [--file PATH]

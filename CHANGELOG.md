@@ -13,11 +13,16 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- CLI `restore-wif` (import WIF private keys as a spendable wallet, `-` reads them from stdin) and `--kind taproot` (BIP86); taproot and WIF wallets were checked end to end on regtest: sync, spend, broadcast and mined by a node that enforces relay policy (ADR 0053).
+
 - The total of the frozen coins is shown under the balance, so a forgotten freeze is visible; the Send tab shows the coin-control summary on the phone layout too (ADR 0052).
 
 - CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
 
 ### Fixed
+
+- An unknown `--kind` value (a typo such as `taprot`) silently created a native segwit wallet; it is now an error.
+- `info` printed an empty path and extended key for an imported-key wallet; it now says what was imported.
 
 - Malformed CLI input and environment failures escaped as a stack trace (exit 134): an invalid `--path`, `--server` port or `--scan`, a server that refuses the connection, a corrupt wallet file. They are now one-line errors with exit code 1.
 
