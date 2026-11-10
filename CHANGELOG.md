@@ -13,6 +13,8 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- The total of the frozen coins is shown under the balance, so a forgotten freeze is visible; the Send tab shows the coin-control summary on the phone layout too (ADR 0052).
+
 - CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
 
 ### Fixed

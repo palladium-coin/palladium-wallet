@@ -71,6 +71,49 @@ public sealed class CoinControlTests : VmTestBase
     });
 
     [Fact]
+    public Task The_frozen_total_is_shown_under_the_balance_and_goes_away_on_unfreeze() => UiSession.Run(async () =>
+    {
+        var (vm, _) = await OpenWithTwoCoins();
+        Assert.Equal("", vm.FrozenText);                          // nothing frozen: no extra line
+
+        await vm.ToggleFreezeCoinCommand.ExecuteAsync(vm.Coins.Single(c => c.Vout == 0)); // the 0.5 PLM coin
+        Assert.Contains("0.5", vm.FrozenText);
+        Assert.Contains("0.1", vm.BalanceText);                   // and it is not in the balance
+
+        await vm.ToggleFreezeCoinCommand.ExecuteAsync(vm.Coins.Single(c => c.Vout == 0));
+        Assert.Equal("", vm.FrozenText);
+    });
+
+    [Fact]
+    public Task The_frozen_total_survives_a_sync() => UiSession.Run(async () =>
+    {
+        var (vm, _) = await OpenWithTwoCoins();
+        await vm.ToggleFreezeCoinCommand.ExecuteAsync(vm.Coins.Single(c => c.Vout == 0));
+        await vm.ConnectAndSyncCommand.ExecuteAsync(null);
+        await Eventually(() => !vm.IsSyncing);
+        Assert.Contains("0.5", vm.FrozenText);
+    });
+
+    [Fact]
+    public Task The_coin_selection_summary_is_in_the_desktop_and_the_phone_layout_of_the_send_tab() => UiSession.Run(async () =>
+    {
+        var (vm, _) = await OpenWithTwoCoins();
+        vm.ToggleCoinSelectedCommand.Execute(vm.Coins.Single(c => c.Vout == 1));
+        vm.SelectedTabIndex = 1; // Send
+        var view = new PalladiumWallet.App.Views.MainView { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Content = view };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        // Desktop and phone layout each carry the summary (only one is visible at a time); the Coins tab
+        // is not built while another tab is selected.
+        var summaries = view.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+            .Count(t => t.Text == vm.CoinSelectionText);
+        Assert.Equal(2, summaries);
+        window.Close();
+    });
+
+    [Fact]
     public Task A_coin_selection_limits_the_next_send_to_the_selected_coins() => UiSession.Run(async () =>
     {
         var (vm, account) = await OpenWithTwoCoins();

@@ -342,6 +342,9 @@
                     <TextBlock Text="{Binding VerifyingText}" Foreground="#FCD34D"
                                TextWrapping="Wrap"
                                IsVisible="{Binding VerifyingText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="{Binding FrozenText}" Foreground="#FCD34D"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding FrozenText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     <TextBlock Text="{Binding NetworkInfo}" Classes="on-hero" FontSize="12"
                                Margin="0,2,0,0"/>
                 </StackPanel>
@@ -695,6 +698,11 @@
                                        IsVisible="{Binding IsWatchOnlyAccount}"
                                        TextWrapping="Wrap" FontSize="12"
                                        Foreground="{DynamicResource WarningBrush}"/>
+
+                            <!-- Coin control summary (phone layout; the desktop layout has its own above) -->
+                            <TextBlock Text="{Binding CoinSelectionText}"
+                                       IsVisible="{Binding HasCoinSelection}" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
 
                             <!-- Action buttons: primary (Confirm) prominent, secondary below -->
                             <Button Content="{Binding Loc[send.confirm]}" Classes="accent"

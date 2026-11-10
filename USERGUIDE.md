@@ -491,9 +491,10 @@ The **Coins** tab lists every coin (UTXO) of the wallet with its amount, its out
 - **Freeze / Unfreeze.** A frozen coin is never spent: not by automatic selection, and not by
   coin control. Its value is also left out of the balance. The freeze is saved in the wallet
   file, so it survives restarts and syncs. A coin you froze and forgot keeps its value out of
-  the balance until you unfreeze it.
+  the balance until you unfreeze it; so that it cannot go unnoticed, the total of the frozen
+  coins is shown under the balance ("Frozen coins: …").
 - **Use in next send.** Select spendable coins to restrict the next send (or donation) to them.
-  A summary appears in the Send tab, and *Clear selection* removes it. A successful send
+  A summary appears in the Send tab (desktop and phone layout), and *Clear selection* removes it. A successful send
   clears the selection. The selection is not saved: it is gone when you restart the app.
 - If a selected coin stops being spendable (for example, it becomes unconfirmed after a
   chain reorganisation), the send is blocked with a message until you deselect that coin.
