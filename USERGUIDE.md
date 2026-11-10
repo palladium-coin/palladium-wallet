@@ -515,11 +515,20 @@ cosigners does not matter** and the addresses can be checked against any of them
    fingerprint aloud): a key swapped in transit would put a stranger among the cosigners.
 2. With all `N` keys, each cosigner runs
    `create-multisig --threshold M --cosigner KEY1 --cosigner KEY2 … --mnemonic "<its mnemonic>"`.
-   The same keys give the same wallet on every device; `info` shows the first receive address, the cosigners and
-   a descriptor: **compare the address on every device before receiving anything**. A file made without
-   `--mnemonic` is a watch-only copy that can follow the funds and build a PSBT but sign nothing.
+   The same keys give the same wallet on every device, and the command prints its **wallet ID** (8 characters,
+   the descriptor checksum Bitcoin Core also computes): it covers every key and the threshold, whatever order they
+   were typed in, and changes if a single key was altered.
+3. **Check the wallet ID.** The wallet cannot tell a genuine cosigner key from one swapped on its way, so the
+   cosigners compare the ID over a channel the attacker does not control (in person, a call, a different messenger
+   from the one that carried the keys). Easiest: the first cosigner creates the wallet and reads the ID to the others,
+   who create theirs with `--expect-id ID`: the wallet is **not written** if the ID differs, and the command says
+   the keys are not the ones the other cosigner saw. Without `--expect-id` the command says `NOT VERIFIED`. The ID
+   is also in `info` and, in the GUI, in the wallet information. Also compare the first receive address if you
+   like, before receiving anything. A file made without `--mnemonic` is a watch-only copy that can follow the funds
+   and build a PSBT but sign nothing.
 
-**Spending.**
+**Spending.** (A multisig wallet signs only inputs it recognises as spending its own addresses, and
+refuses a PSBT whose witness script is not its own.)
 
 1. One cosigner runs `sync`, then `send --to ADDRESS --amount X`: the output is a PSBT already carrying that
    cosigner's signature (and, in the PSBT, the key origins and the change output's script, so the other signers can
@@ -954,12 +963,12 @@ coin as printed by `utxos`.
 
 ```
 cosigner-key    "<mnemonic>" [--account N] [--passphrase W] [--net N]
-create-multisig --threshold M --cosigner KEY … [--mnemonic "<words>"] [--passphrase W] [--net N] [--file PATH]
+create-multisig --threshold M --cosigner KEY … [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
 combine-psbt    <base64|-> <base64> … [--broadcast --server ...] [--ssl] [--net N]
 ```
 Multisig (see [8.8](#88-multisig-wallets)). `cosigner-key` prints the key to hand to the other cosigners.
 `create-multisig` takes **all `N` keys** (this wallet's included) and, with `--mnemonic`, the seed of one of them,
-found by its fingerprint; a seed that matches no key, the same key twice, `M` outside `1..N` or fewer than two keys are
+found by its fingerprint; `--expect-id` refuses to write the wallet unless its ID is the given one; a seed that matches no key, the same key twice, `M` outside `1..N` or fewer than two keys are
 refused. `combine-psbt` merges copies of one PSBT (`-` reads them from stdin, one per line).
 
 ```

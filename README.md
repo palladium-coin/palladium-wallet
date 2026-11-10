@@ -377,7 +377,7 @@ dotnet run --project src/Cli -- restore         "<mnemonic>" [...]
 dotnet run --project src/Cli -- restore-xpub    <slip132-key> [--net ...] [--no-encryption] [--fingerprint HEX8 --path m/...]
 dotnet run --project src/Cli -- restore-wif     <wif1,wif2,...|-> [--kind ...] [--net ...] [--no-encryption]   # spendable, no seed
 dotnet run --project src/Cli -- cosigner-key    "<mnemonic>" [--net ...]                                            # key to share with the other cosigners
-dotnet run --project src/Cli -- create-multisig --threshold M --cosigner KEY ... [--mnemonic "<words>"]   # M-of-N P2WSH wallet
+dotnet run --project src/Cli -- create-multisig --threshold M --cosigner KEY ... [--mnemonic "<words>"] [--expect-id ID]   # M-of-N P2WSH wallet; the ID is what the cosigners compare
 dotnet run --project src/Cli -- combine-psbt    <base64> <base64> ... [--broadcast]                                  # merge the cosigners' signatures
 dotnet run --project src/Cli -- restore-address <addr1,addr2,...> [--net ...] [--no-encryption]
 dotnet run --project src/Cli -- info            [--net ...]

@@ -179,4 +179,51 @@ public class MultisigSpendTests
         Assert.True(effective >= 5m * 0.95m, $"effective rate {effective} sat/vB for a requested 5");
         Assert.True(effective < 5m * 1.5m, $"effective rate {effective} sat/vB wastes fee");
     }
+
+    // ----- a multisig wallet signs only what it can recognise as its own -----
+
+    [Fact]
+    public void AnInputOfAnotherMultisigWallet_IsNotSigned()
+    {
+        var mine = MultisigAccountTests.Account(ownWords: MultisigAccountTests.Words1);
+        var other = MultisigAccountTests.Account(threshold: 3, ownWords: null);   // same keys, another script
+        var (utxos, txs, _) = Fund(other, 100_000_000);
+        var psbt = Build(other, utxos, txs).Psbt;
+        foreach (var input in psbt.Inputs) input.PartialSigs.Clear();
+
+        var ex = Assert.Throws<WalletSpendException>(() => PsbtSigner.Sign(psbt, mine));
+        Assert.Contains("does not spend an address of this multisig wallet", ex.Message);
+    }
+
+    [Fact]
+    public void AnInputWithoutItsAmount_IsNotSigned()
+    {
+        var mine = MultisigAccountTests.Account(ownWords: MultisigAccountTests.Words1);
+        var (utxos, txs, _) = Fund(mine, 100_000_000);
+        var psbt = PSBT.Parse(Build(mine, utxos, txs).Psbt.ToBase64(), Net);
+        foreach (var input in psbt.Inputs)
+        {
+            input.PartialSigs.Clear();
+            input.NonWitnessUtxo = null;
+            input.WitnessUtxo = null;
+        }
+
+        Assert.Throws<WalletSpendException>(() => PsbtSigner.Sign(psbt, mine));
+    }
+
+    [Fact]
+    public void AWitnessScriptThatIsNotTheWalletsOwn_IsNotSigned()
+    {
+        var mine = MultisigAccountTests.Account(ownWords: MultisigAccountTests.Words1);
+        var (utxos, txs, _) = Fund(mine, 100_000_000);
+        var psbt = PSBT.Parse(Build(mine, utxos, txs).Psbt.ToBase64(), Net);
+        foreach (var input in psbt.Inputs)
+        {
+            input.PartialSigs.Clear();
+            input.WitnessScript = PayToMultiSigTemplate.Instance.GenerateScriptPubKey(1, new Key().PubKey, mine.GetPrivateKey(false, 0)!.PubKey);
+        }
+
+        var ex = Assert.Throws<WalletSpendException>(() => PsbtSigner.Sign(psbt, mine));
+        Assert.Contains("not this wallet's own", ex.Message);
+    }
 }

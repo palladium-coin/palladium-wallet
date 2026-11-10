@@ -1536,6 +1536,16 @@
                                              FontFamily="monospace" FontSize="13"/>
                     </StackPanel>
 
+                    <!-- Multisig: threshold and wallet ID, to compare with the other cosigners -->
+                    <StackPanel Spacing="3"
+                                IsVisible="{Binding WalletInfoMultisigId,
+                                    Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Loc[walletinfo.multisigid]}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <SelectableTextBlock Text="{Binding WalletInfoMultisigId}"
+                                             FontFamily="monospace" FontSize="14" FontWeight="SemiBold"/>
+                    </StackPanel>
+
                     <!-- Master fingerprint (only if present) -->
                     <StackPanel Spacing="3"
                                 IsVisible="{Binding WalletInfoFingerprint,

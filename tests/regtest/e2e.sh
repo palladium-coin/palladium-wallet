@@ -160,6 +160,9 @@ DESCRIPTOR=$(other info --file "$WORK/ms1.json" | sed -n 's/^descriptor: //p')
 NODE_DESCRIPTOR=$($CLI getdescriptorinfo "$DESCRIPTOR" | python3 -c 'import sys,json;print(json.load(sys.stdin)["descriptor"])')
 MS_ADDR=$(other info --file "$WORK/ms1.json" | sed -n 's/^receive: *\([^ ]*\).*/\1/p')
 check "the node derives the same multisig address from the descriptor" "$MS_ADDR" $CLI deriveaddresses "$NODE_DESCRIPTOR" "[0,0]"
+check "the wallet ID is the checksum the node computes for the descriptor" \
+  "$($CLI getdescriptorinfo "$DESCRIPTOR" | python3 -c 'import sys,json;print(json.load(sys.stdin)["checksum"])')" \
+  other info --file "$WORK/ms1.json"
 for n in 2 3; do
   check "cosigner $n derives the same address" "$MS_ADDR" other info --file "$WORK/ms$n.json"
 done

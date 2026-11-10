@@ -13,6 +13,7 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- **Wallet ID for multisig wallets** (the BIP380 descriptor checksum, equal to Bitcoin Core's): printed by `create-multisig`, shown by `info` and in the GUI wallet information, with `create-multisig --expect-id ID` refusing to write a wallet whose ID is not the one another cosigner saw. This is how the cosigners check that no key was swapped in transit (ADR 0057). A multisig wallet now signs only inputs that spend its own addresses.
 - **M-of-N multisig wallets** (native SegWit P2WSH, BIP48 keys, `sortedmulti` addresses) from the CLI: `cosigner-key`, `create-multisig`, `combine-psbt`, and `sign-psbt` for a multisig PSBT. Addresses were checked against Palladium Core's descriptors; a 2-of-3 spend was signed by two cosigners and broadcast on regtest. The GUI opens and syncs such a wallet and prepares its PSBT (ADR 0056). Fuzz target `cosignerkey` for the pasted cosigner keys.
 - Regtest checks against the real stack, in `tests/regtest/e2e.sh`: PSBT interoperability with Palladium Core as the external party (our PSBT signed by the node, the node's PSBT signed by us), and the GUI view model against a real node and plm-fulcrum, including the broadcast reconciliation through a proxy that lies about broadcasts (ADR 0055). The witness tip clamp is tested through the view model's own witness wiring.
 

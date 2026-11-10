@@ -909,4 +909,49 @@ public sealed class CliTests : IDisposable
         Assert.Equal(1, exit);
         Assert.Contains("Not a valid PSBT", err);
     }
+
+    // ----- the wallet ID (ADR 0057): the cosigners compare it, and --expect-id makes the comparison part of the command -----
+
+    private async Task<string[]> ThreeKeys() => [await KeyOf(Mnemonic), await KeyOf(Words2), await KeyOf(Words3)];
+
+    [Fact]
+    public async Task CreateMultisig_PrintsTheWalletId_AndSaysItIsNotVerifiedUntilCompared()
+    {
+        var keys = await ThreeKeys();
+        var (exit, output, _) = await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1],
+            "--cosigner", keys[2], "--mnemonic", Mnemonic, "--net", "regtest", "--no-encryption", "--file", WalletFile());
+
+        Assert.Equal(0, exit);
+        Assert.Contains("Wallet ID: zdl27u8e", output);                 // = Palladium Core's checksum of the descriptor
+        Assert.Contains("NOT VERIFIED", output);
+        var (_, info, _) = await Cli("info", "--net", "regtest", "--file", WalletFile());
+        Assert.Contains("wallet id: zdl27u8e", info);
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WithTheExpectedId_SavesTheWallet_AndSaysItMatches()
+    {
+        var keys = await ThreeKeys();
+        var (exit, output, err) = await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[2], "--cosigner", keys[0],
+            "--cosigner", keys[1], "--mnemonic", Words2, "--expect-id", "ZDL27U8E", "--net", "regtest", "--no-encryption",
+            "--file", WalletFile());                                    // other order, other case: same wallet
+
+        Assert.True(exit == 0, err);
+        Assert.Contains("matches the one you were given", output);
+        Assert.DoesNotContain("NOT VERIFIED", output);
+    }
+
+    [Fact]
+    public async Task CreateMultisig_WithAKeySwappedInTransit_IsRefusedAndWritesNothing()
+    {
+        var keys = await ThreeKeys();
+        var attacker = await KeyOf("letter advice cage absurd amount doctor acoustic avoid letter advice cage above");
+        var (exit, _, err) = await Cli("create-multisig", "--threshold", "2", "--cosigner", keys[0], "--cosigner", keys[1],
+            "--cosigner", attacker, "--mnemonic", Mnemonic, "--expect-id", "zdl27u8e", "--net", "regtest", "--no-encryption",
+            "--file", WalletFile());
+
+        Assert.Equal(1, exit);
+        Assert.Contains("not the ones the other cosigner saw", err);
+        Assert.False(File.Exists(WalletFile()));
+    }
 }

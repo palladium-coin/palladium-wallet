@@ -100,11 +100,19 @@ public static class PsbtSigner
         foreach (var isChange in new[] { false, true })
             for (var index = 0; index < scan; index++)
                 scripts[account.GetAddress(isChange, index).ScriptPubKey] = account.GetWitnessScript(isChange, index);
-        foreach (var input in psbt.Inputs)
-            if (input.WitnessScript is null
-                && input.GetTxOut()?.ScriptPubKey is { } spk
-                && scripts.TryGetValue(spk, out var witnessScript))
-                input.WitnessScript = witnessScript;
+        for (var i = 0; i < psbt.Inputs.Count; i++)
+        {
+            var input = psbt.Inputs[i];
+            var spk = input.GetTxOut()?.ScriptPubKey;
+            if (spk is null || !scripts.TryGetValue(spk, out var witnessScript))
+                // Signing an input of some other wallet would lend this wallet's signature to a spend it cannot
+                // check: the PSBT's own witness script is attacker-controlled, and says nothing about this wallet.
+                throw new WalletSpendException(
+                    $"Input {i} does not spend an address of this multisig wallet (or its amount is unknown): refusing to sign.");
+            input.WitnessScript ??= witnessScript;
+            if (input.WitnessScript != witnessScript)
+                throw new WalletSpendException($"Input {i} carries a witness script that is not this wallet's own: refusing to sign.");
+        }
     }
 
     /// <summary>

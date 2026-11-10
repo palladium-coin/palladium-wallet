@@ -193,6 +193,7 @@ static int Info(string[] o)
             (multisig.OwnCosignerIndex is { } own ? $"; this wallet holds cosigner {own + 1}'s key" : "; holds no key (cannot sign)"));
         for (var i = 0; i < multisig.Cosigners.Count; i++)
             Console.WriteLine($"cosigner {i + 1}: {multisig.Cosigners[i].ToText(ScriptKind.NativeSegwitMultisig, account.Profile)}");
+        Console.WriteLine($"wallet id: {multisig.WalletId}   (compare it with every other cosigner)");
         Console.WriteLine($"descriptor: {multisig.ToDescriptor()}");
     }
     else if (doc.AccountXpub is { Length: > 0 })
@@ -421,10 +422,24 @@ static int CreateMultisig(string[] o)
     {
         throw new WalletSpendException(ex.Message);
     }
+    // The wallet cannot authenticate the cosigners' keys by itself: a key altered on its way would build another
+    // wallet. The wallet ID covers every key and the threshold, so the cosigners compare it, and --expect-id makes
+    // the comparison part of the command: the wallet is not written unless it is the one the others see.
+    var walletId = created.account.WalletId;
+    var expected = Opt(o, "--expect-id");
+    if (expected is not null && !string.Equals(expected.Trim(), walletId, StringComparison.OrdinalIgnoreCase))
+        throw new WalletSpendException(
+            $"The wallet ID is {walletId}, not {expected.Trim()}: the cosigner keys given here are not the ones the other " +
+            "cosigner saw. Nothing was written; check each key and its fingerprint with its owner.");
+
     var path = WalletPath(o, profile);
     WalletStore.Save(created.doc, path, CliPassword.ForNewWallet(o));
     Console.WriteLine($"Multisig wallet {created.account.Threshold}-of-{created.account.Cosigners.Count} saved to {path}" +
         (created.account.IsWatchOnly ? " (holds no key: cannot sign)" : ""));
+    Console.WriteLine($"Wallet ID: {walletId}");
+    Console.WriteLine(expected is not null
+        ? "The wallet ID matches the one you were given."
+        : "NOT VERIFIED: compare the wallet ID with every other cosigner (or give it to them to pass --expect-id) before receiving funds.");
     Console.WriteLine($"First address: {created.account.GetReceiveAddress(0)}");
     return 0;
 }
@@ -773,7 +788,7 @@ static int Usage()
           freeze        <txid>:<vout> [--net ...] [--file PATH]     keep a coin out of every spend (offline)
           unfreeze      <txid>:<vout> [--net ...] [--file PATH]
           create-multisig --threshold M --cosigner KEY (repeat N times, own included) [--mnemonic "<words>"]
-                        [--passphrase W] [--net ...] [--file PATH]   M-of-N P2WSH wallet (BIP48, sortedmulti)
+                        [--passphrase W] [--expect-id ID] [--net ...] [--file PATH]   M-of-N P2WSH wallet (BIP48, sortedmulti)
           cosigner-key  "<mnemonic>" [--account N] [--passphrase W] [--net ...]   the key to hand to the other cosigners
           combine-psbt  <base64|-> <base64> ... [--broadcast --server host[:port] [--ssl]] [--net ...]
           sign-psbt     <base64|-> [--scan N] [--broadcast --server host[:port] [--ssl]] [--net ...] [--file PATH]

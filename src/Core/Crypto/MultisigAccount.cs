@@ -104,9 +104,21 @@ public sealed class MultisigAccount : IWalletAccount
     public string ToDescriptor(bool isChange = false)
     {
         var network = PalladiumNetworks.For(Profile.Kind);
-        var keys = string.Join(",", Cosigners.Select(c => $"{c.ToDescriptorKey(network)}/{(isChange ? 1 : 0)}/*"));
+        // Canonical key order (by serialised key), so that the descriptor, and the wallet ID drawn from it, do not
+        // depend on the order in which each cosigner happened to enter the keys. The addresses never did.
+        var keys = string.Join(",", Cosigners.OrderBy(c => Convert.ToHexString(c.Xpub.ToBytes()), StringComparer.Ordinal)
+            .Select(c => $"{c.ToDescriptorKey(network)}/{(isChange ? 1 : 0)}/*"));
         return $"wsh(sortedmulti({Threshold},{keys}))";
     }
+
+    /// <summary>
+    /// The wallet ID: the BIP380 checksum of the receive descriptor, 8 characters, equal to the one Bitcoin Core
+    /// prints for the same descriptor. It depends on every cosigner key and on the threshold (not on the order the keys were
+    /// entered in), so two cosigners who read the same ID have built the same wallet. It is the check that the cosigner keys
+    /// were not altered on their way: the wallet cannot authenticate a key by itself, the people compare this code
+    /// over a channel the attacker does not control.
+    /// </summary>
+    public string WalletId => DescriptorChecksum.Compute(ToDescriptor())!;
 
     private sealed class ByteArrayComparer : IComparer<byte[]>
     {

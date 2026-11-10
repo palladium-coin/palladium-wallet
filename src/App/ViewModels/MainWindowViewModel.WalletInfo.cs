@@ -1,3 +1,4 @@
+using PalladiumWallet.Core.Crypto;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -45,6 +46,14 @@ public partial class MainWindowViewModel
 
     public string WalletInfoXpub => _doc?.AccountXpub ?? "";
 
+    /// <summary>
+    /// Multisig wallets: "2-of-3 · ID zdl27u8e". The ID covers every cosigner key and the threshold: the cosigners compare
+    /// it with each other, since the wallet cannot authenticate a key by itself (ADR 0057). Empty for other wallets.
+    /// </summary>
+    public string WalletInfoMultisigId => _account is MultisigAccount m
+        ? $"{m.Threshold}-of-{m.Cosigners.Count} · ID {m.WalletId}"
+        : "";
+
     public string WalletInfoFingerprint => _doc?.MasterFingerprint ?? "";
 
     public bool WalletInfoHasSeed => _doc?.Mnemonic is not null;
@@ -67,6 +76,7 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(WalletInfoScriptKind));
         OnPropertyChanged(nameof(WalletInfoDerivPath));
         OnPropertyChanged(nameof(WalletInfoXpub));
+        OnPropertyChanged(nameof(WalletInfoMultisigId));
         OnPropertyChanged(nameof(WalletInfoFingerprint));
         OnPropertyChanged(nameof(WalletInfoHasSeed));
         OnPropertyChanged(nameof(WalletInfoSeedNeedsPassword));

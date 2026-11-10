@@ -47,6 +47,8 @@ public sealed class MultisigGuiTests : VmTestBase
         Assert.Equal(account.GetReceiveAddress(1).ToString(), vm.ReceiveAddress);   // address 0 is used: the next one
         Assert.NotEmpty(vm.Addresses);
         Assert.Equal("", vm.WalletInfoXpub);          // no single account key stands for a multisig wallet
+        vm.OpenWalletInfoCommand.Execute(null);
+        Assert.Equal($"2-of-3 · ID {account.WalletId}", vm.WalletInfoMultisigId);   // what the cosigners compare
     });
 
     [Fact]

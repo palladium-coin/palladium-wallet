@@ -85,7 +85,8 @@ public class MultisigAccountTests
     public void TheDescriptor_IsTheOneTheNodeAccepts_WithStandardKeys()
     {
         var descriptor = Account().ToDescriptor();
-        Assert.StartsWith("wsh(sortedmulti(2,[73c5da0a/48'/1'/0'/2']tpub", descriptor);
+        Assert.StartsWith("wsh(sortedmulti(2,[", descriptor);
+        Assert.Contains("[73c5da0a/48'/1'/0'/2']tpub", descriptor);
         Assert.EndsWith("/0/*))", descriptor);
         Assert.EndsWith("/1/*))", Account().ToDescriptor(isChange: true));
     }
@@ -221,4 +222,25 @@ public class MultisigAccountTests
     [Fact]
     public void AKeyOfAnotherNetwork_IsRejected() =>
         Assert.False(Cosigner.TryParse(AllKeys[0], ChainProfiles.Mainnet, out _));
+
+    // ----- the wallet ID: the check the cosigners make by comparing it, since a key cannot be authenticated by the wallet -----
+
+    [Fact]
+    public void TheWalletId_IsThePalladiumCoreChecksumOfTheSameDescriptor()
+    {
+        // getdescriptorinfo on the node, for the descriptor this wallet prints.
+        Assert.Equal("zdl27u8e", Account().WalletId);
+    }
+
+    [Fact]
+    public void TheWalletId_DoesNotDependOnTheOrderTheKeysWereEntered_ButOnEveryKeyAndTheThreshold()
+    {
+        var reference = Account().WalletId;
+        Assert.Equal(reference, Account(keys: [AllKeys[2], AllKeys[0], AllKeys[1]]).WalletId);
+        Assert.Equal(reference, Account(ownWords: null).WalletId);
+        Assert.NotEqual(reference, Account(threshold: 3).WalletId);
+        // One key replaced by another cosigner's: what an attacker who swaps a key in transit produces.
+        var attacker = KeyOf("letter advice cage absurd amount doctor acoustic avoid letter advice cage above");
+        Assert.NotEqual(reference, Account(2, null, [AllKeys[0], AllKeys[1], attacker]).WalletId);
+    }
 }
