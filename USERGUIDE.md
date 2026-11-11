@@ -208,7 +208,7 @@ Resolution order:
 
 Inside the data root: `mainnet/wallets/*.wallet.json` (your wallets),
 `mainnet/server-certs.json` (pinned TLS certificates), `mainnet/servers.json` (discovered
-servers), `config.json` (language, unit, last server — shared across wallets).
+servers), `config.json` (language, unit, theme, last server — shared across wallets).
 
 ### 3.5 Trying the GUI on a test network (regtest)
 
@@ -767,6 +767,8 @@ the door to the server settings:
 
 - **Language** — Italiano, English, Español, Français, Português, Deutsch. Applies
   immediately. Default: English.
+- **Theme** — System (follows the operating system, default), Light or Dark. Applies
+  immediately and is remembered.
 - **Amount unit** — how amounts are displayed *and interpreted when you type them*:
 
   | Unit | In satoshi | Decimals shown |

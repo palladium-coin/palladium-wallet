@@ -16,10 +16,24 @@
         <!-- ============ LIGHT THEME ============ -->
         <ResourceDictionary x:Key="Light">
             <!-- Surfaces -->
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F1F5F9"/>     <!-- slate-100 -->
+            <!-- Liquid-glass ground: a soft blue → violet → teal wash, so translucent surfaces have colour to pick up -->
+            <LinearGradientBrush x:Key="AppBackgroundBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0"    Color="#D6E4FF"/>
+                <GradientStop Offset="0.55" Color="#E6DEFF"/>
+                <GradientStop Offset="1"    Color="#D3EFEA"/>
+            </LinearGradientBrush>
+            <!-- Glass materials: translucent fill + a rim that is bright on the lit (top-left) edge and a faint
+                 slate hairline on the far edge. Cards are lighter than overlays (bigger surface = thicker). -->
+            <SolidColorBrush x:Key="GlassBrush" Color="#B8FFFFFF"/>
+            <!-- A recessed field inside glass (address box): a faint cool tint, not a lighter fill -->
+            <SolidColorBrush x:Key="GlassInsetBrush" Color="#14305BA8"/>
+            <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#F2FFFFFF"/>
+                <GradientStop Offset="1" Color="#4D94A3B8"/>
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#FFFFFF"/>
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#F8FAFC"/>     <!-- slate-50 -->
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#F7FFFFFF"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#66000000"/>   <!-- 40% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#E2E8F0"/>     <!-- slate-200 -->
@@ -38,11 +52,11 @@
             <SolidColorBrush x:Key="DangerBrush"         Color="#DC2626"/>     <!-- red-600 -->
             <!-- Secondary (neutral) buttons: white surface + visible border, so they read as
                  available but quieter than the blue accent (Fluent's default grey reads as disabled). -->
-            <SolidColorBrush x:Key="ButtonBackground"            Color="#FFFFFF"/>
-            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F1F5F9"/>
-            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#B3FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E6FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#CCE2E8F0"/>
             <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#F1F5F9"/>
-            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#CBD5E1"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#80FFFFFF"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#94A3B8"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPressed"    Color="#94A3B8"/>
             <SolidColorBrush x:Key="ButtonBorderBrushDisabled"   Color="#E2E8F0"/>
@@ -56,10 +70,20 @@
         <!-- ============ DARK THEME ============ -->
         <ResourceDictionary x:Key="Dark">
             <!-- Surfaces -->
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F172A"/>      <!-- slate-900 -->
+            <LinearGradientBrush x:Key="AppBackgroundBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0"    Color="#0A1126"/>
+                <GradientStop Offset="0.55" Color="#17123C"/>
+                <GradientStop Offset="1"    Color="#0A2131"/>
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="GlassBrush" Color="#662A3A5C"/>
+            <SolidColorBrush x:Key="GlassInsetBrush" Color="#33000000"/>
+            <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#4DFFFFFF"/>
+                <GradientStop Offset="1" Color="#0FFFFFFF"/>
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#1E293B"/>     <!-- slate-800 -->
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#273449"/>
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#1E293B"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#F71E2A47"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#99000000"/>   <!-- 60% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#334155"/>     <!-- slate-700 -->
@@ -77,11 +101,11 @@
             <SolidColorBrush x:Key="WarningBrush"        Color="#F59E0B"/>     <!-- amber-500 -->
             <SolidColorBrush x:Key="DangerBrush"         Color="#EF4444"/>     <!-- red-500 -->
             <!-- Secondary (neutral) buttons, dark variant -->
-            <SolidColorBrush x:Key="ButtonBackground"            Color="#273449"/>
-            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#334155"/>
-            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#3B4A60"/>
-            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#1E293B"/>
-            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#475569"/>
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#2EFFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#45FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#22FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#14FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#40FFFFFF"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#64748B"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPressed"    Color="#64748B"/>
             <SolidColorBrush x:Key="ButtonBorderBrushDisabled"   Color="#334155"/>
@@ -110,6 +134,20 @@
 
     <!-- Global Fluent control corner radii: rounds buttons, inputs, combos,
          and lists uniformly without retemplating each control. -->
-    <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="ControlCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="OverlayCornerRadius">24</CornerRadius>
+
+    <!-- Accent (primary) buttons: a subtle top-lit gradient instead of a flat fill. -->
+    <LinearGradientBrush x:Key="AccentButtonBackground" StartPoint="50%,0%" EndPoint="50%,100%">
+        <GradientStop Offset="0" Color="#4F8EF7"/>
+        <GradientStop Offset="1" Color="#2563EB"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="AccentButtonBackgroundPointerOver" StartPoint="50%,0%" EndPoint="50%,100%">
+        <GradientStop Offset="0" Color="#6AA0FA"/>
+        <GradientStop Offset="1" Color="#3B82F6"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="AccentButtonBackgroundPressed" StartPoint="50%,0%" EndPoint="50%,100%">
+        <GradientStop Offset="0" Color="#2F6FEA"/>
+        <GradientStop Offset="1" Color="#1D4ED8"/>
+    </LinearGradientBrush>
 </ResourceDictionary>

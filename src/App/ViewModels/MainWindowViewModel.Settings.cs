@@ -13,6 +13,9 @@ public partial class MainWindowViewModel
     public bool IsLangPt => _config.Language == "pt";
     public bool IsLangDe => _config.Language == "de";
     public bool IsLangZh => _config.Language == "zh";
+    public bool IsThemeSystem => _config.Theme is not ("light" or "dark");
+    public bool IsThemeLight => _config.Theme == "light";
+    public bool IsThemeDark => _config.Theme == "dark";
     public bool IsUnitPlm => _config.Unit == "PLM";
     public bool IsUnitMilli => _config.Unit == "mPLM";
     public bool IsUnitMicro => _config.Unit == "µPLM";
@@ -23,6 +26,25 @@ public partial class MainWindowViewModel
     {
         _config.Language = language;
         ApplySettings(_config);
+    }
+
+    [RelayCommand]
+    private void SetTheme(string theme)
+    {
+        _config.Theme = theme is "light" or "dark" ? theme : "system";
+        ApplySettings(_config);
+    }
+
+    /// <summary>Sets the Avalonia theme variant from the saved choice; "system" follows the OS.</summary>
+    private void ApplyTheme()
+    {
+        if (Avalonia.Application.Current is { } app)
+            app.RequestedThemeVariant = _config.Theme switch
+            {
+                "light" => Avalonia.Styling.ThemeVariant.Light,
+                "dark" => Avalonia.Styling.ThemeVariant.Dark,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            };
     }
 
     [RelayCommand]
@@ -39,6 +61,10 @@ public partial class MainWindowViewModel
         _loc = Localization.Loc.SwitchTo(config.Language);
         OnPropertyChanged(nameof(Loc));
         OnPropertyChanged(nameof(UnitLabel));
+        ApplyTheme();
+        OnPropertyChanged(nameof(IsThemeSystem));
+        OnPropertyChanged(nameof(IsThemeLight));
+        OnPropertyChanged(nameof(IsThemeDark));
         OnPropertyChanged(nameof(IsLangIt));
         OnPropertyChanged(nameof(IsLangEn));
         OnPropertyChanged(nameof(IsLangEs));

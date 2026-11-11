@@ -15,6 +15,9 @@ public sealed class AppConfig
     /// <summary>Display unit for amounts (see <see cref="Wallet.CoinAmount.Units"/>).</summary>
     public string Unit { get; set; } = "PLM";
 
+    /// <summary>Colour theme: <c>system</c> (follow the OS, default), <c>light</c> or <c>dark</c>. Unknown values mean <c>system</c>.</summary>
+    public string Theme { get; set; } = "system";
+
     /// <summary>Last successfully connected server, persisted across sessions.</summary>
     public string? LastServerHost { get; set; }
     public int? LastServerPort { get; set; }

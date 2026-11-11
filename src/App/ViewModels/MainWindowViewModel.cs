@@ -162,6 +162,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _loc = Loc.SwitchTo(_config.Language);
+        ApplyTheme();
         if (!AppPaths.IsDataLocationConfigured())
             SetupStep = StepDataLocation;
         else
