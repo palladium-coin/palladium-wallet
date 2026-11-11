@@ -137,3 +137,14 @@ This is a complement to, not a substitute for, independent human or third-party 
   comparison itself must happen over a channel the attacker does not control; without `--expect-id` the wallet says
   `NOT VERIFIED`. A multisig wallet also signs only inputs it recognises as its own addresses and refuses a PSBT whose
   witness (or redeem) script is not its own (ADRs 0057, 0058, 0059)
+- PSBTs can travel as animated QR codes (BC-UR, ADR 0063). The decoder treats every frame as untrusted (bounded sizes, CRC-32 on the whole message, fuzzed), and a scanned PSBT goes through the same review as a pasted one, but a QR carries no authentication: what the wallet shows (inputs, outputs, change, fee) is what protects the user, not the transport.
+
+### Not yet verified
+
+These are gaps in testing, not known faults; none has been observed to fail.
+
+- **Real signers and other wallets.** The PSBT and multisig configuration formats (ADR 0061, 0062) and the animated-QR transport (ADR 0063) have been exercised against Palladium Core and, for the UR frames, an independent implementation (foundation-ur-py), but not against Coldcard, Ledger, Trezor, Sparrow or Electrum.
+- **Android QR scanner.** The change that collects `ur:` frames in `ScannerActivity` has not been compiled or run; plain address QR codes follow the unchanged path.
+- **CI regtest end-to-end.** The `regtest-e2e` job (ADR 0060) has never run on GitHub; the script passes locally.
+- **Translations.** The wizard, PSBT and animated-QR texts (`wiz.multisig.*`, `psbt.*`) are not reviewed by native speakers in es, fr, pt, de and zh.
+- **Release state.** The `dev` branch is not published yet.
