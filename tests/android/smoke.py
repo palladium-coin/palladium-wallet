@@ -7,7 +7,7 @@ It drives the app through the accessibility tree (`uiautomator dump`, which Aval
 so it taps buttons by their label and reads text boxes back instead of guessing coordinates or trusting `input text`
 (which drops characters when it types fast).
 
-  python3 tests/android/smoke.py [--apk FILE] [--avd NAME] [--serial ID] [--out DIR] [--keep] [--reset-data]
+  python3 tests/android/smoke.py [--apk FILE] [--avd NAME] [--serial ID] [--out DIR] [--keep] [--reset-data] [--langs de,fr]
 
 * With no device attached it creates a throw-away AVD (default `plm-smoke`, an x86_64 Android 14 image with KVM),
   boots it headless, and deletes the AVD when it is done (`--keep` keeps both).
@@ -37,6 +37,11 @@ SDK = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT") or os
 ADB = os.path.join(SDK, "platform-tools", "adb")
 EMULATOR = os.path.join(SDK, "emulator", "emulator")
 AVDMANAGER = os.path.join(SDK, "cmdline-tools", "latest", "bin", "avdmanager")
+# code -> (name on the radio button, Receive tab, Copy button, Settings button, Close button) as in Localization/Loc.cs
+LANGS = {"it": ("Italiano", "Ricevi", "Copia", "Impostazioni", "Chiudi"), "en": ("English", "Receive", "Copy", "Settings", "Close"),
+         "es": ("Español", "Recibir", "Copiar", "Configuración", "Cerrar"), "fr": ("Français", "Recevoir", "Copier", "Paramètres", "Fermer"),
+         "pt": ("Português", "Receber", "Copiar", "Configurações", "Fechar"),
+         "de": ("Deutsch", "Empfangen", "Kopieren", "Einstellungen", "Schließen"), "zh": ("中文", "接收", "复制", "设置", "关闭")}
 IMAGE = "system-images;android-34;google_apis;x86_64"
 
 
@@ -63,19 +68,9 @@ class Device:
     def dump(self):
         self.sh("uiautomator dump /sdcard/plm-ui.xml", check=False)
         xml = self.sh("cat /sdcard/plm-ui.xml", check=False)
-        if not xml.startswith("<?xml"):
-            return []
-        root = ET.fromstring(xml)
-        nodes = []
-        for n in root.iter("node"):
-            b = re.findall(r"\d+", n.get("bounds", ""))
-            if len(b) != 4:
-                continue
-            x1, y1, x2, y2 = map(int, b)
-            if n.get("resource-id", "").endswith(":id/action_bar_root"):
-                self.top = y1
-            nodes.append({"text": n.get("text", ""), "cls": n.get("class", ""), "desc": n.get("content-desc", ""),
-                          "checked": n.get("checked") == "true", "box": (x1, y1, x2, y2)})
+        nodes, top = parse_dump(xml)
+        if top is not None:
+            self.top = top
         return nodes
 
     def find(self, text, cls=None, nodes=None):
@@ -98,6 +93,20 @@ class Device:
     def tap_node(self, n):
         x1, y1, x2, y2 = n["box"]
         self.sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2 + self.top}")
+
+    def tap_any(self, texts, timeout=20):
+        """Taps the first label that is on screen: the same button has a different label in each language."""
+        end = time.time() + timeout
+        while time.time() < end:
+            nodes = self.dump()
+            for t in texts:
+                n = self.find(t, "Button", nodes)
+                if n:
+                    self.tap_node(n)
+                    time.sleep(1.0)
+                    return n
+            time.sleep(1)
+        raise Fail(f"none of {texts} appeared within {timeout}s")
 
     def tap(self, text, cls=None, timeout=20):
         n = self.wait_for(text, cls, timeout)
@@ -137,15 +146,42 @@ class Device:
             f.write(self.adb("exec-out", "screencap", "-p", binary=True))
 
     def pixel(self, x, y):
-        raw = self.adb("exec-out", "screencap", binary=True)
-        w, h, _fmt = (int.from_bytes(raw[i:i + 4], "little") for i in (0, 4, 8))
-        header = len(raw) - w * h * 4  # 12 bytes before Android 10, 16 after
-        o = header + (y * w + x) * 4
-        return raw[o], raw[o + 1], raw[o + 2]
+        return pixel_from_raw(self.adb("exec-out", "screencap", binary=True), x, y)
 
     def screen_size(self):
         m = re.search(r"(\d+)x(\d+)", self.sh("wm size"))
         return int(m.group(1)), int(m.group(2))
+
+
+def parse_dump(xml):
+    """Parses a `uiautomator dump`: (nodes, y of the Avalonia root view or None). Not a dump -> ([], None)."""
+    if not xml.startswith("<?xml"):
+        return [], None
+    top = None
+    nodes = []
+    for n in ET.fromstring(xml).iter("node"):
+        b = re.findall(r"\d+", n.get("bounds", ""))
+        if len(b) != 4:
+            continue
+        x1, y1, x2, y2 = map(int, b)
+        if n.get("resource-id", "").endswith(":id/action_bar_root"):
+            top = y1
+        nodes.append({"text": n.get("text", ""), "cls": n.get("class", ""), "desc": n.get("content-desc", ""),
+                      "checked": n.get("checked") == "true", "box": (x1, y1, x2, y2)})
+    return nodes, top
+
+
+def pixel_from_raw(raw, x, y):
+    """RGB of a pixel in `screencap` raw output: width, height, format, [16-byte header from Android 10], RGBA rows."""
+    w, h, _fmt = (int.from_bytes(raw[i:i + 4], "little") for i in (0, 4, 8))
+    header = len(raw) - w * h * 4  # 12 bytes before Android 10, 16 after
+    o = header + (y * w + x) * 4
+    return raw[o], raw[o + 1], raw[o + 2]
+
+
+def overflowing(nodes, width):
+    """Nodes that stick out of the screen sideways: text that is too long for its box shows up like this."""
+    return [n for n in nodes if n["box"][2] > width + 1 or n["box"][0] < -1]
 
 
 def luma(rgb):
@@ -191,6 +227,8 @@ def main():
     ap.add_argument("--serial")
     ap.add_argument("--out", default="/tmp/plm-android-smoke")
     ap.add_argument("--keep", action="store_true", help="leave the emulator running and keep a created AVD")
+    ap.add_argument("--langs", default="", help="comma-separated language codes (de,fr,zh…) to switch to after the walk-through, "
+                    "checking Receive and Settings for text that overflows the screen; use with a full walk-through")
     ap.add_argument("--reset-data", action="store_true", help="on an existing device: clear the app's data and run the full walk-through")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
@@ -298,6 +336,43 @@ def main():
             dev.screenshot(os.path.join(args.out, "05-settings.png"))
             dev.tap("Close", "Button")
         check("Settings opens with the theme and solid-surfaces options, and closes", settings)
+
+        # ---- other languages: longer strings must not push anything off the screen ----
+        for code in [c for c in args.langs.split(",") if c]:
+            if code not in LANGS:
+                raise Fail(f"--langs: unknown language '{code}' (known: {', '.join(LANGS)})")
+            name, receive, copy, _settings, close = LANGS[code]
+
+            def language(code=code, name=name, receive=receive, copy=copy, close=close):
+                width, height = dev.screen_size()
+                for attempt in (1, 2):  # a tap right after a tab change is sometimes lost
+                    dev.tap_any([v[3] for v in LANGS.values()])
+                    try:
+                        dev.wait_for(name, "RadioButton", timeout=6)
+                        break
+                    except Fail:
+                        if attempt == 2:
+                            raise
+                dev.tap(name, "RadioButton", timeout=15)
+                dev.screenshot(os.path.join(args.out, f"07-settings-{code}.png"))
+                bad = overflowing(dev.dump(), width)
+                if bad:
+                    raise Fail(f"Settings sticks out of the screen: {[n['text'] for n in bad][:3]}")
+                dev.tap(close, "Button")  # by label: the Copy button of Receive is also in the tree, behind the overlay
+                end = time.time() + 10
+                while dev.find(name, "RadioButton") and time.time() < end:
+                    time.sleep(0.5)
+                if dev.find(name, "RadioButton"):
+                    raise Fail("the Settings overlay did not close")
+                dev.tap(receive)
+                c = dev.wait_for(copy, timeout=15)
+                if c["box"][3] + dev.top > height - 120:
+                    raise Fail("the Copy button is under the status bar")
+                bad = overflowing(dev.dump(), width)
+                if bad:
+                    raise Fail(f"Receive sticks out of the screen: {[n['text'] for n in bad][:3]}")
+                dev.screenshot(os.path.join(args.out, f"08-receive-{code}.png"))
+            check(f"{name}: Settings and Receive fit the screen", language)
 
         # ---- follows the system's light/dark mode while running ----
         original_night = dev.sh("cmd uimode night", check=False).strip().split(":")[-1].strip() or "auto"

@@ -20,7 +20,7 @@ release and covers the full history from the initial commit.
 
 ### Added
 
-- **Android smoke test on an emulator** (`python3 tests/android/smoke.py`, ADR 0066): installs the debug APK on a throw-away AVD (or checks start-up on an existing device), walks the start screen, the restore wizard, the wallet home, Receive and Settings through the accessibility tree, and checks the System theme against the OS light/dark switch. Run by hand.
+- **Android smoke test on an emulator** (`python3 tests/android/smoke.py`, ADR 0066): installs the debug APK on a throw-away AVD (or checks start-up on an existing device), walks the start screen, the restore wizard, the wallet home, Receive and Settings through the accessibility tree, and checks the System theme against the OS light/dark switch; `--langs` repeats Settings and Receive in other languages looking for text that overflows (German, French, Chinese, Italian, Spanish, Portuguese: all fit), and `tests/android/test_smoke.py` covers the script's parsing without a device. Run by hand.
 
 - **Desktop release binaries are built in CI**: publishing a GitHub release runs `.github/workflows/release.yml`, which builds Windows x64, Linux x64 and Linux ARM64 with the same `docker/build.sh` used locally, checks that the tag matches `<Version>`, and attaches the binaries, `SHA256SUMS` and a build-provenance attestation to the release. Android stays a local, locally-signed build uploaded to the release afterwards. `SECURITY.md` has a supply-chain section (what the checksums and attestation do and do not protect against) and `USERGUIDE.md` tells users how to verify a download. Not run on GitHub yet (ADR 0065).
 

@@ -337,7 +337,9 @@ AVD it creates and boots headless (or on a device that is already there, start-u
 the restore wizard, the wallet home, Receive and Settings, and checks that the **System** theme follows the OS
 light/dark switch while the app runs. It drives the accessibility tree, so it taps by label and reads text boxes
 back (`adb shell input text` drops characters). It never uninstalls, and the full walk-through needs a device it booted
-itself or `--reset-data`. Run by hand; CI does not build the Android head.
+itself or `--reset-data`. `--langs de,fr,zh` repeats Settings and Receive in other languages and fails on anything
+that sticks out of the screen, and `python3 -m unittest discover -s tests/android` tests the script's own parsing
+without a device. Run by hand; CI does not build the Android head.
 
 **VS Code "Android iOS Emulator" extension** (optional, click-to-launch): it only starts an
 existing AVD, so create one first (step 3). Point it at the emulator binary:
