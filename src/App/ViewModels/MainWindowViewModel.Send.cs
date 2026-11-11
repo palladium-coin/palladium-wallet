@@ -130,6 +130,21 @@ public partial class MainWindowViewModel
         SendTo = address.Trim();
     }
 
+    /// <summary>Parses a pasted recipient for the current network; false (not an exception text) when it is empty or wrong.</summary>
+    private bool TryParseDestination(string text, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BitcoinAddress? address)
+    {
+        try
+        {
+            address = BitcoinAddress.Create(text.Trim(), PalladiumNetworks.For(Net));
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            address = null;
+            return false;
+        }
+    }
+
     [RelayCommand]
     private async Task PrepareSend()
     {
@@ -147,7 +162,11 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            var destination = BitcoinAddress.Create(SendTo.Trim(), PalladiumNetworks.For(Net));
+            if (!TryParseDestination(SendTo, out var destination))
+            {
+                SendPreview = Loc.Tr("msg.address.invalid");
+                return;
+            }
             long amount = 0;
             if (!SendAll && (!CoinAmount.TryParseIn(SendAmount, _config.Unit, out amount) || amount <= 0))
             {

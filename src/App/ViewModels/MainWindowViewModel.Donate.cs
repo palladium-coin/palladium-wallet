@@ -57,7 +57,11 @@ public partial class MainWindowViewModel
         }
         try
         {
-            var destination = BitcoinAddress.Create(DonationAddressOverride ?? DevAddress, PalladiumNetworks.For(Net));
+            if (!TryParseDestination(DonationAddressOverride ?? DevAddress, out var destination))
+            {
+                DonatePreview = Loc.Tr("msg.address.invalid");
+                return;
+            }
             if (!CoinAmount.TryParseIn(DonateAmount.Trim(), _config.Unit, out var amount) || amount <= 0)
             {
                 DonatePreview = Loc.Tr("msg.amount.invalid");
@@ -98,7 +102,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             DiscardPendingDonate();
-            DonatePreview = $"{Loc.Tr("msg.error")}: {ex.Message}";
+            DonatePreview = $"{Loc.Tr("msg.error")}: {DescribeError(ex)}";
         }
         await Task.CompletedTask;
     }

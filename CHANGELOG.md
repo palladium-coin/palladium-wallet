@@ -35,6 +35,7 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- An empty, malformed or wrong-network recipient in Send (and an invalid donation address) showed the parser's exception text (`Error: Invalid string`); it now says "Address not valid for this network".
 - The buttons that reveal and hide an address's private key (and the password prompt in front of it) said "Show seed"/"Hide"; they now say "Show key"/"Hide key" (new Loc keys `addr.privkey.reveal` and `addr.privkey.hide`).
 - Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed and tells the user so ("Transaction not complete: more signatures are needed. Nothing was sent…") instead of doing nothing.
 - A failed write on a server connection failed the pending requests before marking the connection dead, so a caller woken by the failure could still see it as connected; it is now marked dead first, as the read loop does.
