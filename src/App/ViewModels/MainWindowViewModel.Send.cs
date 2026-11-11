@@ -75,17 +75,23 @@ public partial class MainWindowViewModel
         }
     }
 
-    private void ApplyFeeEstimates(FeeEstimates estimates)
+    private void RenderFeeHint()
     {
-        _feeEstimates = estimates;
-        HasFeeEstimates = estimates.HasAny;
-        FeeEstimateHint = estimates.HasAny
+        var estimates = _feeEstimates;
+        FeeEstimateHint = estimates is { HasAny: true }
             ? string.Format(Loc.Tr("send.fee.hint"),
                 estimates.Fast is { } f ? FeePolicy.Format(f) : "—",
                 estimates.Normal is { } n ? FeePolicy.Format(n) : "—",
                 estimates.Economy is { } e ? FeePolicy.Format(e) : "—",
                 estimates.Relay is { } r ? FeePolicy.Format(r) : "—")
             : "";
+    }
+
+    private void ApplyFeeEstimates(FeeEstimates estimates)
+    {
+        _feeEstimates = estimates;
+        HasFeeEstimates = estimates.HasAny;
+        RenderFeeHint();
         // Preselect the normal estimate unless the user already typed something.
         if (!_feeRateTouched && estimates.HasAny)
             SetFeeRate(FeePolicy.Format(FeePolicy.DefaultRate(estimates)));
@@ -195,15 +201,10 @@ public partial class MainWindowViewModel
                 pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, SendAll);
 
-            SendPreview = DescribePayment(_pendingSend, destination) +
-                (_pendingSend.TxidIsFinal
-                    ? $"txid {_pendingSend.Txid[..16]}… · "
-                    : Loc.Tr("msg.txid.notfinal") + " · ") +
-                $"fee {Fmt(_pendingSend.Fee.Satoshi)} " +
-                $"({_pendingSend.Transaction.GetVirtualSize()} vB)" +
-                (_pendingSend.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
-                HighFeeWarning(_pendingSend.Fee.Satoshi,
-                    SendAll ? _pendingSend.Transaction.TotalOut.Satoshi : amount);
+            var built = _pendingSend;
+            var paid = SendAll ? built.Transaction.TotalOut.Satoshi : amount;
+            _renderSendPreview = () => BuildPreview(built, destination, paid);
+            SendPreview = _renderSendPreview();
             HasPendingSend = _pendingSend.Signed;
             PendingPsbtBase64 = _pendingSend.Signed ? "" : _pendingSend.Psbt.ToBase64();
         }
@@ -218,6 +219,7 @@ public partial class MainWindowViewModel
     private void DiscardPendingSend()
     {
         _pendingSend = null;
+        _renderSendPreview = null;
         HasPendingSend = false;
         PendingPsbtBase64 = "";
     }
@@ -244,6 +246,18 @@ public partial class MainWindowViewModel
     /// If the transaction does not pay the requested address there is nothing to confirm, so this
     /// throws instead of showing a review that does not match.
     /// </summary>
+    // The review of a prepared transaction is rendered from the transaction, so a change of language or
+    // unit re-renders it instead of leaving the text of the moment it was prepared (see ApplySettings).
+    private Func<string>? _renderSendPreview;
+    private Func<string>? _renderDonatePreview;
+
+    private string BuildPreview(BuiltTransaction built, BitcoinAddress destination, long paidSats) =>
+        DescribePayment(built, destination) +
+        (built.TxidIsFinal ? $"txid {built.Txid[..16]}… · " : Loc.Tr("msg.txid.notfinal") + " · ") +
+        string.Format(Loc.Tr("send.review.fee"), Fmt(built.Fee.Satoshi), built.Transaction.GetVirtualSize()) +
+        (built.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
+        HighFeeWarning(built.Fee.Satoshi, paidSats);
+
     private string DescribePayment(BuiltTransaction built, BitcoinAddress destination)
     {
         var outputs = built.Transaction.Outputs;

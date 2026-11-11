@@ -45,11 +45,35 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void CloseServerSettings() => IsServerSettingsOpen = false;
 
-    [ObservableProperty]
-    private string connectionStatus = Loc.Tr("conn.none");
+    // The connection texts are derived from the state, never stored as translated strings, so a
+    // language switch re-renders them (see ApplySettings).
+    private enum ConnState { None, Connecting, Connected, Reconnecting }
+    private ConnState _connState = ConnState.None;
+    private string _connEndpoint = "";
 
-    [ObservableProperty]
-    private string connectionStatusShort = Loc.Tr("conn.none");
+    private void SetConn(ConnState state, string? endpoint = null)
+    {
+        _connState = state;
+        if (endpoint is not null) _connEndpoint = endpoint;
+        OnPropertyChanged(nameof(ConnectionStatus));
+        OnPropertyChanged(nameof(ConnectionStatusShort));
+    }
+
+    public string ConnectionStatus => _connState switch
+    {
+        ConnState.Connecting => $"{Loc.Tr("conn.connectingto")} {_connEndpoint}…",
+        ConnState.Connected => $"{Loc.Tr("conn.connectedto")} {_connEndpoint}",
+        ConnState.Reconnecting => Loc.Tr("conn.reconnecting"),
+        _ => Loc.Tr("conn.none"),
+    };
+
+    public string ConnectionStatusShort => _connState switch
+    {
+        ConnState.Connecting => Loc.Tr("conn.connectingto") + "…",
+        ConnState.Connected => Loc.Tr("conn.connectedto"),
+        ConnState.Reconnecting => Loc.Tr("conn.reconnecting"),
+        _ => Loc.Tr("conn.none"),
+    };
 
     [ObservableProperty]
     private bool isConnected;
@@ -215,8 +239,7 @@ public partial class MainWindowViewModel
                 foreach (var (h, p) in candidates)
                 {
                     ct.ThrowIfCancellationRequested();
-                    ConnectionStatus = $"{Loc.Tr("conn.connectingto")} {h}:{p}…";
-                    ConnectionStatusShort = Loc.Tr("conn.connectingto") + "…";
+                    SetConn(ConnState.Connecting, $"{h}:{p}");
                     try
                     {
                         var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
@@ -232,13 +255,11 @@ public partial class MainWindowViewModel
                         _client.Disconnected += _ => Dispatcher.UIThread.Post(() =>
                         {
                             IsConnected = false;
-                            ConnectionStatus = Loc.Tr("conn.none");
-                            ConnectionStatusShort = Loc.Tr("conn.none");
+                            SetConn(ConnState.None);
                         });
                         IsConnected = true;
                         _autoReconnect = true;
-                        ConnectionStatus = $"{Loc.Tr("conn.connectedto")} {h}:{p}";
-                        ConnectionStatusShort = Loc.Tr("conn.connectedto");
+                        SetConn(ConnState.Connected, $"{h}:{p}");
                         // Update the UI to reflect the server actually connected.
                         _syncingServerFields = true;
                         ServerHost = h;
@@ -354,15 +375,13 @@ public partial class MainWindowViewModel
             // (_resumeRecovering) — neither is an error the user needs to see as one.
             cancelled = true;
             IsConnected = false;
-            ConnectionStatus = _resumeRecovering ? Loc.Tr("conn.reconnecting") : Loc.Tr("conn.none");
-            ConnectionStatusShort = _resumeRecovering ? Loc.Tr("conn.reconnecting") : Loc.Tr("conn.none");
+            SetConn(_resumeRecovering ? ConnState.Reconnecting : ConnState.None);
             StatusMessage = "";
         }
         catch (CertificatePinMismatchException ex)
         {
             IsConnected = false;
-            ConnectionStatus = Loc.Tr("conn.none");
-            ConnectionStatusShort = Loc.Tr("conn.none");
+            SetConn(ConnState.None);
             StatusMessage = DescribeError(ex);
         }
         catch (Exception ex)
@@ -375,13 +394,11 @@ public partial class MainWindowViewModel
                 // is a race, not a real failure — show "reconnecting" and restart right away
                 // instead of a scary error message and a wait for the next keep-alive tick.
                 cancelled = true;
-                ConnectionStatus = Loc.Tr("conn.reconnecting");
-                ConnectionStatusShort = Loc.Tr("conn.reconnecting");
+                SetConn(ConnState.Reconnecting);
             }
             else
             {
-                ConnectionStatus = IsConnected ? ConnectionStatus : Loc.Tr("conn.none");
-                ConnectionStatusShort = IsConnected ? Loc.Tr("conn.connectedto") : Loc.Tr("conn.none");
+                SetConn(IsConnected ? ConnState.Connected : ConnState.None);
                 StatusMessage = $"{Loc.Tr("msg.error")}: {DescribeError(ex)}";
             }
             if (_account is not null)

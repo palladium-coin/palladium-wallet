@@ -207,14 +207,14 @@ public partial class MainWindowViewModel : ViewModelBase
                     await DisconnectAsync();
                     if (_autoReconnect)
                     {
-                        ConnectionStatus = Loc.Tr("conn.reconnecting");
+                        SetConn(ConnState.Reconnecting);
                         await ConnectAndSync();
                     }
                 }
             }
             else if (_autoReconnect)
             {
-                ConnectionStatus = Loc.Tr("conn.reconnecting");
+                SetConn(ConnState.Reconnecting);
                 await ConnectAndSync();
             }
         }
@@ -242,8 +242,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // so it shows "reconnecting" and restarts immediately instead of
             // flashing a scary error message and waiting for the next keep-alive tick.
             _resumeRecovering = true;
-            ConnectionStatus = Loc.Tr("conn.reconnecting");
-            ConnectionStatusShort = Loc.Tr("conn.reconnecting");
+            SetConn(ConnState.Reconnecting);
             _syncCts.Cancel();
             // Deliberately not DisconnectAsync() here: it also nulls _synchronizer,
             // which still holds whatever this sync already downloaded/verified (e.g.
@@ -293,7 +292,7 @@ public partial class MainWindowViewModel : ViewModelBase
         AddressInfo = null; // also drops a revealed private key
         IsWalletOpen = false;
         IsConnected = false;
-        ConnectionStatus = Loc.Tr("conn.none");
+        SetConn(ConnState.None);
         RefreshSetupState();
     }
 }

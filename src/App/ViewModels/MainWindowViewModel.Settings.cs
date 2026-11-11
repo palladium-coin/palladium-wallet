@@ -51,6 +51,12 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsUnitMicro));
         OnPropertyChanged(nameof(IsUnitSat));
         ApplyCache(_doc?.Cache);
+        // Texts built from translated parts when they were produced: render them again in the new language/unit.
+        OnPropertyChanged(nameof(ConnectionStatus));
+        OnPropertyChanged(nameof(ConnectionStatusShort));
+        RenderFeeHint();
+        if (_pendingSend is not null && _renderSendPreview is { } send) SendPreview = send();
+        if (_pendingDonate is not null && _renderDonatePreview is { } donate) DonatePreview = donate();
         StatusMessage = Localization.Loc.Tr("msg.settings.saved");
     }
 
