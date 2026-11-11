@@ -604,9 +604,12 @@
                                             <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
                                                      FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
                                                      AcceptsReturn="True" Height="90"/>
-                                            <Button Grid.Column="1" Margin="8,0,0,0"
-                                                    Content="{Binding Loc[send.psbt.copy]}"
-                                                    Click="OnCopyPsbtClick"/>
+                                            <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
+                                                <Button Content="{Binding Loc[send.psbt.copy]}"
+                                                        Click="OnCopyPsbtClick"/>
+                                                <Button Content="{Binding Loc[psbt.showqr]}"
+                                                        Command="{Binding ShowPendingPsbtQrCommand}"/>
+                                            </StackPanel>
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
@@ -745,6 +748,9 @@
                                                  AcceptsReturn="True" Height="90"/>
                                         <Button Content="{Binding Loc[send.psbt.copy]}"
                                                 Click="OnCopyPsbtClick"
+                                                MinHeight="44"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Content="{Binding Loc[psbt.showqr]}" Command="{Binding ShowPendingPsbtQrCommand}"
                                                 MinHeight="44"
                                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                                     </StackPanel>
@@ -1564,6 +1570,8 @@
                              FontFamily="monospace" FontSize="11"/>
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <Button Content="{Binding Loc[psbt.openfile]}" Click="OnOpenPsbtFileClick"/>
+                        <Button Content="{Binding Loc[psbt.scanqr]}" Command="{Binding ScanPsbtQrCommand}"
+                                IsVisible="{Binding CanScanPsbt}"/>
                         <Button Content="{Binding Loc[psbt.sign]}" Classes="accent" Command="{Binding SignPsbtCommand}"/>
                     </StackPanel>
                     <SelectableTextBlock Text="{Binding PsbtSummary}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12"
@@ -1575,6 +1583,7 @@
                                  TextWrapping="Wrap" Height="90" FontFamily="monospace" FontSize="11"/>
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="{Binding Loc[send.psbt.copy]}" Click="OnCopySignedPsbtClick"/>
+                            <Button Content="{Binding Loc[psbt.showqr]}" Command="{Binding ShowSignedPsbtQrCommand}"/>
                             <Button Content="{Binding Loc[psbt.savefile]}" Click="OnSavePsbtFileClick"/>
                             <Button Content="{Binding Loc[psbt.broadcast]}" Classes="accent"
                                     Command="{Binding BroadcastPsbtCommand}" IsEnabled="{Binding HasFinalPsbt}"/>
@@ -1584,6 +1593,28 @@
                             Command="{Binding ClosePsbtCommand}"/>
                 </StackPanel>
                 </ScrollViewer>
+            </Border>
+        </Border>
+
+        <!-- ============ ANIMATED QR (UR) OVERLAY ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="3"
+                Background="{DynamicResource ScrimBrush}"
+                IsVisible="{Binding IsUrQrOpen}">
+            <Border Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+                    MaxWidth="480" Margin="16"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <StackPanel Margin="24" Spacing="12">
+                    <TextBlock Text="{Binding Loc[psbt.urqr.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[psbt.urqr.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Background="White" Padding="8" HorizontalAlignment="Center" CornerRadius="4">
+                        <Image Source="{Binding UrQrImage}" Width="320" Height="320"/>
+                    </Border>
+                    <TextBlock Text="{Binding UrQrCaption}" HorizontalAlignment="Center" FontSize="12"/>
+                    <Button Content="{Binding Loc[psbt.urqr.close]}" Command="{Binding CloseUrQrCommand}"
+                            HorizontalAlignment="Center" MinHeight="40"/>
+                </StackPanel>
             </Border>
         </Border>
 

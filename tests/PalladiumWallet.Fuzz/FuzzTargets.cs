@@ -34,6 +34,7 @@ public static class FuzzTargets
             ["cosignerkey"] = CosignerKey,
             ["psbt"] = PsbtInput,
             ["multisigconfig"] = MultisigConfigFile,
+            ["ur"] = UrFrames,
         };
 
     /// <summary>Runs one input through a named target (used by replay and the regression test).</summary>
@@ -188,6 +189,18 @@ public static class FuzzTargets
         try { psbt = PsbtFormat.Parse(data, PalladiumNetworks.Regtest); }
         catch (FormatException) { return; }
         PsbtFormat.Parse(PsbtFormat.ToBinary(psbt), PalladiumNetworks.Regtest);
+    }
+
+    // Animated-QR frames (BC-UR) scanned from another device, one per line.
+    // Contract: Receive never throws, for any text; a message it completes is what its frames' checksum vouches for, and
+    // asking it for the PSBT only ever yields bytes or null.
+    private static void UrFrames(byte[] data)
+    {
+        var decoder = new PalladiumWallet.Core.Wallet.Ur.UrDecoder();
+        foreach (var line in Utf8(data).Split('\n'))
+            decoder.Receive(line);
+        _ = decoder.Psbt;
+        _ = decoder.Progress;
     }
 
     // The multisig configuration file another tool exported.

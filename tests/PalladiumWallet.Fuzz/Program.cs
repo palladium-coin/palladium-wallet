@@ -123,6 +123,15 @@ internal static class RandomFuzz
 /// </summary>
 internal static class SeedCorpus
 {
+    // The frames of a real UR for a pseudo-random "PSBT" of the given size, one per line, enough to complete it.
+    private static string UrSeed(int size, int fragment)
+    {
+        var data = new byte[size];
+        new Random(size).NextBytes(data);
+        var enc = PalladiumWallet.Core.Wallet.Ur.UrEncoder.ForPsbt(data, fragment);
+        return string.Join('\n', Enumerable.Range(0, enc.IsSinglePart ? 1 : enc.PartCount + 2).Select(_ => enc.NextPart()));
+    }
+
     private static readonly Dictionary<string, (string Name, byte[] Data)[]> Seeds = new()
     {
         ["header"] =
@@ -221,6 +230,14 @@ internal static class SeedCorpus
             ("hex-magic", Encoding.UTF8.GetBytes("70736274ff0100")),
             // Regression: NBitcoin throws InvalidDataException (non-canonical varint) on a binary PSBT; PsbtFormat now maps it to FormatException.
             ("regression-noncanonical-varint", Convert.FromHexString("70736274ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+            ("empty", []),
+        ],
+        ["ur"] =
+        [
+            ("single", Encoding.UTF8.GetBytes(UrSeed(40, 100))),
+            ("multipart", Encoding.UTF8.GetBytes(UrSeed(300, 60))),
+            ("huge-counts", Encoding.UTF8.GetBytes("ur:crypto-psbt/1-99999999/aeaeaeaeaeaeaeae")),
+            ("not-ur", Encoding.UTF8.GetBytes("bitcoin:abc\nur:\nur:x/1-2/zz")),
             ("empty", []),
         ],
         ["multisigconfig"] =

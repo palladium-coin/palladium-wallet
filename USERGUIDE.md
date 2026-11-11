@@ -558,6 +558,11 @@ it on. The result can be copied or saved as a `.psbt` file; when the signatures 
 information screen of a multisig wallet shows its descriptors and saves the configuration file for a signer, and the creation
 step can load such a file, takes an optional seed passphrase and an account number, and shows your own key as a QR code.
 
+**Animated QR for air-gapped signers.** Next to a pending PSBT (Send tab) and next to a signed result (*Sign a PSBT…*),
+*Show as animated QR* cycles the PSBT as a UR (`crypto-psbt`) that a signer with a camera reads (Keystone, Passport, Jade,
+SeedSigner, Sparrow's QR mode): hold the signer steady until it has read every frame; the frames repeat. On Android, *Scan QR…*
+in *Sign a PSBT…* reads the PSBT back from the signer's screen, animated or not, into the box, where you review it as usual.
+
 **Hardware signers and other wallets.** `sign-psbt` and `combine-psbt` take a `.psbt` file (the binary file a signer
 reads from and writes to an SD card, or one Sparrow saves), base64 or hex text, or `-`; add `--psbt-out FILE` to
 `send`, `sign-psbt` or `combine-psbt` to also write the binary file. `export-multisig --out FILE` writes the

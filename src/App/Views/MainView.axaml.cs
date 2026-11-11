@@ -254,6 +254,7 @@ public partial class MainView : UserControl
     {
         if ((e.Key == Key.Escape || e.Key == Key.Back) && DataContext is MainWindowViewModel vm)
         {
+            if (vm.IsUrQrOpen) { vm.CloseUrQrCommand.Execute(null); e.Handled = true; return; }
             if (vm.IsPsbtOpen) { vm.ClosePsbtCommand.Execute(null); e.Handled = true; return; }
             if (vm.IsTxDetailsOpen) { vm.CloseTransactionDetailsCommand.Execute(null); e.Handled = true; return; }
             if (vm.IsPrivKeyPromptOpen) { vm.CancelPrivKeyPromptCommand.Execute(null); e.Handled = true; return; }

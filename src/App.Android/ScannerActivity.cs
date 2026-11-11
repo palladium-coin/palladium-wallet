@@ -35,6 +35,9 @@ internal sealed class ScannerActivity : Activity, TextureView.ISurfaceTextureLis
     private bool _permOk;
     private volatile bool _done;
     private long _lastDecode;
+    private TextView? _hint;
+    // Animated QR (UR, e.g. a PSBT from an air-gapped signer): frames are collected until the message is whole.
+    private readonly PalladiumWallet.Core.Wallet.Ur.UrDecoder _ur = new();
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -47,7 +50,7 @@ internal sealed class ScannerActivity : Activity, TextureView.ISurfaceTextureLis
         root.AddView(preview, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MatchParent, FrameLayout.LayoutParams.MatchParent));
 
-        var hint = new TextView(this) { Text = "Inquadra un codice QR" };
+        var hint = _hint = new TextView(this) { Text = "Inquadra un codice QR" };
         hint.SetTextColor(Color.White);
         hint.SetBackgroundColor(Color.ParseColor("#AA000000"));
         hint.SetPadding(24, 12, 24, 12);
@@ -178,10 +181,25 @@ internal sealed class ScannerActivity : Activity, TextureView.ISurfaceTextureLis
             var result = zreader.Decode(source);
             if (result == null) return;
 
+            var text = result.Text;
+            if (text.StartsWith("ur:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!_ur.Receive(text)) return;
+                if (!_ur.IsComplete)
+                {
+                    var pct = (int)(_ur.Progress * 100);
+                    RunOnUiThread(() => _hint!.Text = $"QR animato: {pct}%");
+                    return;
+                }
+                // A PSBT UR is handed back as base64, which the PSBT box already accepts.
+                if (_ur.Psbt is not { } psbt) return;
+                text = Convert.ToBase64String(psbt);
+            }
+
             _done = true;
             RunOnUiThread(() =>
             {
-                var intent = new Intent().PutExtra(ResultKey, result.Text);
+                var intent = new Intent().PutExtra(ResultKey, text);
                 SetResult(AndroidResult.Ok, intent);
                 Finish();
             });
