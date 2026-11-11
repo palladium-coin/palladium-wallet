@@ -29,8 +29,10 @@ public partial class MainWindowViewModel
     public const string StepImportWif = "import-wif";
     public const string StepImportAddress = "import-address";
     public const string StepPassword = "password";
+    public const string StepMultisig = "multisig";
+    public const string StepMultisigVerify = "multisig-verify";
 
-    private enum WizardFlowKind { New, Restore, ImportXkey, ImportWif, ImportAddress }
+    private enum WizardFlowKind { New, Restore, ImportXkey, ImportWif, ImportAddress, Multisig }
     private WizardFlowKind _wizardFlow;
 
     [ObservableProperty]
@@ -47,6 +49,8 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsStepImportWif))]
     [NotifyPropertyChangedFor(nameof(IsStepImportAddress))]
     [NotifyPropertyChangedFor(nameof(IsStepPassword))]
+    [NotifyPropertyChangedFor(nameof(IsStepMultisig))]
+    [NotifyPropertyChangedFor(nameof(IsStepMultisigVerify))]
     private string setupStep = StepStart;
 
     public bool IsStepDataLocation => SetupStep == StepDataLocation;
@@ -62,6 +66,8 @@ public partial class MainWindowViewModel
     public bool IsStepImportWif     => SetupStep == StepImportWif;
     public bool IsStepImportAddress => SetupStep == StepImportAddress;
     public bool IsStepPassword      => SetupStep == StepPassword;
+    public bool IsStepMultisig      => SetupStep == StepMultisig;
+    public bool IsStepMultisigVerify => SetupStep == StepMultisigVerify;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLegacySelected))]
@@ -84,6 +90,14 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private string importXkeyInput = "";
+
+    /// <summary>Optional origin of an imported xpub: master fingerprint (8 hex digits), for PSBTs an external signer can match.</summary>
+    [ObservableProperty]
+    private string importFingerprintInput = "";
+
+    /// <summary>Optional account path of the imported key (e.g. m/84'/746'/0').</summary>
+    [ObservableProperty]
+    private string importPathInput = "";
 
     [ObservableProperty]
     private string importWifInput = "";
@@ -206,6 +220,7 @@ public partial class MainWindowViewModel
     {
         _wizardFlow = WizardFlowKind.ImportXkey;
         ImportXkeyInput = "";
+        ImportFingerprintInput = ImportPathInput = "";
         ImportXkeyDetectedKind = "";
         SetupStep = StepImportXkey;
         StatusMessage = "";
@@ -299,10 +314,38 @@ public partial class MainWindowViewModel
             StatusMessage = Loc.Tr("msg.xkey.invalid");
             return;
         }
+        if (!TryReadImportOrigin(out _, out _))
+            return;
         PasswordInput = ConfirmPasswordInput = "";
         EncryptWallet = true;
         SetupStep = StepPassword;
         StatusMessage = "";
+    }
+
+    /// <summary>
+    /// Reads the optional fingerprint and path fields. Empty means "not given" (no BIP32 origin in
+    /// exported PSBTs); a non-empty field that does not parse sets the status message and fails.
+    /// </summary>
+    private bool TryReadImportOrigin(out NBitcoin.HDFingerprint? fingerprint, out NBitcoin.KeyPath? path)
+    {
+        fingerprint = null;
+        path = null;
+        if (!string.IsNullOrWhiteSpace(ImportFingerprintInput))
+        {
+            fingerprint = HdAccount.ParseFingerprint(ImportFingerprintInput.Trim().ToLowerInvariant());
+            if (fingerprint is null)
+            {
+                StatusMessage = Loc.Tr("msg.xkey.fingerprint.invalid");
+                return false;
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(ImportPathInput)
+            && !DerivationPaths.TryParse(ImportPathInput, out path))
+        {
+            StatusMessage = Loc.Tr("msg.xkey.path.invalid");
+            return false;
+        }
+        return true;
     }
 
     [RelayCommand]
@@ -371,7 +414,8 @@ public partial class MainWindowViewModel
         SetupStep = SetupStep switch
         {
             StepOpen => WalletList.Count > 1 ? StepChooseWallet : StepStart,
-            StepChooseWallet or StepShowSeed or StepWords or StepImportXkey or StepImportWif or StepImportAddress => StepStart,
+            StepChooseWallet or StepShowSeed or StepWords or StepImportXkey or StepImportWif or StepImportAddress or StepMultisig => StepStart,
+            StepMultisigVerify => StepMultisig,
             StepConfirmSeed => StepShowSeed,
             StepPassphrase => _wizardFlow == WizardFlowKind.Restore ? StepWords : StepConfirmSeed,
             StepScriptType => _wizardFlow == WizardFlowKind.ImportWif ? StepImportWif : StepPassphrase,
@@ -379,6 +423,7 @@ public partial class MainWindowViewModel
             {
                 WizardFlowKind.ImportXkey => StepImportXkey,
                 WizardFlowKind.ImportAddress => StepImportAddress,
+                WizardFlowKind.Multisig => StepMultisigVerify,
                 _ => StepScriptType,
             },
             _ => StepStart,
@@ -420,16 +465,24 @@ public partial class MainWindowViewModel
                 case WizardFlowKind.ImportXkey:
                 {
                     var input = ImportXkeyInput.Trim();
+                    if (!TryReadImportOrigin(out var fingerprint, out var accountPath))
+                        return;
                     if (Slip132.TryDecodePublic(input, Profile, out _, out _))
                     {
-                        var (d, a) = WalletLoader.NewFromXpub(input, Profile, SelectedScriptKind);
+                        var (d, a) = WalletLoader.NewFromXpub(input, Profile, SelectedScriptKind, accountPath, fingerprint);
                         (doc, account) = (d, a);
                     }
                     else
                     {
-                        var (d, a) = WalletLoader.NewFromXprv(input, Profile, SelectedScriptKind);
+                        var (d, a) = WalletLoader.NewFromXprv(input, Profile, SelectedScriptKind, accountPath, fingerprint);
                         (doc, account) = (d, a);
                     }
+                    break;
+                }
+                case WizardFlowKind.Multisig:
+                {
+                    var (d, a) = NewMultisigFromInputs();
+                    (doc, account) = (d, a);
                     break;
                 }
                 case WizardFlowKind.ImportWif:
@@ -555,6 +608,8 @@ public partial class MainWindowViewModel
         _password = password;
         MnemonicInput = ConfirmMnemonicInput = PassphraseInput = PasswordInput = ConfirmPasswordInput = WalletNameInput = "";
         ImportXkeyInput = ImportWifInput = ImportAddressInput = ImportXkeyDetectedKind = "";
+        ImportFingerprintInput = ImportPathInput = "";
+        ResetMultisigInputs();
         SetupStep = StepStart;
         OnPropertyChanged(nameof(IsWatchOnlyAccount));
 

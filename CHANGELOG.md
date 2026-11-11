@@ -5,6 +5,83 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
+## [Unreleased]
+
+### Changed
+
+- The dust relay rate (3 sat/vB) moved from a literal in `TransactionFactory` to `ChainProfile.DustRelaySatPerVByte`; the thresholds (P2PKH 546, P2SH 540, P2WPKH 294, P2WSH 330 sat) were verified against Palladium Core v2.1.0 with `testmempoolaccept` (ADR 0049).
+
+### Added
+
+- **Animated-QR (BC-UR) transport of PSBTs** for air-gapped signers: `Core/Wallet/Ur` (bytewords, CBOR subset, fountain code), *Show as animated QR* on the pending and the signed PSBT, and on Android a scanner that collects `ur:` frames into the PSBT box. Fuzz target `ur`. Frames match byte for byte those of foundation-ur-py (golden vectors in the tests); not tried with a real device; the Android scanner change was not built here (ADR 0063).
+- **Sign a PSBT in the GUI** (Send tab, *Sign a PSBT…*): paste or open a `.psbt` file, read the inputs, outputs, change and fee, sign, copy or save the result, and broadcast once the signatures are enough. A multisig wallet can now be completed entirely in the GUI; its information screen shows the descriptors and saves the configuration file, and the creation step loads one, takes a seed passphrase and an account number, shows the own key as a QR, and asks to retype a generated seed (ADR 0062).
+- **Exchange with signers and other wallets**: binary `.psbt` files (read by `sign-psbt`/`combine-psbt`, written with `--psbt-out`), hex PSBT text, `export-multisig` (the Coldcard/Sparrow configuration text, or the descriptors with checksums) and `create-multisig --config FILE`. Fuzz targets `psbt` and `multisigconfig`; the first run found a non-canonical-varint `InvalidDataException` from NBitcoin on a binary PSBT, now mapped to `FormatException`. No real device, Sparrow or Electrum was available to try (ADR 0061).
+- **P2SH-wrapped multisig** (`sh(wsh(sortedmulti(…)))`, BIP48 script type 1'): `--wrapped` on `cosigner-key` and `create-multisig`. Addresses and wallet ID checked against Palladium Core; a 2-of-3 wrapped spend was signed by two cosigners, broadcast and mined on regtest (ADR 0058).
+- **Create a multisig wallet in the GUI**: a wizard flow for the threshold, the N keys, an optional own seed (typed or generated) and the wrapped switch, then a step that shows the wallet ID and asks for the one the other cosigners read; a different ID writes nothing (ADR 0059).
+- The regtest end-to-end runs in CI (`regtest-e2e` job), and Donate is exercised against a real node through a test seam for its address (ADR 0060). A PSBT in the bare shape other wallets export (witness_utxo only, no scripts, no origins) is tested to sign and complete.
+- **Wallet ID for multisig wallets** (the BIP380 descriptor checksum, equal to Bitcoin Core's): printed by `create-multisig`, shown by `info` and in the GUI wallet information, with `create-multisig --expect-id ID` refusing to write a wallet whose ID is not the one another cosigner saw. This is how the cosigners check that no key was swapped in transit (ADR 0057). A multisig wallet now signs only inputs that spend its own addresses.
+- **M-of-N multisig wallets** (native SegWit P2WSH, BIP48 keys, `sortedmulti` addresses) from the CLI: `cosigner-key`, `create-multisig`, `combine-psbt`, and `sign-psbt` for a multisig PSBT. Addresses were checked against Palladium Core's descriptors; a 2-of-3 spend was signed by two cosigners and broadcast on regtest. The GUI opens and syncs such a wallet and prepares its PSBT (ADR 0056). Fuzz target `cosignerkey` for the pasted cosigner keys.
+- Regtest checks against the real stack, in `tests/regtest/e2e.sh`: PSBT interoperability with Palladium Core as the external party (our PSBT signed by the node, the node's PSBT signed by us), and the GUI view model against a real node and plm-fulcrum, including the broadcast reconciliation through a proxy that lies about broadcasts (ADR 0055). The witness tip clamp is tested through the view model's own witness wiring.
+
+- Fuzz target `headerrange`: the shape check of a `blockchain.block.headers` reply is now a parser of its own (`Core/Spv/HeaderRange.cs`, behaviour unchanged) with a seed corpus and a CI smoke job (ADR 0054).
+- Tests for the paths that had none: the zero and invalid amount through the ViewModel (Send and Donate), a Prepare that fails without a field edit (relay fee rising after the user typed a fee), the broadcast-mismatch reconciliation for the Donate tab and for `sign-psbt --broadcast`, the witness connections closed when the primary is replaced, a notification for an already-used address, and the write-failure path of `ElectrumClient`.
+
+- CLI `restore-wif` (import WIF private keys as a spendable wallet, `-` reads them from stdin) and `--kind taproot` (BIP86); taproot and WIF wallets were checked end to end on regtest: sync, spend, broadcast and mined by a node that enforces relay policy (ADR 0053).
+
+- The total of the frozen coins is shown under the balance, so a forgotten freeze is visible; the Send tab shows the coin-control summary on the phone layout too (ADR 0052).
+
+- CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
+
+### Fixed
+
+- Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed and tells the user so ("Transaction not complete: more signatures are needed. Nothing was sent…") instead of doing nothing.
+- A failed write on a server connection failed the pending requests before marking the connection dead, so a caller woken by the failure could still see it as connected; it is now marked dead first, as the read loop does.
+
+- An unknown `--kind` value (a typo such as `taprot`) silently created a native segwit wallet; it is now an error.
+- `info` printed an empty path and extended key for an imported-key wallet; it now says what was imported.
+
+- Malformed CLI input and environment failures escaped as a stack trace (exit 134): an invalid `--path`, `--server` port or `--scan`, a server that refuses the connection, a corrupt wallet file. They are now one-line errors with exit code 1.
+
+- The PSBT of a watch-only wallet could hold a different transaction (another output order) from the one whose txid and fee had just been shown: it is now built from that very transaction (ADR 0045).
+- A server could report an inflated chain tip and make fresh outputs look deeply confirmed; the tip is now checked against a witness server and the lower one is used when they differ by more than 2 blocks (ADR 0045).
+- A TLS connection made without a pin store accepted any certificate; it now validates the certificate normally unless the caller opts out explicitly (ADR 0045).
+- The wallet file is written owner-only (0600 on Unix) and flushed to disk before the rename; before, a wallet saved without a password was readable by other local users, and overlapping `Save`/`SaveAsync` calls shared one temporary file (ADR 0044).
+- The single-instance wallet lock is released and its file removed in one step (`DeleteOnClose`); before, a window after release let two processes own the same wallet.
+- Servers announced by peers are no longer tried automatically as fallbacks, and peers naming `localhost` or private addresses, or ports outside 1–65535, are dropped (ADR 0044).
+- Imported-key wallets (WIF or plain addresses) fetched their address histories concurrently into a shared dictionary, which could silently lose history entries; the results are now gathered before being stored.
+- Importing the same key or address twice crashed the synchronisation (duplicate scriptPubKey) and listed it twice; duplicates are now collapsed on import and when loading an existing wallet file, keeping the copy that has the private key.
+- A transaction reported at different heights by different addresses (a block arriving between the per-address queries) now takes the highest one instead of whichever was read last.
+- Wrapped segwit (P2SH-P2WPKH) wallets could not build a spend: the redeem script is now attached to each input coin, so they can send, and watch-only ones can produce a PSBT.
+
+- A zero amount was accepted for a payment, and a payment below the dust limit of its script (546 sat for P2PKH, 294 sat for P2WPKH, as Bitcoin Core computes it) was built and then rejected by the network; both are now refused before signing, in the watch-only path too.
+- A broadcast reply naming a txid other than the one built was shown as a successful send; it is now reported as not confirmed.
+- Addresses already used before the last sync were not subscribed on the server, so a payment to them was not notified until the next block.
+- A failed write on the server connection left it looking alive until the 30 s request timeout; it is now torn down at once, and an exception thrown by a notification subscriber no longer drops the connection.
+- Reconnecting after the primary server died left the witness connections of the previous session open.
+- The Frozen flag of a UTXO is kept across syncs (it was reset on every sync). No UI sets it yet.
+- Core error messages and comments are in English; the wrong-password message is shown in the UI language.
+- `send` synchronizes the wallet before it builds the transaction. Before, it built from the last saved cache, so a second send right after the first could select an output already spent and fail at broadcast, after printing a txid.
+- The CLI `send --broadcast` and `sign-psbt --broadcast` check that the server's txid is the one computed locally, as the GUI already did.
+- When a broadcast is answered with another txid, the wallet no longer stops at an error: it asks the server for the transaction it built. If the server holds it, the send is done and the anomaly is reported; if not, the transaction stays pending and can be sent again (same signed bytes); if the check cannot be made, it stays pending too. The CLI exits 0 when the transaction is in the network, and otherwise exits 1 and prints the signed hex. See ADR 0047.
+- In the GUI, changing the destination, amount, *Send all*, fee rate or coin selection after **Prepare** left **Confirm** active, so it sent the earlier transaction while the form showed new values. The prepared transaction is now a snapshot: any of those changes discards it and clears the summary, and the summary shows the amount and the full address the transaction really pays, and the change. A sync that finds one of its coins no longer spendable (or freezing one of them) drops it with a message. Same for the Donate tab. See ADR 0048.
+- A watch-only transaction with legacy or wrapped inputs shows "txid not final until signed": its txid changes when signed, so the one shown before was not the one broadcast.
+- A frozen UTXO stays frozen after a CLI sync, and it is excluded from the balance as well as from coin selection (the flag is applied while the UTXOs are built).
+- An address of another network (e.g. a mainnet address on regtest) gives a one-line error instead of a stack trace.
+
+### Added
+
+- A **Coins** tab in the GUI lists every coin of the wallet. A coin can be frozen (it is then never spent, and it leaves the balance; the freeze is saved in the wallet file), and coins can be selected to restrict the next send or donation to them (coin control). See ADR 0046 and the user guide, section 8.7.
+- `sign-psbt` CLI command: signs a PSBT with the wallet's keys after printing inputs, outputs (own change marked) and fee, refuses sighash types other than ALL and a previous transaction that does not match its outpoint, finalises when complete and can broadcast (ADR 0045).
+- The xpub/xprv import step of the GUI takes the optional master fingerprint and account path (ADR 0045).
+- PSBTs attach the full previous transaction of every input, so an offline signer can verify the amounts.
+- Watch-only PSBTs now carry the BIP32 origin of the inputs, of the change output and of the account xpub when the master fingerprint is known, so an external signer can match its keys; `restore-xpub` accepts `--fingerprint` and `--path` (ADR 0044).
+
+### Security
+
+- A raw transaction served by the indexing server is now required to hash to the txid it was requested under (sync, preload from the wallet cache, transaction details, CLI `send`). Before, the Merkle proof covered only the txid, so a hostile server could return a fabricated transaction for a real txid and have it counted as verified (ADR 0043).
+- Block headers not chained to a checkpoint (above the newest one, or on networks without checkpoints) are no longer kept between syncs nor written to the wallet file; proofs for blocks less than 24 deep are re-verified at every sync. This fixes honest servers being reported as untrustworthy after a shallow reorganisation, a state that also survived restarts (ADR 0043).
+- Header-range replies are validated (count within what was requested, hex exactly `count × 80` bytes, valid hex) and a header reaches the cache only after the whole range has been validated against the checkpoint (ADR 0043).
+
 ## [1.2.0] — 2026-11-03
 
 Hardens SPV verification (header anchoring fix, recent-block witness cross-check, chain identity

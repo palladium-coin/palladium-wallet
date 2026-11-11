@@ -5,10 +5,10 @@ using PalladiumWallet.Core.Chain;
 namespace PalladiumWallet.Core.Crypto;
 
 /// <summary>
-/// Serializzazione e parsing SLIP-132 delle chiavi estese (xprv/yprv/zprv e
-/// varianti pubbliche) con gli header di <see cref="ChainProfile.ExtKeyHeaders"/>
-/// (blueprint §3). NBitcoin serializza con i soli header registrati nella Network
-/// (xprv/xpub): le altre varianti si compongono qui come
+/// SLIP-132 serialization and parsing of extended keys (xprv/yprv/zprv and the public
+/// variants) with the headers of <see cref="ChainProfile.ExtKeyHeaders"/> (blueprint §3).
+/// NBitcoin serializes only with the headers registered in the Network (xprv/xpub):
+/// the other variants are composed here as
 /// Base58Check( header 4 byte BE || payload BIP32 74 byte ).
 /// </summary>
 public static class Slip132

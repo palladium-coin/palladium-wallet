@@ -12,6 +12,7 @@ using PalladiumWallet.Core.Chain;
 using PalladiumWallet.Core.Net;
 using PalladiumWallet.Core.Spv;
 using PalladiumWallet.Core.Storage;
+using PalladiumWallet.Core.Wallet;
 
 namespace PalladiumWallet.App.ViewModels;
 
@@ -153,8 +154,9 @@ public partial class MainWindowViewModel
             if (seen.Add(key))
                 yield return (selectedHost, selectedPort);
         }
-        // 2. Other known servers, in list order.
-        foreach (var s in KnownServers)
+        // 2. The shipped (bootstrap) servers, in list order. Servers discovered from peers are
+        // never tried automatically: someone else named them (see ServerRegistry.Trusted).
+        foreach (var s in Registry.Trusted)
         {
             var p = s.PortFor(UseSsl);
             var key = $"{s.Host}:{p}";
@@ -201,7 +203,10 @@ public partial class MainWindowViewModel
                 // synchronizer will use a different client and must be recreated,
                 // but already-downloaded data is preserved via _doc.Cache.
                 PersistPartialTxCache();
-                _synchronizer = null;
+                // Release the dead connection's resources first: its witness connections and the
+                // dead client itself (DisconnectAsync also clears the synchronizer). Without this the
+                // witnesses opened for the previous primary stay open until the next explicit disconnect.
+                await DisconnectAsync();
 
                 // Try all known servers in order; starts with the selected one
                 // and walks the list until the first that responds.
@@ -313,6 +318,7 @@ public partial class MainWindowViewModel
                 // Off the UI thread: sync does heavy CPU work (LINQ over thousands of
                 // cached txs/UTXOs) and blocking JSON/disk I/O between awaits, negligible
                 // on desktop but enough to freeze the UI (ANR) on slower mobile hardware.
+                _synchronizer.FrozenOutpoints = _doc.Cache?.FrozenOutpoints() ?? [];
                 var (result, rawHex, verifiedAt, blockHeaders, anchoredDownTo) = await Task.Run(async () =>
                 {
                     var r = await _synchronizer.SyncOnceAsync(ct);
@@ -327,11 +333,14 @@ public partial class MainWindowViewModel
                     AnchoredDownTo = anchoredDownTo,
                 };
                 FillDisplayFields(cache, result);
+                // The freezes as they are now: the user may have changed one while the sync ran.
+                CoinControl.ApplyFrozen(cache, Profile, _doc.Cache?.FrozenOutpoints() ?? new HashSet<(string Txid, int Vout)>());
                 // Finalise this run BEFORE the save's await: a stale partial snapshot still queued on the
                 // UI thread would otherwise run during the save and replace _doc.Cache with unverified rows.
                 Interlocked.Increment(ref _syncRun);
                 _doc.Cache = cache;
                 ApplyCache(cache);
+                DiscardStalePending(cache); // final state only: a partial snapshot may still be unverified
                 await WalletStore.SaveAsync(_doc, _walletPath!, _password);
                 _syncFailed = false;
                 StatusMessage = $"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
@@ -513,6 +522,8 @@ public partial class MainWindowViewModel
     {
         CertificatePinMismatchException cert =>
             string.Format(Loc.Tr("msg.cert.mismatch"), $"{cert.Host}:{cert.Port}"),
+        WrongPasswordException => Loc.Tr("msg.wrongpassword"),
+        BroadcastTxidMismatchException => Loc.Tr("msg.broadcast.txid.mismatch"),
         WrongChainException chain =>
             string.Format(Loc.Tr("msg.chain.wrong"), $"{chain.Host}:{chain.Port}"),
         _ => ex.Message,

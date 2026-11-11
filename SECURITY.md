@@ -21,7 +21,7 @@ It does **not** protect against:
 
 This wallet is an SPV client, not a full node. It validates:
 
-- Block headers: `SkipPowValidation` is enabled because LWMA difficulty cannot be recomputed client-side, so proof of work is never checked. Instead, every header used for a Merkle proof is hash-chain-linked (prev-hash) **up to the nearest hardcoded checkpoint at or above its height**, and the header at that checkpoint height must hash to the checkpoint exactly (`Core/Chain/ChainProfiles.cs`, enforced in `Core/Spv/WalletSynchronizer.AnchorToCheckpointAsync`, ADR 0040). The direction matters: with PoW skipped, a chain built *from* a checkpoint *up to* a header proves nothing, because anyone can fabricate such a chain; a chain ending in a known hash cannot be forged without inverting SHA-256. Mainnet checkpoints run every 20,000 blocks from 20,000 (so even the oldest blocks are covered) and are extended at each release. **Known limit:** a transaction in a block *above the highest checkpoint* has no checkpoint to anchor to, so only its Merkle proof against the header the server supplied is checked there; the window is the blocks mined since the last release. The wallet flags such transactions as **not anchored** in the history list and in the transaction detail (ADR 0041), so the reduced guarantee is visible instead of silent. For those blocks the wallet also cross-checks the header with a second server taken from the hardcoded bootstrap list (never from announced peers): a different header at a safe depth (3+ blocks) aborts the sync, a shallower disagreement leaves the proof unverified until the next sync, and with no reachable witness only the Merkle proof applies (ADR 0042). This raises the bar from one lying server to two; it does not help against two colluding servers or an attacker in front of both. Testnet/regtest have no checkpoints yet, so headers there are trusted at face value
+- Block headers: `SkipPowValidation` is enabled because LWMA difficulty cannot be recomputed client-side, so proof of work is never checked. Instead, every header used for a Merkle proof is hash-chain-linked (prev-hash) **up to the nearest hardcoded checkpoint at or above its height**, and the header at that checkpoint height must hash to the checkpoint exactly (`Core/Chain/ChainProfiles.cs`, enforced in `Core/Spv/WalletSynchronizer.AnchorToCheckpointAsync`, ADR 0040). The direction matters: with PoW skipped, a chain built *from* a checkpoint *up to* a header proves nothing, because anyone can fabricate such a chain; a chain ending in a known hash cannot be forged without inverting SHA-256. Mainnet checkpoints run every 20,000 blocks from 20,000 (so even the oldest blocks are covered) and are extended at each release. **Known limit:** a transaction in a block *above the highest checkpoint* has no checkpoint to anchor to, so only its Merkle proof against the header the server supplied is checked there; the window is the blocks mined since the last release. The wallet flags such transactions as **not anchored** in the history list and in the transaction detail (ADR 0041), so the reduced guarantee is visible instead of silent. For those blocks the wallet also cross-checks the header with a second server taken from the hardcoded bootstrap list (never from announced peers): a different header at a safe depth (3+ blocks) aborts the sync, a shallower disagreement leaves the proof unverified until the next sync, and with no reachable witness only the Merkle proof applies (ADR 0042). This raises the bar from one lying server to two; it does not help against two colluding servers or an attacker in front of both. Only headers proven to chain to a checkpoint are written to the wallet cache or read back from it; headers above the newest checkpoint are re-fetched at every sync and proofs for blocks less than 24 deep are re-verified, so a reorganisation cannot leave a stale header or verdict behind, and a header-range reply is rejected unless its count and length are exactly what was requested (ADR 0043; the check is a fuzzed parser, `Core/Spv/HeaderRange.cs`, ADR 0054). The chain tip, from which every confirmation count is derived, is also checked against the witness: if the primary reports a tip more than 2 blocks above the witness's, the lower one is used, so a primary cannot make fresh outputs look deeply confirmed (ADR 0045). Testnet/regtest have no checkpoints yet, so headers there are trusted at face value
 - Transaction inclusion in a confirmed block (Merkle branch proof, mandatory for every confirmed transaction — see `Core/Spv/MerkleProof.cs`)
 
 It does **not** validate:
@@ -34,12 +34,14 @@ The indexing server (ElectrumX-compatible, port 50001/50002) is a **semi-trusted
 
 - Lie about unconfirmed (mempool) transactions — the wallet shows mempool transactions as unconfirmed and non-spendable
 - Refuse to relay a broadcast transaction
+- Answer a broadcast with a txid other than the one of the transaction sent. The wallet compares the reply with the txid it computed itself (`BroadcastVerifiedAsync`); on a mismatch it does not believe either side, but asks the server for the transaction by its txid. A transaction the server returns with the right hash is reported as in the network, one it does not know stays pending and can be sent again (same signed bytes, harmless to repeat), and a check that cannot be made also keeps it pending (ADR 0047). The answer to that check comes from the same server, so a send is only certain once a sync shows it in the wallet history.
 - Delay reporting of new blocks
 - Suggest misleading fee estimates or relay fee (the wallet ignores implausible values, never goes below the relay fee, and always shows the absolute fee, flagging one above 1% of the amount — ADR 0039)
 
 It cannot (given correct Merkle verification):
 
 - Fabricate a confirmed transaction with a valid Merkle proof
+- Serve a different transaction than the one requested for a txid: every downloaded (and every cached) raw transaction must hash to the txid it is filed under (`Core/Spv/VerifiedTransactions.cs`, ADR 0043), otherwise the Merkle proof, which covers only the txid, would not bind the content. The txid excludes witness data, so signatures of a served transaction are not covered (balances and amounts are)
 - Forge a payment to a wrong address
 
 **Chain identity.** Right after the handshake the wallet checks that the server is on the Palladium chain (`Core/Spv/ChainVerifier.cs`, ADR 0036): `genesis_hash` from `server.features` must match the profile, and the header at the highest checkpoint not above the server's tip must hash to the hardcoded checkpoint. Mainnet shares Bitcoin's genesis, so the checkpoint header is what actually distinguishes it; testnet/regtest (no checkpoints) rely on the genesis alone. A server whose tip is below the first checkpoint is accepted on the genesis check alone.
@@ -81,14 +83,23 @@ a sync, never a partial one, so no unverified data survives a restart.
 - Authentication: GCM tag (16 bytes) — any tampering is detected before decryption
 - A malformed container (broken JSON, missing fields, bad base64, wrong nonce/tag size) always fails with a typed `InvalidDataException`, never a raw parser exception — the decrypt path is fuzz-tested (`tests/PalladiumWallet.Fuzz`)
 - The user can explicitly opt out of encryption (UI shows a warning); the `WalletStore.Save` API accepts `null` password only when the caller has confirmed user intent
+- The wallet file is written owner-only (0600 on Unix, whether or not it is encrypted), flushed to disk and renamed over the old one, so a crash leaves the old file or the new one, never a partial one. The single-instance lock file is removed in the same step that releases the lock (ADR 0044)
 
 ---
 
 ## TLS certificate pinning
 
-Connections to the indexing server use TOFU (Trust On First Use): the server's TLS certificate is pinned on first connection and stored in `server-certs.json`. A certificate change triggers a hard error (`CertificatePinMismatchException`) requiring explicit reset by the user. This prevents silent MITM substitution after first connection.
+Connections to the indexing server use TOFU (Trust On First Use): the server's TLS certificate is pinned on first connection and stored in `server-certs.json`. A certificate change triggers a hard error (`CertificatePinMismatchException`) requiring explicit reset by the user. This prevents silent MITM substitution after first connection. **Known limit:** the first contact with a self-signed server is trusted as it is, so a man in the middle at that very moment is not detected. A connection made without a pin store is validated like any HTTPS connection (chain and host name); nothing in the wallet disables that, and only the server probe tool opts out explicitly (ADR 0045).
 
 ---
+
+## PSBT signing
+
+`sign-psbt` signs a PSBT that came from outside, so it is treated as untrusted input (ADR 0045): only `SIGHASH_ALL` is signed, a previous transaction attached to an input must hash to the outpoint it is supposed to fund, a watch-only wallet refuses, and the inputs, outputs (with the wallet's own change marked) and fee are printed before the result. An input amount that is not backed by a full previous transaction is flagged as unverified. The PSBTs the wallet itself produces are built from the very transaction whose txid and fee were shown, and carry the previous transactions and, when the master fingerprint is known, the BIP32 origin.
+
+## Servers announced by peers
+
+Servers learned through peer discovery are listed and can be selected by the user, but the wallet never connects to one on its own: the automatic fallback after a connection failure uses only the servers shipped in the profile's bootstrap list, and peers naming `localhost`, private, link-local or otherwise non-public addresses are dropped (ADR 0044). A hostile server therefore cannot steer the wallet to servers of its choosing or have it probe the user's own network.
 
 ## Backup
 
@@ -113,9 +124,27 @@ This is a complement to, not a substitute for, independent human or third-party 
 - No Tor/proxy support (network traffic reveals which addresses are being queried)
 - No multi-server pooling (single point of failure for the indexing server)
 - No hardware wallet integration
-- No coin control (automatic UTXO selection only)
+- Coin control is a manual selection of coins and a freeze flag (ADR 0046), with no privacy-aware selection
 - No RBF/CPFP UI (RBF flag is set on all transactions, but fee bumping is not exposed)
 - No Lightning Network support
-- No multisig (M-of-N) wallets: the network profile defines multisig SLIP-132 header
-  variants, but derivation for them is not implemented — attempting to use one throws
-  rather than silently producing an insecure/incorrect wallet
+- Multisig (M-of-N) is native SegWit (P2WSH) or P2SH-wrapped (P2SH-P2WSH), created from the CLI or the GUI, with no
+  hardware signer integration; PSBT files and the multisig configuration file are exchanged in the formats such signers use (ADR 0061), but only Palladium Core has been exercised as the external party. A cosigner
+  key cannot be authenticated by the wallet (there is no PKI; the key is just a public key): a key swapped while it
+  travels between the cosigners would put a stranger among them. What the wallet does is make the check cheap and
+  enforceable: the **wallet ID** (the BIP380 checksum of the descriptor, covering every key and the threshold,
+  independent of entry order) is printed at creation, shown in `info` and in the GUI (in the creation flow, where a
+  mismatching ID typed in writes nothing, and in the wallet information), and `create-multisig --expect-id` refuses to write a wallet whose ID differs from the one another cosigner saw. The
+  comparison itself must happen over a channel the attacker does not control; without `--expect-id` the wallet says
+  `NOT VERIFIED`. A multisig wallet also signs only inputs it recognises as its own addresses and refuses a PSBT whose
+  witness (or redeem) script is not its own (ADRs 0057, 0058, 0059)
+- PSBTs can travel as animated QR codes (BC-UR, ADR 0063). The decoder treats every frame as untrusted (bounded sizes, CRC-32 on the whole message, fuzzed), and a scanned PSBT goes through the same review as a pasted one, but a QR carries no authentication: what the wallet shows (inputs, outputs, change, fee) is what protects the user, not the transport.
+
+### Not yet verified
+
+These are gaps in testing, not known faults; none has been observed to fail.
+
+- **Real signers and other wallets.** The PSBT and multisig configuration formats (ADR 0061, 0062) and the animated-QR transport (ADR 0063) have been exercised against Palladium Core and, for the UR frames, an independent implementation (foundation-ur-py), but not against Coldcard, Ledger, Trezor, Sparrow or Electrum.
+- **Android QR scanner.** The change that collects `ur:` frames in `ScannerActivity` has not been compiled or run; plain address QR codes follow the unchanged path.
+- **CI regtest end-to-end.** The `regtest-e2e` job (ADR 0060) has never run on GitHub; the script passes locally.
+- **Translations.** The wizard, PSBT and animated-QR texts (`wiz.multisig.*`, `psbt.*`) are not reviewed by native speakers in es, fr, pt, de and zh.
+- **Release state.** The `dev` branch is not published yet.

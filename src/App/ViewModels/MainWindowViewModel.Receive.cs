@@ -31,6 +31,10 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string verifyingText = "";
 
+    /// <summary>Total of the frozen coins, shown under the balance so that a forgotten freeze is visible (ADR 0052).</summary>
+    [ObservableProperty]
+    private string frozenText = "";
+
     [ObservableProperty]
     private string networkInfo = "";
 
@@ -274,8 +278,10 @@ public partial class MainWindowViewModel
             UnconfirmedText = "";
             ImmatureText = "";
             VerifyingText = "";
+            FrozenText = "";
             ReceiveAddress = _account.GetReceiveAddress(0).ToString();
             History.Clear();
+            RefreshCoins(null);
             Addresses.Clear();
             for (var i = 0; i < 10; i++)
                 Addresses.Add(new AddressRow(_loc["addr.receive"], i,
@@ -291,6 +297,7 @@ public partial class MainWindowViewModel
         // negative. SpendableSats is computed directly from the same IsSpendable gate
         // coin selection uses, so it's always correct.
         BalanceText = Fmt(cache.SpendableSats);
+        RefreshCoins(cache);
         var pending = cache.History.Where(t => t.Height <= 0).Sum(t => t.DeltaSats);
         UnconfirmedText = pending != 0
             ? $"{Loc.Tr("msg.pending")}: {(pending > 0 ? "+" : "")}{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"
@@ -303,6 +310,11 @@ public partial class MainWindowViewModel
         // as immature/pending, distinct wording so it doesn't read as a maturity/confirmation problem.
         VerifyingText = cache.PendingVerificationSats != 0
             ? $"{Loc.Tr("msg.verifying")}: {Fmt(cache.PendingVerificationSats)} — {Loc.Tr("msg.notspendable")}"
+            : "";
+        // A frozen coin is left out of the balance above; saying so keeps a forgotten freeze visible.
+        var frozenSats = cache.Utxos.Where(u => u.Frozen).Sum(u => u.ValueSats);
+        FrozenText = frozenSats != 0
+            ? string.Format(Loc.Tr("msg.frozen"), Fmt(frozenSats))
             : "";
         ReceiveAddress = _account.GetReceiveAddress(cache.NextReceiveIndex).ToString();
         History.Clear();

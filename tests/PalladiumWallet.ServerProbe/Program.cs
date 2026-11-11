@@ -84,7 +84,7 @@ async Task<(bool Ok, int? Height)> Probe((string Host, int Port, bool Ssl) s)
     {
         client = await Step("connect+handshake", async ct =>
         {
-            var c = await ElectrumClient.ConnectAsync(s.Host, s.Port, s.Ssl, pins: null, ct);
+            var c = await ElectrumClient.ConnectAsync(s.Host, s.Port, s.Ssl, pins: null, ct, acceptAnyCertificate: true);
             return (c, s.Ssl ? "TLS fingerprint " + await Fingerprint(s.Host, s.Port, ct) : "plaintext", !s.Ssl);
         });
         if (client is null) return (false, null);

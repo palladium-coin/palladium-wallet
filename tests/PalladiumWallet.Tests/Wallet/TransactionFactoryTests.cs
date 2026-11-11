@@ -477,4 +477,40 @@ public class TransactionFactoryTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void A_wrapped_segwit_account_can_build_and_sign_a_spend()
+    {
+        // P2SH-P2WPKH inputs need the redeem script on the coin; without it NBitcoin cannot even
+        // estimate the input size. Found by spending from a wrapped wallet on regtest.
+        Assert.True(Bip39.TryParse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            out var mnemonic));
+        var account = HdAccount.FromMnemonic(mnemonic!, null, ScriptKind.WrappedSegwit, Profile);
+        var funding = Net.CreateTransaction();
+        funding.Inputs.Add(new TxIn(new OutPoint(uint256.One, 0)));
+        funding.Outputs.Add(Money.Satoshis(2_000_000), account.GetReceiveAddress(0));
+        var txid = funding.GetHash().ToString();
+        var utxos = new List<CachedUtxo>
+        {
+            new() { Txid = txid, Vout = 0, ValueSats = 2_000_000, Address = account.GetReceiveAddress(0).ToString(),
+                    Height = 100, Verified = true },
+        };
+        var destination = new Key().PubKey.GetAddress(ScriptPubKeyType.Segwit, Net);
+
+        var built = new TransactionFactory(account).Build(
+            utxos, new Dictionary<string, Transaction> { [txid] = funding }, destination,
+            1_000_000, 3m, changeIndex: 0, tipHeight: 200);
+
+        Assert.True(built.Signed);
+        Assert.True(built.Transaction.Inputs[0].WitScript.PushCount > 0); // segwit witness present
+        Assert.NotEqual(Script.Empty, built.Transaction.Inputs[0].ScriptSig);     // the P2SH redeem-script push
+        Assert.Contains(built.Transaction.Outputs, o => o.Value == Money.Satoshis(1_000_000));
+
+        var watchOnly = HdAccount.FromAccountXpub(account.AccountXpub, ScriptKind.WrappedSegwit, Profile);
+        var unsigned = new TransactionFactory(watchOnly).Build(
+            utxos, new Dictionary<string, Transaction> { [txid] = funding }, destination,
+            1_000_000, 3m, changeIndex: 0, tipHeight: 200);
+        Assert.False(unsigned.Signed);
+    }
 }

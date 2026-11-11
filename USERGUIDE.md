@@ -56,7 +56,6 @@ What this wallet intentionally does **not** include (as of this version):
 
 - Lightning Network
 - Hardware-wallet integration
-- Coin control (manual UTXO selection) — coin selection is always automatic
 - RBF fee bumping (transactions *signal* RBF, but there is no "bump fee" button)
 - Tor/proxy support — the indexing server can observe which addresses you query
 - Fiat currency conversion
@@ -121,7 +120,8 @@ The coin type in the derivation path is **746** on mainnet (1 on testnet/regtest
 |---|---|---|---|
 | HD (BIP39 seed) | Create new / Restore from seed | Yes | The normal case |
 | HD (imported xprv) | Import extended key (xprv/yprv/zprv) | Yes | Full account key, no seed words |
-| Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing |
+| Watch-only (xpub) | Import extended key (xpub/ypub/zpub) | **No** | Sees balances/history; cannot sign. In the GUI it can *prepare* a transaction preview but not sign or broadcast it. The CLI produces an unsigned PSBT for offline signing (`sign-psbt` signs it on the machine with the seed) |
+| Multisig (M-of-N) | Wizard *Multisig wallet*, or CLI `create-multisig` | Only with `M` cosigners | P2WSH or P2SH-P2WSH, BIP48 keys, addresses as `sortedmulti`. The GUI creates, opens, syncs and shows it and prepares the PSBT, but never broadcasts an incomplete transaction. See [8.8](#88-multisig-wallets). |
 | Imported WIF keys | Import WIF key(s) | Yes | Fixed address list, **no HD derivation and no change chain — change always returns to the first imported address** (this links your coins together; prefer an HD wallet for privacy) |
 
 The extended-key format is **SLIP-132**: `xpub`/`xprv` (Legacy and Taproot), `ypub`/`yprv`
@@ -320,7 +320,7 @@ applicable.
 
 ## 6. The main screen
 
-Five tabs: **History**, **Send**, **Receive**, **Addresses**, **Contacts**.
+Six tabs: **History**, **Send**, **Receive**, **Addresses**, **Contacts**, **Coins**.
 
 - **Balance** (top): confirmed, spendable balance in your chosen unit. Below it, when
   applicable, two amber advisory lines: *pending confirmation* (mempool, unproven, not
@@ -359,6 +359,12 @@ funds, do not skip ahead by more than 20 — a payment to address #30, with #10�
 would **not be found after a restore from seed**. Under normal use (addresses handed out
 sequentially, most getting used) this never triggers. The limit (20) is stored per wallet
 and is not editable in the GUI.
+
+*Example.* A wallet whose last used address is #4 scans #5–#24 and stops. If someone pays
+address **#45**, that payment is invisible after a restore from seed (and to a sync from a
+cache that never saw it): the balance stays at zero although the coins are on the chain.
+Nothing is lost: the funds appear once the wallet scans that far, so never hand out an address
+more than 20 positions beyond the last used one.
 
 ---
 
@@ -400,16 +406,35 @@ wallet must be spendable (not watch-only) to actually broadcast.
 Sending is a **two-step** operation:
 
 1. **Prepare transaction** — builds and signs the transaction locally, without sending
-   anything. The summary card shows the txid (truncated), the **exact fee**, and the virtual
-   size, e.g. `txid 4f3a…| fee 0.00000141 PLM (141 vB)`. Nothing has left your wallet yet;
-   you can change the fields and prepare again, or simply navigate away to abandon it.
+   anything. The summary card is read from the transaction itself: the **amount and the full
+   address** it pays, the change that comes back to your wallet, then the txid (truncated), the
+   **exact fee**, and the virtual size, e.g. `txid 4f3a…| fee 0.00000141 PLM (141 vB)`. Check
+   the address character by character: it is what will be paid. Nothing has left your wallet
+   yet.
+
+   The prepared transaction is a **snapshot**. If you change anything that went into it (the
+   destination, the amount, *Send all*, the fee rate, or the coins selected in the Coins tab),
+   it is discarded and the summary clears: prepare again. The confirm button only ever sends
+   the transaction whose summary you are looking at. If a sync then finds that one of its
+   coins is no longer spendable (spent elsewhere, back in the mempool after a reorganisation,
+   or frozen), the prepared transaction is dropped with a message, and you prepare it again.
+   The Donate tab works the same way.
 2. **CONFIRM AND BROADCAST** — transmits the prepared transaction to the server. Success
    shows the full txid; the form clears and a re-sync starts. After broadcasting, **a
    transaction cannot be cancelled** — it is in the network's mempool and will confirm.
 
+   In the rare case that the server answers with a txid that is not the one of your
+   transaction, the wallet asks the server for the transaction itself. If the server has it,
+   the send is done and the message says the server replied with a different txid (report it
+   to the server's operator). If the server does not have it, or the check could not be made,
+   the transaction stays **pending**: press confirm again to send the same transaction once
+   more, which is harmless. The sure sign that a send went through is that it appears in your
+   history after the re-sync.
+
 ### 8.3 How the transaction is built (facts you may need)
 
-- **Coin selection is automatic** (there is no coin control). The wallet spends from its
+- **Coin selection is automatic** unless you choose coins yourself in the Coins tab (see
+  [section 8.7](#87-coins-tab-and-coin-control)). The wallet spends from its
   spendable UTXOs and sends any **change back to its own internal change chain** — this is
   why, in transaction details, one output to an address you don't recognize as "yours" may
   still be marked as yours: it is your change.
@@ -444,11 +469,108 @@ watch-only + offline-signing workflow, use the **CLI**, whose `send` command pri
 ([section 17](#17-command-line-interface-cli)). Sign that PSBT on the offline machine with
 software of your choice, then broadcast the finalized transaction.
 
+The CLI can also be the offline signer: on the machine that holds the seed, run
+`sign-psbt <psbt-base64> --file seed-wallet.json` (see [section 17](#17-command-line-interface-cli)).
+It prints the inputs, outputs (your own change marked) and fee, signs, and, when every input
+is signed, prints the final transaction; with `--broadcast --server …` it also transmits it.
+For an external or hardware signer to recognise its keys in the PSBT, import the xpub with
+its **master fingerprint** and **account path** (the import step of the GUI and
+`restore-xpub --fingerprint … --path …` both take them). Note that for legacy and
+P2SH-wrapped inputs the txid shown before signing is not the final one; for native segwit it is.
+
 ### 8.6 The Donate tab (Help → Donate)
 
 The Help overlay includes a donation form (developer address
 `plm1qdq3gu2zvg9lyr8gxd6yln4wavc5tlp8prmvfay`) using the same prepare/confirm flow and the
 fee rate from the Send tab (an invalid rate is reported as an error). Entirely optional.
+
+### 8.7 Coins tab and coin control
+
+The **Coins** tab lists every coin (UTXO) of the wallet with its amount, its outpoint
+(`txid:vout`), its address and its status.
+
+- **Freeze / Unfreeze.** A frozen coin is never spent: not by automatic selection, and not by
+  coin control. Its value is also left out of the balance. The freeze is saved in the wallet
+  file, so it survives restarts and syncs. A coin you froze and forgot keeps its value out of
+  the balance until you unfreeze it; so that it cannot go unnoticed, the total of the frozen
+  coins is shown under the balance ("Frozen coins: …").
+- **Use in next send.** Select spendable coins to restrict the next send (or donation) to them.
+  A summary appears in the Send tab (desktop and phone layout), and *Clear selection* removes it. A successful send
+  clears the selection. The selection is not saved: it is gone when you restart the app.
+- If a selected coin stops being spendable (for example, it becomes unconfirmed after a
+  chain reorganisation), the send is blocked with a message until you deselect that coin.
+
+### 8.8 Multisig wallets
+
+An **M-of-N multisig** wallet needs `M` signatures out of `N` cosigners to spend. No single device (or
+person) can move the funds alone, and losing up to `N - M` keys does not lose them. This wallet supports
+**native SegWit (P2WSH)** multisig with keys derived as BIP48 (`m/48'/746'/0'/2'`), or the older **P2SH-P2WSH** form
+(`…/1'`, for signers that cannot read bech32 addresses; pass `--wrapped`, or tick the box in the GUI), and addresses built the way
+Bitcoin Core's `wsh(sortedmulti(M, …))` and Sparrow do (keys sorted, BIP67), so **the order in which you enter the
+cosigners does not matter** and the addresses can be checked against any of them.
+
+**Setting it up in the GUI.** On the first screen choose *Multisig wallet*. Enter the threshold `M`, paste all `N`
+keys (yours too, one per line), and either type your own seed or press *New seed* (it is kept in the encrypted
+wallet file; read it again under Wallet information). *Show my key* prints the key to hand to the others; tick
+*P2SH-P2WSH* first if the wallet is the wrapped type, since the key differs. Next comes the **wallet ID**, shown
+large: type the ID the other cosigners read (see step 3 below). A different one is refused and nothing is
+saved; leaving it empty creates the wallet but warns that it is **not verified**. Without a seed the wallet
+only follows the funds and prepares PSBTs.
+
+**Setting it up (command line).** Every cosigner, on its own device and from its own seed:
+
+1. `cosigner-key "<its mnemonic>"` prints its key, `[73c5da0a/48'/746'/0'/2']Zpub…`: the master fingerprint, the path
+   and the public key. It is public; send it to the others by any channel, **then check it out of band** (read the
+   fingerprint aloud): a key swapped in transit would put a stranger among the cosigners.
+2. With all `N` keys, each cosigner runs
+   `create-multisig --threshold M --cosigner KEY1 --cosigner KEY2 … --mnemonic "<its mnemonic>"`.
+   The same keys give the same wallet on every device, and the command prints its **wallet ID** (8 characters,
+   the descriptor checksum Bitcoin Core also computes): it covers every key and the threshold, whatever order they
+   were typed in, and changes if a single key was altered.
+3. **Check the wallet ID.** The wallet cannot tell a genuine cosigner key from one swapped on its way, so the
+   cosigners compare the ID over a channel the attacker does not control (in person, a call, a different messenger
+   from the one that carried the keys). Easiest: the first cosigner creates the wallet and reads the ID to the others,
+   who create theirs with `--expect-id ID`: the wallet is **not written** if the ID differs, and the command says
+   the keys are not the ones the other cosigner saw. Without `--expect-id` the command says `NOT VERIFIED`. The ID
+   is also in `info` and, in the GUI, in the wallet information. Also compare the first receive address if you
+   like, before receiving anything. A file made without `--mnemonic` is a watch-only copy that can follow the funds
+   and build a PSBT but sign nothing.
+
+**Spending.** (A multisig wallet signs only inputs it recognises as spending its own addresses, and
+refuses a PSBT whose witness script is not its own.)
+
+1. One cosigner runs `sync`, then `send --to ADDRESS --amount X`: the output is a PSBT already carrying that
+   cosigner's signature (and, in the PSBT, the key origins and the change output's script, so the other signers can
+   check where the change goes).
+2. Each other cosigner, from the PSBT text and its own file: `sign-psbt <psbt> --file its.json`. It lists the
+   inputs, the outputs (its own change is marked) and the fee before the signed PSBT: **read them: you are signing
+   for the others too**. When `M` signatures are present it also prints the final transaction.
+3. `combine-psbt <psbt-1> <psbt-2> …` merges the cosigners' copies (they must be of the same transaction),
+   prints the final transaction when there are enough signatures, and `--broadcast --server host:port` sends it.
+   `sign-psbt … --broadcast` does the same for the last cosigner.
+
+The GUI shows the same wallet (balance, history, addresses, Coins tab) and its Send tab prepares the PSBT to pass on;
+it never offers to broadcast a transaction that is not complete.
+
+**In the GUI.** The Send tab has a **Sign a PSBT…** button: paste the PSBT (base64 or hex) or *Open file…* (a binary
+`.psbt` too), press *Sign*, and read what it shows (inputs, outputs with your own change marked, the fee) before you pass
+it on. The result can be copied or saved as a `.psbt` file; when the signatures are enough, *Broadcast* sends it. The wallet
+information screen of a multisig wallet shows its descriptors and saves the configuration file for a signer, and the creation
+step can load such a file, takes an optional seed passphrase and an account number, and shows your own key as a QR code.
+
+**Animated QR for air-gapped signers.** Next to a pending PSBT (Send tab) and next to a signed result (*Sign a PSBT…*),
+*Show as animated QR* cycles the PSBT as a UR (`crypto-psbt`) that a signer with a camera reads (Keystone, Passport, Jade,
+SeedSigner, Sparrow's QR mode): hold the signer steady until it has read every frame; the frames repeat. On Android, *Scan QR…*
+in *Sign a PSBT…* reads the PSBT back from the signer's screen, animated or not, into the box, where you review it as usual.
+
+**Hardware signers and other wallets.** `sign-psbt` and `combine-psbt` take a `.psbt` file (the binary file a signer
+reads from and writes to an SD card, or one Sparrow saves), base64 or hex text, or `-`; add `--psbt-out FILE` to
+`send`, `sign-psbt` or `combine-psbt` to also write the binary file. `export-multisig --out FILE` writes the
+configuration text a signer registers a multisig wallet from (Coldcard, Sparrow), and `export-multisig --format
+descriptor` prints the descriptors with their checksums; `create-multisig --config FILE` builds the wallet from such a
+file, with your own `--mnemonic`. **These formats are implemented to what the tools document, but no real signer,
+Sparrow or Electrum has been tried against them**: only Palladium Core has. Check the first transaction with a small
+amount, and compare the wallet ID or first address shown by the device.
 
 ---
 
@@ -545,10 +667,11 @@ server…*, or menu *Network* on desktop). Fields:
 - **Known servers** list — click an entry to select it. The wallet ships with four bootstrap
   mainnet servers and remembers any servers learned via discovery.
 - **Discover servers (peers)** — asks the connected server for its known peers and adds new
-  ones to the list.
+  ones to the list (hosts that are not public — `localhost`, private networks — are skipped).
+  A discovered server is never used automatically: pick it yourself if you want it.
 
 Connection behavior: the wallet tries your selected server first, then walks the rest of
-the known list until one answers. The last working server is remembered and reused at next
+the shipped (bootstrap) servers until one answers. The last working server is remembered and reused at next
 launch. A 20-second keep-alive ping detects drops and reconnects automatically;
 server push notifications trigger instant re-syncs when a new block or a relevant
 transaction appears (*"Real-time updates active"*).
@@ -741,8 +864,8 @@ A condensed version of the project's published threat model (`SECURITY.md`).
   irreversible.
 
 **Honest limitations of this version** (also listed in [section 1](#1-what-palladium-wallet-is-and-is-not)):
-single server connection (no pooling), no coin control, no fee estimation, no RBF bumping,
-no hardware wallets, no Tor, GUI mainnet-only, and PSBT export only via the CLI.
+single server connection (no pooling), no fee estimation, no RBF bumping,
+no hardware wallets, no Tor, GUI mainnet-only, and PSBT export and signing only via the CLI.
 
 ---
 
@@ -769,8 +892,8 @@ with the explicit `--no-encryption`** (a warning is printed); forgetting the pas
 longer produces a plaintext wallet. Examples:
 `printf '%s\n' "$PW" | dotnet run --project src/Cli -- restore "<words>" --password-stdin`,
 `PLM_PW=… dotnet run --project src/Cli -- info --password-env PLM_PW`.
-`--kind legacy|wrapped|segwit` selects the script type (default Native SegWit — note that
-only the literal values `legacy` and `wrapped` switch away from the default). Errors print
+`--kind segwit|wrapped|legacy|taproot` selects the script type (default Native SegWit; `taproot`
+is BIP86, key-path only). Any other value is an error, never a silent default. Errors print
 to stderr and set exit code 1.
 
 ### Wallet commands
@@ -793,10 +916,25 @@ restore  "<mnemonic>" [same options as create]
 Restores from an existing mnemonic (quoted, words space-separated).
 
 ```
+restore-wif  <wif1,wif2,...|-> [--kind K] [--net N] [--no-encryption] [--file PATH]
+```
+Imports one or more **WIF private keys** as a spendable wallet: no seed, nothing is derived,
+so only those keys' addresses are tracked, and the same key twice is stored once. `-` reads
+the keys from standard input (one per line or comma separated), which keeps them out of the
+process list and the shell history. The script type (`--kind`) decides which address each key
+yields, and must match the type the funds were sent to. A key of another network is refused.
+The keys are stored in the wallet file, so give it a password (the default) or
+`--no-encryption` on purpose.
+
+```
 restore-xpub <slip132-key> [--net N] [--no-encryption] [--file PATH]
+             [--fingerprint HEX8 --path m/...]
 ```
 Creates a **watch-only** wallet from an xpub/ypub/zpub; the script type is inferred from
-the key prefix.
+the key prefix. To have the PSBTs it exports recognised by an external or hardware signer,
+pass the **master key fingerprint** (8 hex digits) and the **account path** the key came
+from (for example `--fingerprint 73c5da0a --path "m/84'/746'/0'"`). Without a fingerprint
+the PSBT carries no BIP32 origin information.
 
 ```
 info     [--net N] [--file PATH] [--addresses]
@@ -826,7 +964,8 @@ marked as unverified.
 send     --to ADDRESS (--amount X | --all) [--feerate R] [--broadcast]
          [--server ...] [--ssl] [--net N] [--file PATH]
 ```
-Builds a transaction from the synced cache (`sync` must have been run first). `--amount` is
+Synchronizes first (a spend must start from the chain's current state, never from an older cache),
+then builds the transaction. `--amount` is
 in **PLM**; `--all` sends everything minus the fee. `--feerate` is in sat/vB, **default 1**.
 Behavior by wallet type and flags:
 
@@ -838,6 +977,38 @@ Behavior by wallet type and flags:
   broadcast elsewhere.
 - Spendable wallet, **with `--broadcast`** → signs, transmits, prints the txid. Irreversible
   from this point.
+
+```
+utxos     [--net N] [--file PATH]
+freeze    <txid>:<vout> [--net N] [--file PATH]
+unfreeze  <txid>:<vout> [--net N] [--file PATH]
+```
+Work offline on the coins of the last `sync` (modelled on Bitcoin Core's `listunspent` and
+`lockunspent`). `utxos` lists each coin with its confirmations and state (spendable, frozen,
+unconfirmed, awaiting SPV proof) and the frozen total. A **frozen** coin is kept out of every
+spend, automatic or manual, and stays frozen across later syncs. `freeze` and `unfreeze` take a
+coin as printed by `utxos`.
+
+```
+cosigner-key    "<mnemonic>" [--wrapped] [--account N] [--passphrase W] [--net N]
+create-multisig (--threshold M --cosigner KEY … | --config FILE) [--wrapped] [--mnemonic "<words>"] [--passphrase W] [--expect-id ID] [--net N] [--file PATH]
+export-multisig [--format descriptor] [--name N] [--out FILE] [--net N] [--file PATH]
+combine-psbt    <base64|hex|file.psbt|-> <psbt> … [--psbt-out FILE] [--broadcast --server ...] [--ssl] [--net N]
+```
+Multisig (see [8.8](#88-multisig-wallets)). `cosigner-key` prints the key to hand to the other cosigners.
+`create-multisig` takes **all `N` keys** (this wallet's included) and, with `--mnemonic`, the seed of one of them,
+found by its fingerprint; `--expect-id` refuses to write the wallet unless its ID is the given one; a seed that matches no key, the same key twice, `M` outside `1..N` or fewer than two keys are
+refused. `combine-psbt` merges copies of one PSBT (`-` reads them from stdin, one per line).
+
+```
+sign-psbt  <base64|-> [--scan N] [--broadcast --server ...] [--ssl] [--net N] [--file PATH]
+```
+Signs a PSBT with this wallet's keys. `-` reads the PSBT from standard input. It refuses a
+watch-only wallet, any input that asks for a sighash other than ALL, and a previous
+transaction that does not match its outpoint. It prints inputs, outputs and fee, then the
+signed PSBT; if every input is signed it also prints the txid and the final transaction, and
+`--broadcast` sends it. `--scan` is how many receive and change addresses to try when matching
+keys to inputs (default: enough for the wallet's used addresses plus the gap limit, at least 100).
 
 ```
 servers  [--discover] [--server ...] [--ssl] [--net N]

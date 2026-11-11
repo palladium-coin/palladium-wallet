@@ -30,6 +30,11 @@ public static class FuzzTargets
             ["walletdoc"] = WalletDoc,
             ["encfile"] = EncFile,
             ["peers"] = Peers,
+            ["headerrange"] = HeaderRangeReply,
+            ["cosignerkey"] = CosignerKey,
+            ["psbt"] = PsbtInput,
+            ["multisigconfig"] = MultisigConfigFile,
+            ["ur"] = UrFrames,
         };
 
     /// <summary>Runs one input through a named target (used by replay and the regression test).</summary>
@@ -137,5 +142,81 @@ public static class FuzzTargets
         catch (JsonException) { return; }
         using (doc)
             ElectrumApi.ParsePeers(doc.RootElement);
+    }
+
+    // blockchain.block.headers replies are attacker-controlled: a count and a hex string.
+    // Input layout: int32 count, int32 requested, then the hex text. Contract: HeaderRange.Split returns
+    // exactly `count` headers of 160 characters within the request, or throws SpvVerificationException.
+    private static void HeaderRangeReply(byte[] data)
+    {
+        if (data.Length < 8)
+            return;
+        var count = BitConverter.ToInt32(data, 0);
+        var requested = Math.Abs(BitConverter.ToInt32(data, 4) % 2001);
+        var hex = Utf8(data[8..]);
+        try
+        {
+            var headers = HeaderRange.Split(new HeaderRangeResponse(count, hex), requested, 0);
+            if (headers.Length != count || count < 1 || count > requested || headers.Any(h => h.Length != BlockHeaderInfo.Size * 2))
+                throw new InvalidOperationException("HeaderRange.Split returned a result outside its contract.");
+        }
+        catch (SpvVerificationException) { }
+    }
+
+    // A cosigner key ([fingerprint/path]xpub) is pasted from another person and never trusted.
+    // Contract: TryParse never throws, for any text, on any network; a result it accepts is consistent
+    // (the origin's depth is the key's depth) and survives a round trip through its text form.
+    private static void CosignerKey(byte[] data)
+    {
+        var text = Utf8(data);
+        foreach (var profile in new[] { ChainProfiles.Mainnet, ChainProfiles.Regtest })
+        {
+            if (!Cosigner.TryParse(text, profile, out var cosigner))
+                continue;
+            if (cosigner!.Xpub.Depth != cosigner.AccountPath.Length)
+                throw new InvalidOperationException("TryParse accepted a key whose origin contradicts its depth.");
+            if (!Cosigner.TryParse(cosigner.ToText(ScriptKind.NativeSegwitMultisig, profile), profile, out var again)
+                || !again!.Xpub.ToBytes().SequenceEqual(cosigner.Xpub.ToBytes()))
+                throw new InvalidOperationException("An accepted cosigner key does not survive its own text form.");
+        }
+    }
+
+    // A PSBT file or pasted text comes from another wallet or a signer and is never trusted.
+    // Contract: PsbtFormat.Parse throws only FormatException, for any bytes; one it accepts survives its binary form.
+    private static void PsbtInput(byte[] data)
+    {
+        PSBT psbt;
+        try { psbt = PsbtFormat.Parse(data, PalladiumNetworks.Regtest); }
+        catch (FormatException) { return; }
+        PsbtFormat.Parse(PsbtFormat.ToBinary(psbt), PalladiumNetworks.Regtest);
+    }
+
+    // Animated-QR frames (BC-UR) scanned from another device, one per line.
+    // Contract: Receive never throws, for any text; a message it completes is what its frames' checksum vouches for, and
+    // asking it for the PSBT only ever yields bytes or null.
+    private static void UrFrames(byte[] data)
+    {
+        var decoder = new PalladiumWallet.Core.Wallet.Ur.UrDecoder();
+        foreach (var line in Utf8(data).Split('\n'))
+            decoder.Receive(line);
+        _ = decoder.Psbt;
+        _ = decoder.Progress;
+    }
+
+    // The multisig configuration file another tool exported.
+    // Contract: Parse throws only InvalidDataException, for any text; what it accepts lists exactly the keys it counted,
+    // each one a cosigner key of the network.
+    private static void MultisigConfigFile(byte[] data)
+    {
+        try
+        {
+            var (threshold, _, cosigners) = MultisigConfig.Parse(Utf8(data), ChainProfiles.Regtest);
+            if (cosigners.Count == 0 || threshold < 0)
+                throw new InvalidOperationException("Parse accepted a configuration without keys.");
+            foreach (var c in cosigners)
+                if (!Cosigner.TryParse(c, ChainProfiles.Regtest, out _))
+                    throw new InvalidOperationException("Parse accepted a key that TryParse refuses.");
+        }
+        catch (InvalidDataException) { }
     }
 }

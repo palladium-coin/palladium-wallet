@@ -249,4 +249,35 @@ public class ImportedKeyAccountTests
             hdFull.GetReceiveAddress(0).ToString(),
             reloaded.GetReceiveAddress(0).ToString());
     }
+
+    [Fact]
+    public void The_same_address_imported_twice_is_one_entry_and_the_spendable_copy_wins()
+    {
+        var key = GenerateKey();
+        var addr = key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network);
+        var other = GenerateKey().PubKey.GetAddress(ScriptPubKeyType.Segwit, Network);
+
+        var account = new ImportedKeyAccount(
+            [(addr, null), (other, null), (addr, key), (addr, key)], ScriptKind.NativeSegwit, Profile);
+
+        Assert.Equal(2, account.FixedAddresses!.Count);
+        Assert.Equal(addr, account.GetAddress(false, 0));
+        Assert.Equal(other, account.GetAddress(false, 1));
+        Assert.NotNull(account.GetPrivateKey(false, 0)); // the copy with the key replaced the watch-only one
+        Assert.False(account.IsWatchOnly);
+    }
+
+    [Fact]
+    public void Importing_the_same_wif_or_address_twice_stores_it_once()
+    {
+        var key = GenerateKey();
+        var (wifDoc, wifAccount) = WalletLoader.NewFromWif([ToWif(key), ToWif(key)], ScriptKind.NativeSegwit, Profile);
+        Assert.Single(wifDoc.WifKeys!);
+        Assert.Single(wifAccount.FixedAddresses!);
+
+        var addr = key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network).ToString();
+        var (addrDoc, addrAccount) = WalletLoader.NewFromAddresses([addr, addr], Profile);
+        Assert.Single(addrDoc.WatchAddresses!);
+        Assert.Single(addrAccount.FixedAddresses!);
+    }
 }

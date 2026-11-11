@@ -92,7 +92,8 @@ public sealed class ElectrumClient : IAsyncDisposable
     public static async Task<ElectrumClient> ConnectAsync(string host, int port, bool useSsl,
         CertificatePinStore? pins = null, CancellationToken ct = default,
         int maxInFlight = DefaultMaxInFlight, TimeSpan? requestTimeout = null,
-        TimeSpan? handshakeTimeout = null, int maxLineBytes = DefaultMaxLineBytes)
+        TimeSpan? handshakeTimeout = null, int maxLineBytes = DefaultMaxLineBytes,
+        bool acceptAnyCertificate = false)
     {
         var tcp = new TcpClient { NoDelay = true };
         try
@@ -103,10 +104,16 @@ public sealed class ElectrumClient : IAsyncDisposable
             {
                 var pinOk = true;
                 var ssl = new SslStream(stream, leaveInnerStreamOpen: false,
-                    (_, cert, _, _) =>
+                    (_, cert, _, errors) =>
                     {
                         if (cert is null) return false;
-                        pinOk = pins is null || pins.VerifyOrPin(host, port, cert);
+                        // With a pin store the certificate is judged by TOFU pinning (servers are
+                        // typically self-signed). Without one, the ordinary chain and host name
+                        // validation applies: a missing pin store must never mean "trust anyone".
+                        // Only a diagnostic tool may opt out, explicitly.
+                        if (pins is null)
+                            return acceptAnyCertificate || errors == SslPolicyErrors.None;
+                        pinOk = pins.VerifyOrPin(host, port, cert);
                         return pinOk;
                     });
                 try
@@ -215,6 +222,11 @@ public sealed class ElectrumClient : IAsyncDisposable
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
+            // A failed write leaves the connection unusable: mark it dead now instead of letting
+            // it look alive until the request timeout. The read loop then ends and reports Disconnected.
+            // Dead first, then fail the pending requests (as the read loop does): a caller woken by the
+            // failure must already see IsConnected == false, and nothing can register a request meanwhile.
+            try { _cts.Cancel(); } catch (ObjectDisposedException) { }
             foreach (var (_, pending) in _pending)
                 pending.TrySetException(ex);
         }
@@ -326,9 +338,18 @@ public sealed class ElectrumClient : IAsyncDisposable
         }
         else if (root.TryGetProperty("method", out var methodEl))
         {
-            NotificationReceived?.Invoke(
-                methodEl.GetString()!,
-                root.GetProperty("params").Clone());
+            // A fault in a subscriber must not tear down the transport that carries every other reply:
+            // the handler's failure is isolated here, the connection keeps reading.
+            try
+            {
+                NotificationReceived?.Invoke(
+                    methodEl.GetString()!,
+                    root.GetProperty("params").Clone());
+            }
+            catch (Exception)
+            {
+                // Deliberately swallowed: the subscriber owns its errors (see NotificationReceived).
+            }
         }
     }
 

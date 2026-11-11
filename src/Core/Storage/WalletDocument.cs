@@ -43,6 +43,18 @@ public sealed class WalletDocument
     /// <summary>Watch-only addresses with no associated private key (pure address import).</summary>
     public List<string>? WatchAddresses { get; set; }
 
+    /// <summary>
+    /// Multisig wallet (ScriptKind NativeSegwitMultisig): signatures required, M. Null for every other wallet.
+    /// The wallet's own key, when it holds one, is the <see cref="Mnemonic"/> (or <see cref="AccountXprv"/>) of one cosigner.
+    /// </summary>
+    public int? MultisigThreshold { get; set; }
+
+    /// <summary>
+    /// Multisig wallet: the N cosigner keys as <c>[fingerprint/path]Zpub…</c>, the wallet's own included.
+    /// Public data only, so a file without a seed is a watch-only copy of the same wallet.
+    /// </summary>
+    public List<string>? Cosigners { get; set; }
+
     /// <summary>Gap limit for address scanning (§5), configurable.</summary>
     public int GapLimit { get; set; } = 20;
 
@@ -71,17 +83,16 @@ public sealed class WalletDocument
     public static WalletDocument FromJson(string json)
     {
         var doc = JsonSerializer.Deserialize<WalletDocument>(json, JsonOptions)
-            ?? throw new InvalidDataException("File wallet non valido.");
-        // string literal above intentionally left untranslated
+            ?? throw new InvalidDataException("Invalid wallet file.");
         return Migrate(doc);
     }
 
-    /// <summary>Migrazioni di schema all'apertura (§8). Per ora esiste solo la v1.</summary>
+    /// <summary>Schema migrations on open (§8). For now only v1 exists.</summary>
     private static WalletDocument Migrate(WalletDocument doc) => doc.Version switch
     {
         CurrentVersion => doc,
         _ => throw new InvalidDataException(
-            $"Versione file wallet {doc.Version} non supportata (max {CurrentVersion})."),
+            $"Wallet file version {doc.Version} is not supported (max {CurrentVersion})."),
     };
 }
 
@@ -116,6 +127,14 @@ public sealed class SyncCache
     public List<CachedTx> History { get; set; } = [];
     public List<CachedUtxo> Utxos { get; set; } = [];
     public List<CachedAddress> Addresses { get; set; } = [];
+
+    /// <summary>
+    /// The outpoints the user has frozen. The synchronizer rebuilds every UTXO from the chain, so
+    /// the flag is not stored anywhere else: it is read from here and handed to
+    /// WalletSynchronizer.FrozenOutpoints before each sync (GUI and CLI alike).
+    /// </summary>
+    public HashSet<(string Txid, int Vout)> FrozenOutpoints() =>
+        Utxos.Where(u => u.Frozen).Select(u => (u.Txid, u.Vout)).ToHashSet();
 
     /// <summary>
     /// Raw transaction cache (txid → hex). Avoids re-downloading confirmed

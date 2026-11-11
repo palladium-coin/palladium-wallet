@@ -123,6 +123,15 @@ internal static class RandomFuzz
 /// </summary>
 internal static class SeedCorpus
 {
+    // The frames of a real UR for a pseudo-random "PSBT" of the given size, one per line, enough to complete it.
+    private static string UrSeed(int size, int fragment)
+    {
+        var data = new byte[size];
+        new Random(size).NextBytes(data);
+        var enc = PalladiumWallet.Core.Wallet.Ur.UrEncoder.ForPsbt(data, fragment);
+        return string.Join('\n', Enumerable.Range(0, enc.IsSinglePart ? 1 : enc.PartCount + 2).Select(_ => enc.NextPart()));
+    }
+
     private static readonly Dictionary<string, (string Name, byte[] Data)[]> Seeds = new()
     {
         ["header"] =
@@ -185,6 +194,62 @@ internal static class SeedCorpus
             ("wrong-format", Encoding.UTF8.GetBytes(
                 """{"Format":"other","Iterations":2,"Salt":"","Nonce":"","Tag":"","Data":""}""")),
             ("not-json", Encoding.UTF8.GetBytes("hello")),
+        ],
+        ["headerrange"] =
+        [
+            ("two-headers", [.. BitConverter.GetBytes(2), .. BitConverter.GetBytes(2),
+                .. Encoding.UTF8.GetBytes(new string('0', 320))]),
+            ("count-zero", [.. BitConverter.GetBytes(0), .. BitConverter.GetBytes(10), .. Encoding.UTF8.GetBytes("")]),
+            ("more-than-requested", [.. BitConverter.GetBytes(3), .. BitConverter.GetBytes(2),
+                .. Encoding.UTF8.GetBytes(new string('0', 480))]),
+            ("negative-count", [.. BitConverter.GetBytes(-1), .. BitConverter.GetBytes(5), .. Encoding.UTF8.GetBytes("00")]),
+            ("hex-too-short", [.. BitConverter.GetBytes(1), .. BitConverter.GetBytes(1),
+                .. Encoding.UTF8.GetBytes(new string('0', 159))]),
+            // Regression-style boundary: a count whose count * 160 overflows int must be rejected, not wrap into a match.
+            ("count-overflow", [.. BitConverter.GetBytes(int.MaxValue), .. BitConverter.GetBytes(2000),
+                .. Encoding.UTF8.GetBytes("00")]),
+        ],
+        ["cosignerkey"] =
+        [
+            ("valid", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48'/1'/0'/2']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("h-markers", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48h/1h/0h/2h]Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("depth-mismatch", Encoding.UTF8.GetBytes(
+                "[73c5da0a/48'/1'/0']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("huge-index", Encoding.UTF8.GetBytes(
+                "[73c5da0a/99999999999/1'/0'/2']Vpub5n95dMZrDHj6SeBgJ1oz4Fae2N2eJNuWK3VTKDb2dzGpMFLUHLmtyDfen7AaQxwQ5mZnMyXdVrkEaoMLVTH8FmVBRVWPGFYWhmtDUGehGmq")),
+            ("no-brackets", Encoding.UTF8.GetBytes("73c5da0a/48'/1'/0'/2'Vpub5n95")),
+            ("empty", []),
+        ],
+        ["psbt"] =
+        [
+            ("base64", Encoding.UTF8.GetBytes("cHNidP8BAFwCAAAAAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////AegDAAAAAAAAFgAUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==")),
+            ("magic-only", [0x70, 0x73, 0x62, 0x74, 0xff]),
+            ("magic-truncated", [0x70, 0x73, 0x62, 0x74, 0xff, 0x01, 0x00]),
+            ("hex-magic", Encoding.UTF8.GetBytes("70736274ff0100")),
+            // Regression: NBitcoin throws InvalidDataException (non-canonical varint) on a binary PSBT; PsbtFormat now maps it to FormatException.
+            ("regression-noncanonical-varint", Convert.FromHexString("70736274ff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")),
+            ("empty", []),
+        ],
+        ["ur"] =
+        [
+            ("single", Encoding.UTF8.GetBytes(UrSeed(40, 100))),
+            ("multipart", Encoding.UTF8.GetBytes(UrSeed(300, 60))),
+            ("huge-counts", Encoding.UTF8.GetBytes("ur:crypto-psbt/1-99999999/aeaeaeaeaeaeaeae")),
+            ("not-ur", Encoding.UTF8.GetBytes("bitcoin:abc\nur:\nur:x/1-2/zz")),
+            ("empty", []),
+        ],
+        ["multisigconfig"] =
+        [
+            ("valid", Encoding.UTF8.GetBytes(
+                "Name: x\nPolicy: 1 of 1\nFormat: P2WSH\n\nDerivation: m/48'/1'/0'/2'\n" +
+                "73C5DA0A: tpubDFH9dgzveyD8yHQb8VrpG8FYAuwcLMHMje2CCcbBo1FpaGzYVtJeYYxcYgRqSTta5utUFts8nPPHs9C2bqoxrey5jia6Dwf9mpwrPq7YvcJ\n")),
+            ("policy-only", Encoding.UTF8.GetBytes("Policy: 2 of 3\n")),
+            ("policy-overflow", Encoding.UTF8.GetBytes("Policy: 99999999999 of 3\nFormat: P2WSH\n")),
+            ("key-before-derivation", Encoding.UTF8.GetBytes("Policy: 1 of 1\nFormat: P2WSH\n73C5DA0A: tpub\n")),
+            ("no-colon", Encoding.UTF8.GetBytes("garbage")),
+            ("empty", []),
         ],
         ["peers"] =
         [

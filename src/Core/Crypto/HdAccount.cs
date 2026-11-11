@@ -30,6 +30,21 @@ public sealed class HdAccount : IWalletAccount
 
     public ExtPubKey AccountXpub { get; }
 
+    /// <summary>
+    /// True when <see cref="MasterFingerprint"/> is a real one (seed wallet, or supplied on import).
+    /// Without it the PSBT carries no BIP32 origin information rather than a made-up one.
+    /// </summary>
+    public bool HasKnownOrigin => MasterFingerprint.ToBytes().Any(b => b != 0);
+
+    /// <summary>Parses the 8-hex-digit fingerprint stored in the wallet file; null if absent or malformed.</summary>
+    public static HDFingerprint? ParseFingerprint(string? hex)
+    {
+        if (hex is not { Length: 8 })
+            return null;
+        try { return new HDFingerprint(Convert.FromHexString(hex)); }
+        catch (FormatException) { return null; }
+    }
+
     /// <summary>True if the account only knows the xpub: can build but not sign (§4.5).</summary>
     public bool IsWatchOnly => _accountXprv is null;
 

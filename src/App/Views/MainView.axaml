@@ -102,6 +102,9 @@
                     <Button Content="{Binding Loc[wiz.importaddress.btn]}" FontSize="16"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{Binding WizardStartImportAddressCommand}"/>
+                    <Button Content="{Binding Loc[wiz.multisig.btn]}" FontSize="16"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{Binding WizardStartMultisigCommand}"/>
                 </StackPanel>
 
                 <!-- Step: choose wallet (multiple files present) -->
@@ -192,6 +195,12 @@
                     <TextBlock Text="{Binding Loc[wiz.importxkey.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.placeholder]}"
                              Text="{Binding ImportXkeyInput}" AcceptsReturn="False"/>
+                    <TextBlock Text="{Binding Loc[wiz.importxkey.origin.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.fingerprint.placeholder]}"
+                             Text="{Binding ImportFingerprintInput}" AcceptsReturn="False"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.importxkey.path.placeholder]}"
+                             Text="{Binding ImportPathInput}" AcceptsReturn="False"/>
                     <TextBlock Text="{Binding ImportXkeyDetectedKind}"
                                IsVisible="{Binding ImportXkeyDetectedKind, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Foreground="{DynamicResource SuccessBrush}" FontSize="12"/>
@@ -225,6 +234,58 @@
                         <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
                         <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
                                 Command="{Binding WizardNextFromImportAddressCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Step: multisig wallet (M-of-N), keys of all cosigners -->
+                <StackPanel IsVisible="{Binding IsStepMultisig}" Spacing="12">
+                    <TextBlock Text="{Binding Loc[wiz.multisig.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.threshold]}" FontWeight="SemiBold" FontSize="13"/>
+                    <TextBox Text="{Binding MultisigThresholdInput}" Width="80" HorizontalAlignment="Left"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.keys.placeholder]}"
+                             Text="{Binding MultisigKeysInput}" AcceptsReturn="True" Height="110"
+                             FontFamily="monospace" FontSize="12"/>
+                    <Button Content="{Binding Loc[wiz.multisig.loadconfig]}" Click="OnLoadMultisigConfigClick"
+                            HorizontalAlignment="Left"/>
+                    <CheckBox IsChecked="{Binding MultisigWrapped}" Content="{Binding Loc[wiz.multisig.wrapped]}"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.seed.placeholder]}"
+                             Text="{Binding MultisigMnemonicInput}" AcceptsReturn="True" Height="60"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.confirm]}"
+                             Text="{Binding MultisigConfirmWordsInput}" AcceptsReturn="True" Height="60"
+                             IsVisible="{Binding MultisigSeedGenerated}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBox PlaceholderText="{Binding Loc[wiz.multisig.passphrase]}"
+                                 Text="{Binding MultisigPassphraseInput}" MinWidth="220"/>
+                        <TextBlock Text="{Binding Loc[wiz.multisig.account]}" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding MultisigAccountInput}" Width="70"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.multisig.generate]}" Command="{Binding GenerateMultisigSeedCommand}"/>
+                        <Button Content="{Binding Loc[wiz.multisig.showkey]}" Command="{Binding ShowMultisigOwnKeyCommand}"/>
+                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding MultisigOwnKey}" IsVisible="{Binding HasMultisigOwnKey}"
+                                         TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
+                    <Image Source="{Binding MultisigOwnKeyQr}" Width="200" Height="200" HorizontalAlignment="Left"
+                           IsVisible="{Binding MultisigOwnKeyQr, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                                Command="{Binding WizardNextFromMultisigCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Step: compare the wallet ID with the other cosigners -->
+                <StackPanel IsVisible="{Binding IsStepMultisigVerify}" Spacing="12">
+                    <TextBlock Text="{Binding Loc[wiz.multisig.verify.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[wiz.multisig.verify.hint]}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <SelectableTextBlock Text="{Binding MultisigWalletId}" FontFamily="monospace" FontSize="28" FontWeight="Bold"/>
+                    <TextBox PlaceholderText="{Binding Loc[wiz.multisig.verify.placeholder]}"
+                             Text="{Binding MultisigExpectedIdInput}" FontFamily="monospace"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                                Command="{Binding WizardNextFromMultisigVerifyCommand}"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -336,6 +397,9 @@
                     <TextBlock Text="{Binding VerifyingText}" Foreground="#FCD34D"
                                TextWrapping="Wrap"
                                IsVisible="{Binding VerifyingText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="{Binding FrozenText}" Foreground="#FCD34D"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding FrozenText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     <TextBlock Text="{Binding NetworkInfo}" Classes="on-hero" FontSize="12"
                                Margin="0,2,0,0"/>
                 </StackPanel>
@@ -352,7 +416,7 @@
                         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
                         <Setter Property="ItemsPanel">
                             <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" Columns="5"/>
+                                <UniformGrid Rows="1" Columns="6"/>
                             </ItemsPanelTemplate>
                         </Setter>
                     </Style>
@@ -452,7 +516,7 @@
 
                         <!-- ── DESKTOP: Recipient | Amount side-by-side ── -->
                         <Grid IsVisible="{Binding IsDesktop}"
-                              RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
 
                             <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="14">
                                 <!-- Recipient card -->
@@ -540,9 +604,12 @@
                                             <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
                                                      FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
                                                      AcceptsReturn="True" Height="90"/>
-                                            <Button Grid.Column="1" Margin="8,0,0,0"
-                                                    Content="{Binding Loc[send.psbt.copy]}"
-                                                    Click="OnCopyPsbtClick"/>
+                                            <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
+                                                <Button Content="{Binding Loc[send.psbt.copy]}"
+                                                        Click="OnCopyPsbtClick"/>
+                                                <Button Content="{Binding Loc[psbt.showqr]}"
+                                                        Command="{Binding ShowPendingPsbtQrCommand}"/>
+                                            </StackPanel>
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
@@ -554,8 +621,13 @@
                                        TextWrapping="Wrap" FontSize="12"
                                        Foreground="{DynamicResource WarningBrush}"/>
 
+                            <!-- Coin control: when coins are selected in the Coins tab, only those are spent -->
+                            <TextBlock Grid.Row="3" Text="{Binding CoinSelectionText}"
+                                       IsVisible="{Binding HasCoinSelection}" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+
                             <!-- Action buttons -->
-                            <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="14">
+                            <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="14">
                                 <Button Grid.Column="0" Content="{Binding Loc[send.prepare]}"
                                         Command="{Binding PrepareSendCommand}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
@@ -564,6 +636,9 @@
                                         IsEnabled="{Binding HasPendingSend}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                             </Grid>
+                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
+                            <Button Grid.Row="5" Content="{Binding Loc[psbt.open.btn]}"
+                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
                         </Grid>
 
                         <!-- ── MOBILE: vertical stack ── -->
@@ -675,6 +750,9 @@
                                                 Click="OnCopyPsbtClick"
                                                 MinHeight="44"
                                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                    <Button Content="{Binding Loc[psbt.showqr]}" Command="{Binding ShowPendingPsbtQrCommand}"
+                                                MinHeight="44"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -685,6 +763,11 @@
                                        TextWrapping="Wrap" FontSize="12"
                                        Foreground="{DynamicResource WarningBrush}"/>
 
+                            <!-- Coin control summary (phone layout; the desktop layout has its own above) -->
+                            <TextBlock Text="{Binding CoinSelectionText}"
+                                       IsVisible="{Binding HasCoinSelection}" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+
                             <!-- Action buttons: primary (Confirm) prominent, secondary below -->
                             <Button Content="{Binding Loc[send.confirm]}" Classes="accent"
                                     Command="{Binding ConfirmSendCommand}"
@@ -694,6 +777,10 @@
                                     FontSize="15"/>
                             <Button Content="{Binding Loc[send.prepare]}"
                                     Command="{Binding PrepareSendCommand}"
+                                    MinHeight="48"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            <Button Content="{Binding Loc[psbt.open.btn]}"
+                                    Command="{Binding OpenPsbtCommand}"
                                     MinHeight="48"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
 
@@ -963,6 +1050,66 @@
                                     HorizontalContentAlignment="Center"/>
                         </StackPanel>
                     </Grid>
+                </TabItem>
+
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Spacing="{Binding $parent[TabControl].((vm:MainWindowViewModel)DataContext).TabSpacing}"
+                                        HorizontalAlignment="Center">
+                                <Viewbox Width="{Binding $parent[TabControl].((vm:MainWindowViewModel)DataContext).TabIconSize}"
+                                         Height="{Binding $parent[TabControl].((vm:MainWindowViewModel)DataContext).TabIconSize}"
+                                         HorizontalAlignment="Center">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Fill="{Binding $parent[TabItem].Foreground}"
+                                              Data="M12,2C6.48,2 2,4.02 2,6.5V17.5C2,19.98 6.48,22 12,22S22,19.98 22,17.5V6.5C22,4.02 17.52,2 12,2M12,4C16.42,4 20,5.34 20,6.5S16.42,9 12,9 4,7.66 4,6.5 7.58,4 12,4Z"/>
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="{Binding Loc[tab.coins]}"
+                                           FontSize="{Binding $parent[TabControl].((vm:MainWindowViewModel)DataContext).TabFontSize}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer>
+                        <StackPanel Margin="16" Spacing="12">
+                            <TextBlock Text="{Binding Loc[coins.hint]}" TextWrapping="Wrap" Opacity="0.7"/>
+                            <TextBlock Text="{Binding Loc[coins.empty]}" TextWrapping="Wrap"
+                                       IsVisible="{Binding !HasCoins}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12"
+                                        IsVisible="{Binding HasCoinSelection}">
+                                <TextBlock Text="{Binding CoinSelectionText}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <Button Content="{Binding Loc[coins.clear]}"
+                                        Command="{Binding ClearCoinSelectionCommand}"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Coins}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CoinRow">
+                                        <Border Padding="12" Margin="0,4" CornerRadius="6"
+                                                BorderThickness="1" BorderBrush="{DynamicResource SurfaceBrush}">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="{Binding Amount}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Outpoint}" FontFamily="monospace"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Address}" FontFamily="monospace"
+                                                           FontSize="11" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Status}"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="{Binding FreezeText}"
+                                                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ToggleFreezeCoinCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <ToggleButton Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[coins.select]}"
+                                                                  IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                                  IsEnabled="{Binding IsSelectable}"
+                                                                  Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ToggleCoinSelectedCommand}"
+                                                                  CommandParameter="{Binding}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
 
             </TabControl>
@@ -1404,6 +1551,73 @@
             </Border>
         </Border>
 
+        <!-- ============ SIGN A PSBT OVERLAY ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="3"
+                Background="{DynamicResource ScrimBrush}"
+                Tapped="OnPsbtOverlayBackdropTapped"
+                IsVisible="{Binding IsPsbtOpen}">
+            <Border Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+                    MaxWidth="640" Margin="16"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <ScrollViewer MaxHeight="640">
+                <StackPanel Margin="24" Spacing="12">
+                    <TextBlock Text="{Binding Loc[psbt.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[psbt.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <TextBox PlaceholderText="{Binding Loc[psbt.placeholder]}" Text="{Binding PsbtInput}"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="90"
+                             FontFamily="monospace" FontSize="11"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="{Binding Loc[psbt.openfile]}" Click="OnOpenPsbtFileClick"/>
+                        <Button Content="{Binding Loc[psbt.scanqr]}" Command="{Binding ScanPsbtQrCommand}"
+                                IsVisible="{Binding CanScanPsbt}"/>
+                        <Button Content="{Binding Loc[psbt.sign]}" Classes="accent" Command="{Binding SignPsbtCommand}"/>
+                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding PsbtSummary}" TextWrapping="Wrap" FontFamily="monospace" FontSize="12"
+                                         IsVisible="{Binding PsbtSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <StackPanel Spacing="6"
+                                IsVisible="{Binding SignedPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Loc[psbt.result]}" Classes="label"/>
+                        <TextBox Text="{Binding SignedPsbtBase64}" IsReadOnly="True" AcceptsReturn="True"
+                                 TextWrapping="Wrap" Height="90" FontFamily="monospace" FontSize="11"/>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="{Binding Loc[send.psbt.copy]}" Click="OnCopySignedPsbtClick"/>
+                            <Button Content="{Binding Loc[psbt.showqr]}" Command="{Binding ShowSignedPsbtQrCommand}"/>
+                            <Button Content="{Binding Loc[psbt.savefile]}" Click="OnSavePsbtFileClick"/>
+                            <Button Content="{Binding Loc[psbt.broadcast]}" Classes="accent"
+                                    Command="{Binding BroadcastPsbtCommand}" IsEnabled="{Binding HasFinalPsbt}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <Button Content="{Binding Loc[addr.close]}" HorizontalAlignment="Right"
+                            Command="{Binding ClosePsbtCommand}"/>
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Border>
+
+        <!-- ============ ANIMATED QR (UR) OVERLAY ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="3"
+                Background="{DynamicResource ScrimBrush}"
+                IsVisible="{Binding IsUrQrOpen}">
+            <Border Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+                    MaxWidth="480" Margin="16"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                <StackPanel Margin="24" Spacing="12">
+                    <TextBlock Text="{Binding Loc[psbt.urqr.title]}" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Loc[psbt.urqr.hint]}" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Background="White" Padding="8" HorizontalAlignment="Center" CornerRadius="4">
+                        <Image Source="{Binding UrQrImage}" Width="320" Height="320"/>
+                    </Border>
+                    <TextBlock Text="{Binding UrQrCaption}" HorizontalAlignment="Center" FontSize="12"/>
+                    <Button Content="{Binding Loc[psbt.urqr.close]}" Command="{Binding CloseUrQrCommand}"
+                            HorizontalAlignment="Center" MinHeight="40"/>
+                </StackPanel>
+            </Border>
+        </Border>
+
         <!-- ============ WALLET INFO OVERLAY ============ -->
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
@@ -1455,6 +1669,26 @@
                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
                         <SelectableTextBlock Text="{Binding WalletInfoDerivPath}"
                                              FontFamily="monospace" FontSize="13"/>
+                    </StackPanel>
+
+                    <!-- Multisig: threshold and wallet ID, to compare with the other cosigners -->
+                    <StackPanel Spacing="3"
+                                IsVisible="{Binding WalletInfoMultisigId,
+                                    Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Loc[walletinfo.multisigid]}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <SelectableTextBlock Text="{Binding WalletInfoMultisigId}"
+                                             FontFamily="monospace" FontSize="14" FontWeight="SemiBold"/>
+                    </StackPanel>
+
+                    <!-- Multisig: the configuration a signer or another wallet registers the wallet from -->
+                    <StackPanel Spacing="6" IsVisible="{Binding WalletInfoIsMultisig}">
+                        <TextBlock Text="{Binding Loc[walletinfo.multisig.config]}" FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <SelectableTextBlock Text="{Binding MultisigDescriptorsText}" TextWrapping="Wrap"
+                                             FontFamily="monospace" FontSize="10"/>
+                        <Button Content="{Binding Loc[walletinfo.multisig.save]}" Click="OnSaveMultisigConfigClick"
+                                HorizontalAlignment="Left"/>
                     </StackPanel>
 
                     <!-- Master fingerprint (only if present) -->

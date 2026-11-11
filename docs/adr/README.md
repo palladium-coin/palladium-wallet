@@ -46,6 +46,27 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0040 | [Anchor headers up to a checkpoint above them](0040-anchor-headers-up-to-a-checkpoint.md) | SPV | Accepted |
 | 0041 | [Flag transactions above the newest checkpoint as not anchored](0041-flag-transactions-above-the-newest-checkpoint.md) | SPV | Accepted |
 | 0042 | [Cross-check recent headers with a witness server; no bounded-PoW check](0042-cross-check-recent-headers-with-a-witness-server.md) | SPV | Accepted |
+| 0043 | [Bind transactions to their txid; persist only anchored headers; validate header ranges](0043-bind-transactions-to-txid-and-keep-only-anchored-headers.md) | SPV | Accepted |
+| 0044 | [Harden the wallet file and lock, carry BIP32 origin in the PSBT, distrust announced servers](0044-harden-wallet-file-lock-psbt-origin-and-discovered-servers.md) | Wallet | Accepted |
+| 0045 | [Clamp the tip with a witness, validate TLS by default, build PSBTs from the shown transaction and sign them](0045-clamp-the-tip-with-a-witness-validate-tls-by-default-and-sign-psbts.md) | SPV | Accepted |
+| 0046 | [Freeze coins and select them by hand in a Coins tab](0046-freeze-coins-and-coin-control-in-the-gui.md) | Wallet | Accepted |
+| 0047 | [Reconcile a mismatched broadcast reply with the transaction the server holds](0047-reconcile-a-mismatched-broadcast-reply-with-the-transaction-the-server-holds.md) | Wallet | Accepted |
+| 0048 | [Treat the prepared transaction as a snapshot of what the user reviewed](0048-treat-the-prepared-transaction-as-a-snapshot-of-what-the-user-reviewed.md) | UI | Accepted |
+| 0049 | [Keep the dust relay rate in the chain profile, verified against the node](0049-keep-the-dust-relay-rate-in-the-chain-profile-verified-against-the-node.md) | Chain | Accepted |
+| 0050 | [Sync before every CLI send and keep sign-psbt offline](0050-sync-before-every-cli-send-and-keep-sign-psbt-offline.md) | Wallet | Accepted |
+| 0051 | [Expose coin listing and freezing in the CLI](0051-expose-coin-listing-and-freezing-in-the-cli.md) | Wallet | Accepted |
+| 0052 | [Show the frozen total and the coin selection on every layout](0052-show-the-frozen-total-and-the-coin-selection-on-every-layout.md) | UI | Accepted |
+| 0053 | [Import WIF keys and create taproot wallets from the CLI](0053-import-wif-keys-and-create-taproot-wallets-from-the-cli.md) | Wallet | Accepted |
+| 0054 | [Extract the header-range check into a fuzzed parser](0054-extract-the-header-range-check-into-a-fuzzed-parser.md) | Testing | Accepted |
+| 0055 | [Test the view model and PSBT interoperability against a real regtest node](0055-test-the-view-model-and-psbt-interoperability-against-a-real-regtest-node.md) | Testing | Accepted |
+| 0056 | [Add native SegWit multisig wallets from the CLI](0056-add-native-segwit-multisig-wallets-from-the-cli.md) | Wallet | Accepted |
+| 0057 | [Make the cosigner key check a wallet ID the cosigners compare](0057-make-the-cosigner-key-check-a-wallet-id-the-cosigners-compare.md) | Wallet | Accepted |
+| 0058 | [Add P2SH-wrapped multisig](0058-add-p2sh-wrapped-multisig.md) | Wallet | Accepted |
+| 0059 | [Create multisig wallets in the GUI](0059-create-multisig-wallets-in-the-gui.md) | UI | Accepted |
+| 0060 | [Run the regtest end-to-end in CI, and exercise Donate on regtest](0060-run-the-regtest-end-to-end-in-ci-and-donate-on-regtest.md) | Testing | Accepted |
+| 0061 | [Exchange PSBT files and multisig configuration with other tools](0061-exchange-psbt-files-and-multisig-configuration-with-other-tools.md) | Wallet | Accepted |
+| 0062 | [Sign PSBTs and exchange multisig files in the GUI](0062-sign-psbts-and-exchange-multisig-files-in-the-gui.md) | UI | Accepted |
+| 0063 | [Animated-QR transport of PSBTs (BC-UR)](0063-animated-qr-transport-of-psbts-bc-ur.md) | Wallet | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

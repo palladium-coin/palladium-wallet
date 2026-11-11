@@ -61,6 +61,20 @@ public class ElectrumClientTests
     }
 
     [Fact]
+    public async Task A_subscriber_that_throws_does_not_drop_the_connection()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("echo", p => p[0].GetInt32());
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+        client.NotificationReceived += (_, _) => throw new InvalidOperationException("subscriber bug");
+
+        await server.NotifyAsync("blockchain.headers.subscribe", new object[] { new { height = 1, hex = "00" } });
+
+        Assert.Equal(7, (await client.RequestAsync("echo", default, 7)).GetInt32());
+        Assert.True(client.IsConnected);
+    }
+
+    [Fact]
     public async Task Le_notifiche_arrivano_sull_evento_NotificationReceived()
     {
         await using var server = new FakeElectrumServer();
@@ -350,6 +364,29 @@ public class ElectrumClientTests
         }
     }
 
+    [Fact]
+    public async Task Without_a_pin_store_a_self_signed_certificate_is_rejected()
+    {
+        // pins == null must mean "validate normally", not "trust anyone".
+        using var cert = FakeElectrumServer.CreateSelfSignedCertificate("untrusted");
+        await using var server = new FakeElectrumServer(cert);
+
+        await Assert.ThrowsAnyAsync<System.Security.Authentication.AuthenticationException>(() =>
+            ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: true, pins: null));
+    }
+
+    [Fact]
+    public async Task A_diagnostic_tool_can_explicitly_accept_any_certificate()
+    {
+        using var cert = FakeElectrumServer.CreateSelfSignedCertificate("untrusted");
+        await using var server = new FakeElectrumServer(cert);
+
+        await using var client = await ElectrumClient.ConnectAsync(
+            server.Host, server.Port, useSsl: true, pins: null, acceptAnyCertificate: true);
+
+        Assert.True(client.IsConnected);
+    }
+
     /// <summary>Rebinds a fresh server to the port just released by the previous one.</summary>
     private static async Task<FakeElectrumServer> RebindAsync(
         System.Security.Cryptography.X509Certificates.X509Certificate2 cert, int port)
@@ -362,5 +399,48 @@ public class ElectrumClientTests
                 await Task.Delay(50);
             }
         }
+    }
+
+    /// <summary>A stream whose writes fail, to reach the client's write-failure path deterministically.</summary>
+    private sealed class FailingWriteStream : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("write failed");
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) =>
+            ValueTask.FromException(new IOException("write failed"));
+        public override Task FlushAsync(CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Una_scrittura_fallita_chiude_la_connessione_e_fa_fallire_subito_la_richiesta()
+    {
+        await using var server = new FakeElectrumServer();
+        server.Handle("server.banner", _ => "mai risposto");
+        await using var client = await ElectrumClient.ConnectAsync(server.Host, server.Port, useSsl: false);
+        var disconnected = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += ex => disconnected.TrySetResult(ex);
+
+        // From now on the write loop cannot write; the read loop still has the healthy socket, so the only
+        // thing that can end this request early is the write-failure path itself (not an EOF on the read side).
+        typeof(ElectrumClient).GetField("_stream", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(client, new FailingWriteStream());
+
+        var started = DateTime.UtcNow;
+        var ex = await Assert.ThrowsAsync<IOException>(() => client.BannerAsync());
+
+        Assert.Equal("write failed", ex.Message);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5),
+            "the failed write must fail the request at once, not after the request timeout");
+        Assert.False(client.IsConnected);                        // dead now, not "alive until the timeout"
+        await disconnected.Task.WaitAsync(Timeout);               // and the owner is told, so it can reconnect
+        await Assert.ThrowsAnyAsync<IOException>(() => client.BannerAsync()); // later requests fail at once too
     }
 }

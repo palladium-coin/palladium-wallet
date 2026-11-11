@@ -1,15 +1,17 @@
+using System.Text;
+
 namespace PalladiumWallet.Core.Storage;
 
 /// <summary>
-/// Lettura/scrittura del file wallet su disco (blueprint §8): JSON in chiaro
-/// senza password, contenitore AES-GCM con password. Scrittura atomica
-/// (file temporaneo + rename) per non corrompere il wallet su crash.
+/// Reads and writes the wallet file on disk (blueprint §8): plain JSON without a
+/// password, AES-GCM container with one. Writes are atomic (temporary file + rename)
+/// so a crash never corrupts the wallet.
 /// </summary>
 public static class WalletStore
 {
     public static bool Exists(string path) => File.Exists(path);
 
-    /// <summary>True se il file richiede una password per l'apertura.</summary>
+    /// <summary>True when the file requires a password to open.</summary>
     public static bool RequiresPassword(string path) =>
         EncryptedFile.IsEncrypted(File.ReadAllText(path));
 
@@ -33,10 +35,30 @@ public static class WalletStore
         if (!string.IsNullOrEmpty(password))
             content = EncryptedFile.Encrypt(content, password);
 
-        var tmp = path + ".tmp";
-        File.WriteAllText(tmp, content);
-        File.Move(tmp, path, overwrite: true);
+        // One save at a time in this process (Save and SaveAsync share the temp name); other
+        // processes are kept out by WalletLock. The temp file is created owner-only (0600 on
+        // Unix: a plaintext wallet must not be readable by other users) and flushed to disk
+        // before the rename, so a power loss leaves the old file or the new one, never an empty one.
+        lock (SaveLock)
+        {
+            var tmp = path + ".tmp";
+            File.Delete(tmp); // a leftover from a crash could have looser permissions
+            using (var stream = new FileStream(tmp, new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            }))
+            {
+                stream.Write(new UTF8Encoding(false).GetBytes(content));
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(tmp, path, overwrite: true);
+        }
     }
+
+    private static readonly object SaveLock = new();
 
     /// <summary>
     /// Same as <see cref="Save"/> but with the JSON serialization and disk write off the

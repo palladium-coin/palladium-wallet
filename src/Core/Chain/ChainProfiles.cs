@@ -28,6 +28,7 @@ public static class ChainProfiles
         BlockTimeSeconds = 120,
         CoinbaseMaturity = 120,
         MinConfirmations = 6,
+        DustRelaySatPerVByte = 3,
         ExtKeyHeaders = new Dictionary<ScriptKind, ExtKeyHeaders>
         {
             [ScriptKind.Legacy] = new(0x0488ade4, 0x0488b21e),                // xprv / xpub

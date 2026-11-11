@@ -127,7 +127,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ---- helpers ----
 
-    private NetKind Net => NetKind.Mainnet;
+    // Mainnet only in the shipped app; the test seam below may select another profile (the regtest GUI tests).
+    private NetKind Net => ProfileOverride?.Kind ?? NetKind.Mainnet;
     /// <summary>Test seam: lets tests drop the real bootstrap servers so nothing reaches the internet.</summary>
     internal static ChainProfile? ProfileOverride { get; set; }
 
@@ -281,6 +282,7 @@ public partial class MainWindowViewModel : ViewModelBase
         PendingPsbtBase64 = "";
         OnPropertyChanged(nameof(IsWatchOnlyAccount));
         History.Clear();
+        RefreshCoins(null);
         Contacts.Clear();
         SelectedContactInList = null;
         SendToContact = null;
