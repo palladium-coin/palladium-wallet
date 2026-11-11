@@ -35,16 +35,45 @@ public partial class MainWindowViewModel
         ApplySettings(_config);
     }
 
-    /// <summary>Sets the Avalonia theme variant from the saved choice; "system" follows the OS.</summary>
+    /// <summary>Opaque surfaces instead of glass (Settings → Solid surfaces).</summary>
+    public bool SolidSurfaces
+    {
+        get => _config.SolidSurfaces;
+        set
+        {
+            if (_config.SolidSurfaces == value) return;
+            _config.SolidSurfaces = value;
+            ApplySettings(_config);
+        }
+    }
+
+    private static Avalonia.Markup.Xaml.Styling.ResourceInclude? _solidSurfaces;
+
+    /// <summary>
+    /// Sets the Avalonia theme variant from the saved choice ("system" follows the OS) and merges, or removes,
+    /// <c>Styles/SolidSurfaces.axaml</c>, whose opaque brushes replace the glass ones.
+    /// </summary>
     private void ApplyTheme()
     {
-        if (Avalonia.Application.Current is { } app)
-            app.RequestedThemeVariant = _config.Theme switch
-            {
-                "light" => Avalonia.Styling.ThemeVariant.Light,
-                "dark" => Avalonia.Styling.ThemeVariant.Dark,
-                _ => Avalonia.Styling.ThemeVariant.Default,
-            };
+        if (Avalonia.Application.Current is not { } app)
+            return;
+        app.RequestedThemeVariant = _config.Theme switch
+        {
+            "light" => Avalonia.Styling.ThemeVariant.Light,
+            "dark" => Avalonia.Styling.ThemeVariant.Dark,
+            _ => Avalonia.Styling.ThemeVariant.Default,
+        };
+
+        var merged = app.Resources.MergedDictionaries;
+        _solidSurfaces ??= new Avalonia.Markup.Xaml.Styling.ResourceInclude(new System.Uri("avares://PalladiumWallet.App/"))
+        {
+            Source = new System.Uri("/Styles/SolidSurfaces.axaml", System.UriKind.Relative),
+        };
+        var present = merged.Contains(_solidSurfaces);
+        if (_config.SolidSurfaces && !present)
+            merged.Add(_solidSurfaces);
+        else if (!_config.SolidSurfaces && present)
+            merged.Remove(_solidSurfaces);
     }
 
     [RelayCommand]
@@ -62,6 +91,7 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(Loc));
         OnPropertyChanged(nameof(UnitLabel));
         ApplyTheme();
+        OnPropertyChanged(nameof(SolidSurfaces));
         OnPropertyChanged(nameof(IsThemeSystem));
         OnPropertyChanged(nameof(IsThemeLight));
         OnPropertyChanged(nameof(IsThemeDark));

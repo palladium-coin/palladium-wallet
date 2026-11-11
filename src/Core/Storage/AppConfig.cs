@@ -18,6 +18,9 @@ public sealed class AppConfig
     /// <summary>Colour theme: <c>system</c> (follow the OS, default), <c>light</c> or <c>dark</c>. Unknown values mean <c>system</c>.</summary>
     public string Theme { get; set; } = "system";
 
+    /// <summary>Opaque surfaces instead of the translucent glass look (for readability); off by default.</summary>
+    public bool SolidSurfaces { get; set; }
+
     /// <summary>Last successfully connected server, persisted across sessions.</summary>
     public string? LastServerHost { get; set; }
     public int? LastServerPort { get; set; }

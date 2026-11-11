@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ============================================================
+         "Solid surfaces" (Settings): the glass tokens of Theme.axaml replaced by opaque colours, for a person who finds
+         translucency hard to read. Merged into the application resources after Theme.axaml when the option is on and
+         removed when it is off (MainWindowViewModel.ApplyTheme); every control reads these brushes through
+         DynamicResource, so the change is live. Only the surfaces change: the brand colours, the text colours and the
+         state tints are the ones of Theme.axaml.
+         ============================================================ -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="AppBackgroundBrush"  Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="GlassBrush"          Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="GlassInsetBrush"     Color="#EEF2F7"/>
+            <SolidColorBrush x:Key="GlassBorderBrush"    Color="#D5DDE8"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleButtonBackground"            Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed"     Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundDisabled"    Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#94A3B8"/>
+            <SolidColorBrush x:Key="ToggleButtonBorderBrush"           Color="#94A3B8"/>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AppBackgroundBrush"  Color="#0F172A"/>
+            <SolidColorBrush x:Key="GlassBrush"          Color="#1E293B"/>
+            <SolidColorBrush x:Key="GlassInsetBrush"     Color="#162033"/>
+            <SolidColorBrush x:Key="GlassBorderBrush"    Color="#3B4A60"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#1E293B"/>
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#273449"/>
+            <SolidColorBrush x:Key="ToggleButtonBackground"            Color="#273449"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#334155"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#334155"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#3B4A60"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed"     Color="#3B4A60"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#1E293B"/>
+            <SolidColorBrush x:Key="ToggleButtonBackgroundDisabled"    Color="#1E293B"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#64748B"/>
+            <SolidColorBrush x:Key="ToggleButtonBorderBrush"           Color="#64748B"/>
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

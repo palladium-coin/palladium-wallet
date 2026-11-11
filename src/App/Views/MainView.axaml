@@ -1176,8 +1176,7 @@
                             <ItemsControl ItemsSource="{Binding Coins}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CoinRow">
-                                        <Border Padding="12" Margin="0,4" CornerRadius="6"
-                                                BorderThickness="1" BorderBrush="{DynamicResource SurfaceBrush}">
+                                        <Border Classes="card" Padding="16,12" Margin="0,4" CornerRadius="16">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="{Binding Amount}" FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding Outpoint}" FontFamily="monospace"
@@ -1945,6 +1944,13 @@
                                          IsChecked="{Binding IsThemeDark, Mode=OneWay}"
                                          Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
                         </WrapPanel>
+                    </StackPanel>
+
+                    <!-- Opaque surfaces: for a person who finds the translucent look hard to read -->
+                    <StackPanel Spacing="2">
+                        <CheckBox Content="{Binding Loc[settings.solid]}" IsChecked="{Binding SolidSurfaces}"/>
+                        <TextBlock Text="{Binding Loc[settings.solid.hint]}" FontSize="11" TextWrapping="Wrap"
+                                   Margin="28,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
                     </StackPanel>
 
                     <!-- Indexing server (configurable even before a wallet is open) -->

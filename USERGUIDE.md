@@ -215,7 +215,7 @@ Resolution order:
 
 Inside the data root: `mainnet/wallets/*.wallet.json` (your wallets),
 `mainnet/server-certs.json` (pinned TLS certificates), `mainnet/servers.json` (discovered
-servers), `config.json` (language, unit, theme, last server — shared across wallets).
+servers), `config.json` (language, unit, theme, solid surfaces, last server — shared across wallets).
 
 ### 3.5 Trying the GUI on a test network (regtest)
 
@@ -785,6 +785,9 @@ the door to the server settings:
   immediately. Default: English.
 - **Theme** — System (follows the operating system, default), Light or Dark. Applies
   immediately and is remembered.
+- **Solid surfaces** — replaces the translucent glass look with opaque backgrounds (cards, dialogs,
+  buttons, the window background). Off by default; turn it on if the translucency makes text hard
+  to read. Applies immediately and is remembered.
 - **Amount unit** — how amounts are displayed *and interpreted when you type them*:
 
   | Unit | In satoshi | Decimals shown |

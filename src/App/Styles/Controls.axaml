@@ -81,6 +81,17 @@
     <Style Selector="Button:pressed">
         <Setter Property="RenderTransform" Value="scale(0.97)"/>
     </Style>
+    <!-- A toggle button (e.g. "Use in next send") is not a Button to a selector: give it the same size and shape so the two
+         sit side by side without looking like different controls. -->
+    <Style Selector="ToggleButton">
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Padding" Value="16,8"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
     <!-- Accent (CTA) buttons are already blue via Fluent+SystemAccentColor.
          Ensure readable white text in both light and dark variants. -->
     <Style Selector="Button.accent">
@@ -132,6 +143,8 @@
     <!-- ===== Tabs (dashboard) ===== -->
     <!-- Selected item: brand blue + bold; unselected: muted -->
     <Style Selector="TabItem">
+        <!-- Fluent's default header size (20) is too loud in the About dialog; the main tab strip sets its own sizes -->
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="FontWeight" Value="Medium"/>
     </Style>
