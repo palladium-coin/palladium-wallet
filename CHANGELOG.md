@@ -35,6 +35,7 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- Stale status-bar messages: "The words do not match" stayed after going back in the wizard, "The two passwords do not match" after turning encryption off, and "Invalid address…" after the next contact was added successfully. The status is now cleared when the wizard step changes, when the encryption option is toggled, and when a contact is saved.
 - An empty, malformed or wrong-network recipient in Send (and an invalid donation address) showed the parser's exception text (`Error: Invalid string`); it now says "Address not valid for this network".
 - The buttons that reveal and hide an address's private key (and the password prompt in front of it) said "Show seed"/"Hide"; they now say "Show key"/"Hide key" (new Loc keys `addr.privkey.reveal` and `addr.privkey.hide`).
 - Confirming a prepared send or donation could broadcast an incomplete transaction when the command was invoked while the Confirm button was disabled (watch-only wallet, or a multisig wallet holding one of two signatures); the command now refuses anything that is not fully signed and tells the user so ("Transaction not complete: more signatures are needed. Nothing was sent…") instead of doing nothing.

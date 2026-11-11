@@ -54,6 +54,7 @@ public partial class MainWindowViewModel
             return;
         }
         Contacts.Add(new ContactEntry(name, addr));
+        StatusMessage = ""; // an earlier "invalid address" for this form no longer applies
         NewContactName = NewContactAddress = "";
         PersistContacts();
     }
