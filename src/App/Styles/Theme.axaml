@@ -36,6 +36,16 @@
             <SolidColorBrush x:Key="SuccessBrush"        Color="#16A34A"/>     <!-- green-600 -->
             <SolidColorBrush x:Key="WarningBrush"        Color="#D97706"/>     <!-- amber-600 -->
             <SolidColorBrush x:Key="DangerBrush"         Color="#DC2626"/>     <!-- red-600 -->
+            <!-- Secondary (neutral) buttons: white surface + visible border, so they read as
+                 available but quieter than the blue accent (Fluent's default grey reads as disabled). -->
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#E2E8F0"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#F1F5F9"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#CBD5E1"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#94A3B8"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed"    Color="#94A3B8"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled"   Color="#E2E8F0"/>
             <!-- Hero gradient of the balance card: blue → indigo -->
             <LinearGradientBrush x:Key="BalanceGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                 <GradientStop Offset="0" Color="#2563EB"/>
@@ -66,6 +76,15 @@
             <SolidColorBrush x:Key="SuccessBrush"        Color="#22C55E"/>     <!-- green-500 -->
             <SolidColorBrush x:Key="WarningBrush"        Color="#F59E0B"/>     <!-- amber-500 -->
             <SolidColorBrush x:Key="DangerBrush"         Color="#EF4444"/>     <!-- red-500 -->
+            <!-- Secondary (neutral) buttons, dark variant -->
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#273449"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#334155"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#3B4A60"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#1E293B"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#475569"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#64748B"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed"    Color="#64748B"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled"   Color="#334155"/>
             <!-- Hero gradient of the balance card: blue → indigo (deeper tones) -->
             <LinearGradientBrush x:Key="BalanceGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
                 <GradientStop Offset="0" Color="#1D4ED8"/>
