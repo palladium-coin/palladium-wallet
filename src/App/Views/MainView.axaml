@@ -351,10 +351,7 @@
                     <TextBlock Text="{Binding Loc[wiz.password.title]}" FontSize="18" FontWeight="Bold"/>
 
                     <!-- Name section: visually distinct from the password group -->
-                    <Border BorderBrush="{DynamicResource SystemAccentColor}"
-                            BorderThickness="0,0,0,0"
-                            Background="{DynamicResource SurfaceAltBrush}"
-                            CornerRadius="6" Padding="12,10">
+                    <Border Classes="card" CornerRadius="16" Padding="16,12">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding Loc[wiz.name.label]}"
                                        FontWeight="SemiBold" FontSize="13"/>
@@ -441,7 +438,7 @@
                 <TabControl.Styles>
                     <Style Selector="TabStrip">
                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
-                        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                        <Setter Property="Background" Value="Transparent"/>
                     </Style>
                     <!-- ItemsPanel belongs to the TabControl (its template binds the presenter to it); set on the
                          TabStrip it was ignored and the tabs wrapped at phone width. One row of equal cells, never wrapped. -->
@@ -1692,7 +1689,8 @@
                     <TextBlock Text="{Binding Loc[psbt.urqr.title]}" FontSize="18" FontWeight="Bold"/>
                     <TextBlock Text="{Binding Loc[psbt.urqr.hint]}" TextWrapping="Wrap" FontSize="12"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <Border Background="White" Padding="8" HorizontalAlignment="Center" CornerRadius="4">
+                    <Border Background="White" Padding="12" HorizontalAlignment="Center" CornerRadius="12"
+                            BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}">
                         <Image Source="{Binding UrQrImage}" Width="320" Height="320"/>
                     </Border>
                     <TextBlock Text="{Binding UrQrCaption}" HorizontalAlignment="Center" FontSize="12"/>
@@ -1846,8 +1844,8 @@
                         <!-- Revealed seed -->
                         <StackPanel IsVisible="{Binding IsWalletInfoSeedRevealed}" Spacing="8">
                             <Border BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                    CornerRadius="6" Padding="14"
-                                    Background="{DynamicResource SurfaceAltBrush}">
+                                    CornerRadius="12" Padding="14"
+                                    Background="{DynamicResource GlassInsetBrush}">
                                 <SelectableTextBlock Text="{Binding WalletInfoSeedText}"
                                                      FontFamily="monospace" FontSize="15"
                                                      TextWrapping="Wrap"/>

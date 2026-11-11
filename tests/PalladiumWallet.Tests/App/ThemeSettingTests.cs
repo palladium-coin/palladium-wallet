@@ -200,4 +200,14 @@ public sealed class ThemeSettingTests : VmTestBase
         Assert.Equal(button.CornerRadius, toggle.CornerRadius);
         window.Close();
     });
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public Task Overlay_cards_are_opaque_so_the_page_behind_never_ghosts_through_the_text(string variant) => UiSession.Run(() =>
+    {
+        var theme = variant == "Dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        Assert.True(Application.Current!.TryGetResource("OverlayCardBrush", theme, out var brush));
+        Assert.Equal(255, ((ISolidColorBrush)brush!).Color.A);
+    });
 }

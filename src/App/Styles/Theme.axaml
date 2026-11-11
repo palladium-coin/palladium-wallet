@@ -33,7 +33,7 @@
             </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#FFFFFF"/>
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#F8FAFC"/>     <!-- slate-50 -->
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FCFFFFFF"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#66000000"/>   <!-- 40% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#E2E8F0"/>     <!-- slate-200 -->
@@ -99,7 +99,7 @@
             </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#1E293B"/>     <!-- slate-800 -->
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#273449"/>
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FC1E2A47"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FF1E2A47"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#99000000"/>   <!-- 60% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#334155"/>     <!-- slate-700 -->
