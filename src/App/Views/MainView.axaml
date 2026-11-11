@@ -1187,7 +1187,7 @@
 
                         <!-- Not yet revealed: single reveal button -->
                         <Button IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsAddressPrivKeyRevealed}"
-                                Content="{Binding Loc[walletinfo.seed.reveal]}"
+                                Content="{Binding Loc[addr.privkey.reveal]}"
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RequestPrivKeyRevealCommand}"/>
 
                         <!-- Revealed: key text + hide button -->
@@ -1197,7 +1197,7 @@
                                                  FontFamily="monospace" FontSize="12"
                                                  Foreground="{DynamicResource DangerBrush}"
                                                  TextWrapping="Wrap"/>
-                            <Button Content="{Binding Loc[walletinfo.seed.hide]}"
+                            <Button Content="{Binding Loc[addr.privkey.hide]}"
                                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HideAddressPrivKeyCommand}"/>
                         </StackPanel>
                     </StackPanel>
@@ -1235,7 +1235,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Content="{Binding Loc[addr.close]}"
                                 Command="{Binding CancelPrivKeyPromptCommand}"/>
-                        <Button Content="{Binding Loc[walletinfo.seed.reveal]}" Classes="accent"
+                        <Button Content="{Binding Loc[addr.privkey.reveal]}" Classes="accent"
                                 Command="{Binding ConfirmPrivKeyPasswordCommand}"/>
                     </StackPanel>
                 </StackPanel>
