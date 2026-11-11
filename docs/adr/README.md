@@ -67,6 +67,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0061 | [Exchange PSBT files and multisig configuration with other tools](0061-exchange-psbt-files-and-multisig-configuration-with-other-tools.md) | Wallet | Accepted |
 | 0062 | [Sign PSBTs and exchange multisig files in the GUI](0062-sign-psbts-and-exchange-multisig-files-in-the-gui.md) | UI | Accepted |
 | 0063 | [Animated-QR transport of PSBTs (BC-UR)](0063-animated-qr-transport-of-psbts-bc-ur.md) | Wallet | Accepted |
+| 0064 | [Select the network of the desktop GUI with a `--net` argument](0064-select-the-network-of-the-desktop-gui-with-a-net-argument.md) | UI | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

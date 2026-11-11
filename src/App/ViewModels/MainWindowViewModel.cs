@@ -88,7 +88,10 @@ public partial class MainWindowViewModel : ViewModelBase
             ? $"{v.Major}.{v.Minor}.{v.Build}"
             : "";
 
-    public string WindowTitle => $"Palladium Wallet {AppVersion}";
+    /// <summary>Marks a test network in the title so it is never mistaken for the real chain.</summary>
+    public string WindowTitle => Net == NetKind.Mainnet
+        ? $"Palladium Wallet {AppVersion}"
+        : $"Palladium Wallet {AppVersion} [{Net.ToString().ToUpperInvariant()}]";
 
     /// <summary>True on desktop; false on Android/iOS — hides filesystem-dependent features.</summary>
     public bool IsDesktop => !OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS();
@@ -127,8 +130,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ---- helpers ----
 
-    // Mainnet only in the shipped app; the test seam below may select another profile (the regtest GUI tests).
-    private NetKind Net => ProfileOverride?.Kind ?? NetKind.Mainnet;
+    // Mainnet unless the desktop head was started with --net (StartupOptions); the test seam below may select another profile.
+    private NetKind Net => ProfileOverride?.Kind ?? StartupOptions.Net;
     /// <summary>Test seam: lets tests drop the real bootstrap servers so nothing reaches the internet.</summary>
     internal static ChainProfile? ProfileOverride { get; set; }
 

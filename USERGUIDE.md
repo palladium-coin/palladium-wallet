@@ -59,8 +59,8 @@ What this wallet intentionally does **not** include (as of this version):
 - RBF fee bumping (transactions *signal* RBF, but there is no "bump fee" button)
 - Tor/proxy support — the indexing server can observe which addresses you query
 - Fiat currency conversion
-- Network selection in the GUI — the **GUI operates on mainnet only**; testnet and regtest
-  are available through the CLI (`--net`)
+- A network switch inside the GUI — the GUI runs on mainnet unless the desktop app is
+  *started* with `--net testnet|regtest` (see "Trying the GUI on regtest" below)
 
 ---
 
@@ -209,6 +209,22 @@ Resolution order:
 Inside the data root: `mainnet/wallets/*.wallet.json` (your wallets),
 `mainnet/server-certs.json` (pinned TLS certificates), `mainnet/servers.json` (discovered
 servers), `config.json` (language, unit, last server — shared across wallets).
+
+### 3.5 Trying the GUI on a test network (regtest)
+
+The desktop app starts on mainnet. To try features without real funds, start it on another network:
+
+```bash
+dotnet run --project src/App.Desktop                       # mainnet (default)
+dotnet run --project src/App.Desktop -- --net regtest      # regtest (or testnet)
+```
+
+The title then ends with `[REGTEST]` (or `[TESTNET]`); mainnet shows no tag. A test network has its own wallets,
+servers and settings folder, so it never touches your mainnet files, and it ships with no bootstrap servers: open the
+server settings and enter the server yourself. For a local chain run `tests/regtest/up.sh` (needs Docker): it starts a
+throw-away node and plm-fulcrum, mines 130 blocks and prints the server to use (`127.0.0.1:50111`, no SSL) and the
+command that sends coins to a GUI address; `tests/regtest/down.sh` removes everything. A wrong network name is refused
+at start. There is no switch inside the running app, on purpose, and Android always runs on mainnet.
 
 ---
 
@@ -878,8 +894,7 @@ binary); with no arguments it prints usage.
 
 **Shared conventions.** Default wallet file:
 `~/.palladium-wallet/<network>/wallets/default.wallet.json` — override with `--file PATH`.
-Default network mainnet — override with `--net testnet|regtest` (the CLI is the only way to
-use test networks).
+Default network mainnet — override with `--net testnet|regtest`.
 
 **Wallet password.** `create`/`restore*` ask for a password and encrypt the file; encrypted
 wallets need it for `info`/`sync`/`send`. Supply it, in order of preference, with:
