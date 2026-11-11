@@ -33,7 +33,7 @@
             </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#FFFFFF"/>
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#F8FAFC"/>     <!-- slate-50 -->
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#F7FFFFFF"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FCFFFFFF"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#66000000"/>   <!-- 40% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#E2E8F0"/>     <!-- slate-200 -->
@@ -50,13 +50,21 @@
             <SolidColorBrush x:Key="SuccessBrush"        Color="#16A34A"/>     <!-- green-600 -->
             <SolidColorBrush x:Key="WarningBrush"        Color="#D97706"/>     <!-- amber-600 -->
             <SolidColorBrush x:Key="DangerBrush"         Color="#DC2626"/>     <!-- red-600 -->
+            <!-- Text-weight variants of the state colours: readable on glass in this variant -->
+            <SolidColorBrush x:Key="SuccessTextBrush"    Color="#15803D"/>     <!-- green-700 -->
+            <SolidColorBrush x:Key="WarningTextBrush"    Color="#B45309"/>     <!-- amber-700 -->
+            <SolidColorBrush x:Key="WarningSoftBrush"    Color="#26F59E0B"/>
+            <!-- Scrollbars: slim, translucent thumb, no track -->
+            <SolidColorBrush x:Key="ScrollBarThumbFill"            Color="#59475569"/>
+            <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#80475569"/>
+            <SolidColorBrush x:Key="ScrollBarThumbFillPressed"     Color="#A6475569"/>
             <!-- Secondary (neutral) buttons: white surface + visible border, so they read as
                  available but quieter than the blue accent (Fluent's default grey reads as disabled). -->
             <SolidColorBrush x:Key="ButtonBackground"            Color="#B3FFFFFF"/>
             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#E6FFFFFF"/>
             <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#CCE2E8F0"/>
             <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#F1F5F9"/>
-            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#73A5B4CC"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#94A3B8"/>
             <SolidColorBrush x:Key="ButtonBorderBrushPressed"    Color="#94A3B8"/>
             <SolidColorBrush x:Key="ButtonBorderBrushDisabled"   Color="#E2E8F0"/>
@@ -83,7 +91,7 @@
             </LinearGradientBrush>
             <SolidColorBrush x:Key="SurfaceBrush"        Color="#1E293B"/>     <!-- slate-800 -->
             <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#273449"/>
-            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#F71E2A47"/>
+            <SolidColorBrush x:Key="OverlayCardBrush"    Color="#FC1E2A47"/>
             <SolidColorBrush x:Key="ScrimBrush"          Color="#99000000"/>   <!-- 60% -->
             <!-- Borders and separators -->
             <SolidColorBrush x:Key="BorderSubtleBrush"   Color="#334155"/>     <!-- slate-700 -->
@@ -91,7 +99,7 @@
             <!-- Text -->
             <SolidColorBrush x:Key="TextPrimaryBrush"    Color="#F8FAFC"/>     <!-- slate-50 -->
             <SolidColorBrush x:Key="TextSecondaryBrush"  Color="#94A3B8"/>     <!-- slate-400 -->
-            <SolidColorBrush x:Key="TextMutedBrush"      Color="#64748B"/>     <!-- slate-500 -->
+            <SolidColorBrush x:Key="TextMutedBrush"      Color="#8493AB"/>     <!-- between slate-400 and 500: ≥4.5:1 on the dark glass -->
             <!-- Brand / state (brighter tones on dark background) -->
             <SolidColorBrush x:Key="PrimaryBrush"        Color="#3B82F6"/>     <!-- blue-500 -->
             <SolidColorBrush x:Key="PrimaryHoverBrush"   Color="#60A5FA"/>     <!-- blue-400 -->
@@ -100,6 +108,12 @@
             <SolidColorBrush x:Key="SuccessBrush"        Color="#22C55E"/>     <!-- green-500 -->
             <SolidColorBrush x:Key="WarningBrush"        Color="#F59E0B"/>     <!-- amber-500 -->
             <SolidColorBrush x:Key="DangerBrush"         Color="#EF4444"/>     <!-- red-500 -->
+            <SolidColorBrush x:Key="SuccessTextBrush"    Color="#4ADE80"/>     <!-- green-400 -->
+            <SolidColorBrush x:Key="WarningTextBrush"    Color="#FBBF24"/>     <!-- amber-400 -->
+            <SolidColorBrush x:Key="WarningSoftBrush"    Color="#33F59E0B"/>
+            <SolidColorBrush x:Key="ScrollBarThumbFill"            Color="#66CBD5E1"/>
+            <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#8CCBD5E1"/>
+            <SolidColorBrush x:Key="ScrollBarThumbFillPressed"     Color="#B3CBD5E1"/>
             <!-- Secondary (neutral) buttons, dark variant -->
             <SolidColorBrush x:Key="ButtonBackground"            Color="#2EFFFFFF"/>
             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#45FFFFFF"/>

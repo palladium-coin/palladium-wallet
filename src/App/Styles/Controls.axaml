@@ -199,6 +199,33 @@
     <Style Selector="Border.balance-hero TextBlock.on-hero">
         <Setter Property="Foreground" Value="#D6E2FF"/>
     </Style>
+    <!-- Warning chip (e.g. Coinbase): soft amber tint with amber text, not white on a solid fill -->
+    <Style Selector="Border.chip.warn">
+        <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+    </Style>
+    <!-- Own addresses in transaction lists: theme-aware green (a fixed colour fails in one of the variants) -->
+    <Style Selector="SelectableTextBlock.mine">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}"/>
+    </Style>
+    <!-- A card inside an overlay is a recessed group, not a second sheet of glass:
+         never stack a translucent surface on another (legibility, and the double rim reads as noise). -->
+    <Style Selector="Border.overlay-surface Border.card">
+        <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="BoxShadow" Value="none"/>
+    </Style>
+    <Style Selector="Border.overlay-surface Border.card:pointerover">
+        <Setter Property="BoxShadow" Value="none"/>
+    </Style>
+    <!-- Scrollbars: a slim rounded thumb that widens on hover; content keeps clear of it (see Margin on the
+         scrolled panel). -->
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb#thumb">
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
     <!-- Tap-to-copy surface (address box): hand cursor and a brand tint on hover show it is a target -->
     <Style Selector="Border.copyable">
         <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>
