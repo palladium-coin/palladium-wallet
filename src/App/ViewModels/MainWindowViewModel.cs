@@ -94,7 +94,12 @@ public partial class MainWindowViewModel : ViewModelBase
         : $"Palladium Wallet {AppVersion} [{Net.ToString().ToUpperInvariant()}]";
 
     /// <summary>True on desktop; false on Android/iOS — hides filesystem-dependent features.</summary>
-    public bool IsDesktop => !OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS();
+    public bool IsDesktop => MobileLayoutOverride is { } mobile
+        ? !mobile
+        : !OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS();
+
+    /// <summary>Test seam: renders the mobile layout (Android/iOS) on a desktop machine, so it can be checked headlessly.</summary>
+    internal static bool? MobileLayoutOverride { get; set; }
 
     public bool IsMobile => !IsDesktop;
 

@@ -414,6 +414,10 @@
                     <Style Selector="TabStrip">
                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
                         <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                    </Style>
+                    <!-- ItemsPanel belongs to the TabControl (its template binds the presenter to it); set on the
+                         TabStrip it was ignored and the tabs wrapped at phone width. One row of equal cells, never wrapped. -->
+                    <Style Selector="TabControl">
                         <Setter Property="ItemsPanel">
                             <ItemsPanelTemplate>
                                 <UniformGrid Rows="1" Columns="6"/>
@@ -424,7 +428,7 @@
                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Padding" Value="8,12"/>
+                        <Setter Property="Padding" Value="2,12"/>
                     </Style>
                 </TabControl.Styles>
 
