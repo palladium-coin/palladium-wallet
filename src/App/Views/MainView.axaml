@@ -21,7 +21,7 @@
             <Setter Property="Margin" Value="16"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="18"/>
         </Style>
     </UserControl.Styles>
 
@@ -87,7 +87,7 @@
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             IsVisible="{Binding WalletFileExists}"
                             Command="{Binding WizardStartOpenCommand}"/>
-                    <Button Content="{Binding Loc[wiz.new.btn]}" FontSize="16"
+                    <Button Content="{Binding Loc[wiz.new.btn]}" FontSize="16" Classes="accent"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{Binding WizardStartNewCommand}"/>
                     <Button Content="{Binding Loc[wiz.restore.btn]}" FontSize="16"
@@ -632,7 +632,7 @@
 
                             <!-- Action buttons -->
                             <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="14">
-                                <Button Grid.Column="0" Content="{Binding Loc[send.prepare]}"
+                                <Button Grid.Column="0" Classes="accent" Content="{Binding Loc[send.prepare]}"
                                         Command="{Binding PrepareSendCommand}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
                                 <Button Grid.Column="1" Content="{Binding Loc[send.confirm]}" Classes="accent"
@@ -779,7 +779,7 @@
                                     MinHeight="52"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     FontSize="15"/>
-                            <Button Content="{Binding Loc[send.prepare]}"
+                            <Button Classes="accent" Content="{Binding Loc[send.prepare]}"
                                     Command="{Binding PrepareSendCommand}"
                                     MinHeight="48"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
@@ -1038,7 +1038,7 @@
                             <TextBox Grid.Column="1" PlaceholderText="{Binding Loc[contacts.address.ph]}"
                                      Text="{Binding NewContactAddress}" FontFamily="monospace"
                                      Margin="0,0,6,0"/>
-                            <Button Grid.Column="2" Content="{Binding Loc[contacts.add]}"
+                            <Button Grid.Column="2" Classes="accent" Content="{Binding Loc[contacts.add]}"
                                     Command="{Binding AddContactCommand}"/>
                         </Grid>
                         <!-- Add contact form — Mobile: vertical -->
@@ -1048,7 +1048,7 @@
                                      Text="{Binding NewContactName}"/>
                             <TextBox PlaceholderText="{Binding Loc[contacts.address.ph]}"
                                      Text="{Binding NewContactAddress}" FontFamily="monospace"/>
-                            <Button Content="{Binding Loc[contacts.add]}"
+                            <Button Classes="accent" Content="{Binding Loc[contacts.add]}"
                                     Command="{Binding AddContactCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"/>
@@ -1151,8 +1151,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnAddressOverlayBackdropTapped"
                 IsVisible="{Binding AddressInfo, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="540" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     DataContext="{Binding AddressInfo}">
@@ -1219,8 +1219,8 @@
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
                 IsVisible="{Binding IsPrivKeyPromptOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="360" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="14">
@@ -1253,8 +1253,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnTxDetailsOverlayBackdropTapped"
                 IsVisible="{Binding IsTxDetailsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="660" MaxHeight="800" Margin="16" Padding="0"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Panel Margin="24">
@@ -1439,7 +1439,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnServerOverlayBackdropTapped"
                 IsVisible="{Binding IsServerSettingsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
                     BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     Classes.desktop-overlay="{Binding IsDesktop}">
                 <ScrollViewer>
@@ -1560,8 +1560,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnPsbtOverlayBackdropTapped"
                 IsVisible="{Binding IsPsbtOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="640" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="640">
@@ -1604,8 +1604,8 @@
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
                 IsVisible="{Binding IsUrQrOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="480" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="12">
@@ -1627,8 +1627,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnWalletInfoOverlayBackdropTapped"
                 IsVisible="{Binding IsWalletInfoOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="500" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="620">
@@ -1796,8 +1796,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnSettingsOverlayBackdropTapped"
                 IsVisible="{Binding IsSettingsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="640">
@@ -1871,8 +1871,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnHelpOverlayBackdropTapped"
                 IsVisible="{Binding IsHelpOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="16">
@@ -1979,8 +1979,8 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnUpdateAvailableOverlayBackdropTapped"
                 IsVisible="{Binding IsUpdateAvailableOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface" Background="{DynamicResource OverlayCardBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="16">

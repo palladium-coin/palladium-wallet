@@ -26,11 +26,13 @@
     <Style Selector="TextBlock.h1">
         <Setter Property="FontSize" Value="20"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="LetterSpacing" Value="-0.3"/> <!-- size-specific tracking: tighter as type grows -->
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
     </Style>
     <Style Selector="TextBlock.label">
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="LetterSpacing" Value="0.2"/> <!-- small text: slightly open for legibility -->
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
     </Style>
     <Style Selector="TextBlock.muted">
@@ -40,6 +42,7 @@
     <Style Selector="TextBlock.amount">
         <Setter Property="FontSize" Value="34"/>
         <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="LetterSpacing" Value="-0.8"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="FontFeatures" Value="+tnum"/>
     </Style>
@@ -63,6 +66,19 @@
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <!-- Press feedback is instant and physical: scale down on press (state change
+         is immediate), ease back out on release. Compositor-friendly (transform only). -->
+    <Style Selector="Button">
+        <Setter Property="RenderTransform" Value="none"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="CubicEaseOut"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)"/>
     </Style>
     <!-- Accent (CTA) buttons are already blue via Fluent+SystemAccentColor.
          Ensure readable white text in both light and dark variants. -->
@@ -98,6 +114,13 @@
         <Setter Property="Margin" Value="0,1"/>
     </Style>
     <!-- Hover: neutral tint; selected: subtle brand-blue tint -->
+    <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
     <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
     </Style>
@@ -139,6 +162,12 @@
     </Style>
     <Style Selector="Border.card:pointerover">
         <Setter Property="BoxShadow" Value="0 6 16 -4 #26000000"/>
+    </Style>
+    <!-- Overlay surface (address/tx details, settings, help): bigger surface reads
+         as thicker, so a deeper, softer shadow than a card; same radius family. -->
+    <Style Selector="Border.overlay-surface">
+        <Setter Property="CornerRadius" Value="18"/>
+        <Setter Property="BoxShadow" Value="0 20 48 -12 #55000000"/>
     </Style>
     <!-- Balance card: subtle blue accent, slightly more prominent -->
     <Style Selector="Border.balance-card">
