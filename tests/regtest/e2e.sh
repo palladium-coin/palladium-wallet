@@ -206,14 +206,15 @@ echo "== GUI view model against the real node (Coins tab, freeze, send, donate, 
 GUI_ADDR=$(dotnet "$ROOT/src/Cli/bin/Debug/net10.0/PalladiumWallet.Cli.dll" addresses \
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" --net regtest --count 1 \
   | sed -n 's/^ *receiving\/0: *//p')
-for _ in 1 2 3 4; do $CLI sendtoaddress "$GUI_ADDR" 1 >/dev/null; done
+for _ in $(seq 11); do $CLI sendtoaddress "$GUI_ADDR" 1 >/dev/null; done   # 4 for RegtestGuiTests, 7 for ContactsSendRegtestTests
 $CLI generatetoaddress 2 "$MINER" >/dev/null; sleep 4
 check "no transaction waits in the mempool before the GUI run" '"size": 0' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 GUI_RESULT=$(PALLADIUM_TEST_REGTEST_SERVER="127.0.0.1:$PORT" PALLADIUM_TEST_REGTEST_DEST="$($CLI getnewaddress "" bech32)" \
-  dotnet test "$ROOT/tests/PalladiumWallet.Tests" --filter "FullyQualifiedName~RegtestGuiTests" 2>&1 | tail -15 || true)
+  PALLADIUM_TEST_REGTEST_CONTACTS="$($CLI getnewaddress "" bech32),$($CLI getnewaddress "" legacy),$($CLI getnewaddress "" p2sh-segwit)" \
+  dotnet test "$ROOT/tests/PalladiumWallet.Tests" --filter "FullyQualifiedName~RegtestGuiTests|FullyQualifiedName~ContactsSendRegtestTests" 2>&1 | tail -15 || true)
 [[ $GUI_RESULT == *"Passed!"* ]] || echo "$GUI_RESULT"
 check "the GUI tests pass" "Passed!" echo "$GUI_RESULT"
-check "the GUI broadcast four transactions to the node" '"size": 4' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
+check "the GUI broadcast eleven transactions to the node (four sends, seven to saved contacts)" '"size": 11' docker exec "$NODE" palladium-cli -regtest getmempoolinfo
 
 echo
 if [[ $fail == 0 ]]; then echo "regtest e2e: all checks passed"; else echo "regtest e2e: FAILED"; exit 1; fi

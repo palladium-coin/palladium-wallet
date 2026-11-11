@@ -49,7 +49,15 @@ public partial class MainWindowViewModel
 
     // The prepared transaction is a snapshot of the form (ADR 0048): anything the user can change
     // that went into it discards it, so what Confirm sends is always what was reviewed.
-    partial void OnSendToChanged(string value) => InvalidatePendingSend();
+    partial void OnSendToChanged(string value)
+    {
+        InvalidatePendingSend();
+        // The contact picker shows the contact whose address the box holds. When the box no longer holds it (cleared
+        // after a send, edited by hand, replaced by a scanned QR) the picker is emptied: otherwise it keeps showing the
+        // old contact and picking that same contact again changes nothing, so the box stays empty.
+        if (SendToContact is { } contact && !string.Equals(contact.Address, value, StringComparison.OrdinalIgnoreCase))
+            SendToContact = null;
+    }
 
     partial void OnSendAmountChanged(string value) => InvalidatePendingSend();
 
