@@ -48,12 +48,33 @@ public partial class MainWindowViewModel
 
     partial void OnReceiveAddressChanged(string value)
     {
+        ReceiveCopied = false; // a new address has not been copied yet
         var previous = ReceiveQr;
         ReceiveQr = string.IsNullOrEmpty(value) ? null : GenerateQr(value);
         previous?.Dispose();
     }
 
-    public void NotifyAddressCopied() => StatusMessage = Loc.Tr("addr.copied");
+    /// <summary>True for a moment after the receive address was copied: the Copy button confirms in place.</summary>
+    [ObservableProperty]
+    private bool receiveCopied;
+
+    /// <summary>How long the button keeps saying "Copied" (a test seam).</summary>
+    internal static TimeSpan ReceiveCopiedDuration { get; set; } = TimeSpan.FromMilliseconds(1800);
+
+    private int _receiveCopiedGeneration;
+
+    public void NotifyAddressCopied()
+    {
+        StatusMessage = Loc.Tr("addr.copied");
+        ReceiveCopied = true;
+        // Only the latest copy may clear the flag, so a quick second click gets its full duration.
+        var generation = ++_receiveCopiedGeneration;
+        _ = Task.Delay(ReceiveCopiedDuration).ContinueWith(_ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (generation == _receiveCopiedGeneration) ReceiveCopied = false;
+            }), TaskScheduler.Default);
+    }
 
     private static Bitmap? GenerateQr(string text)
     {

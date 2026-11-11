@@ -10,6 +10,7 @@ release and covers the full history from the initial commit.
 ### Changed
 
 - **GUI visual polish** (styles only): buttons scale down on press and ease back, list rows fade their hover background, headings and the balance use size-specific letter spacing, every overlay card shares one `overlay-surface` style (larger radius, deeper soft shadow), and the main action of the start, Send and Contacts screens uses the accent style. Secondary buttons are now a white (light) or slate (dark) surface with a visible border instead of Fluent's flat grey, which read as disabled.
+- **Receive tab**: the two columns align at the top, the QR panel has a hairline border so it reads on the white light-theme card, the Copy button confirms in place ("Copied", 1.8 s) instead of only in the status bar, and the phone layout is tighter so the Copy button is visible without scrolling at 400×800.
 - The dust relay rate (3 sat/vB) moved from a literal in `TransactionFactory` to `ChainProfile.DustRelaySatPerVByte`; the thresholds (P2PKH 546, P2SH 540, P2WPKH 294, P2WSH 330 sat) were verified against Palladium Core v2.1.0 with `testmempoolaccept` (ADR 0049).
 
 ### Added
