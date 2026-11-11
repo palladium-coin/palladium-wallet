@@ -35,6 +35,7 @@ release and covers the full history from the initial commit.
 
 ### Fixed
 
+- The About text claimed "seed and keys always encrypted", which is not true for a wallet created without a password (the wizard offers that, with a warning). It now says the seed and keys never leave the device and the wallet file is encrypted when a password is set (all 7 languages).
 - Texts assembled from translated parts kept the language (and unit) of the moment they were made: the send and donation review ("Change:", "fee … vB"), the fee-estimate hint and the connection indicator ("connected") stayed in the old language after a language switch. They are now rendered from the prepared transaction, the fee estimates and the connection state, so a switch re-renders them; the review and the donation review also follow a unit change. The review's "fee … (… vB)" part and the donation's "watch-only" suffix, hard-coded in English, are translated (new Loc key `send.review.fee`).
 - Stale status-bar messages: "The words do not match" stayed after going back in the wizard, "The two passwords do not match" after turning encryption off, and "Invalid address…" after the next contact was added successfully. The status is now cleared when the wizard step changes, when the encryption option is toggled, and when a contact is saved.
 - An empty, malformed or wrong-network recipient in Send (and an invalid donation address) showed the parser's exception text (`Error: Invalid string`); it now says "Address not valid for this network".

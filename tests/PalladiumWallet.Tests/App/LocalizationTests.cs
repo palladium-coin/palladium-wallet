@@ -75,6 +75,21 @@ public partial class LocalizationTests
         Assert.True(missing.Count == 0, "Keys used but not defined: " + string.Join(", ", missing));
     }
 
+    // The About text must not claim what the wizard lets the user turn off (an unencrypted wallet file): it may say the
+    // keys never leave the device, and that the file is encrypted once a password is set, but not that they are "always" encrypted.
+    [Fact]
+    public void The_about_text_does_not_claim_the_wallet_is_always_encrypted()
+    {
+        var always = new[] { "sempre", "always", "siempre", "toujours", "stets", "始终" };
+        foreach (var lang in new[] { "it", "en", "es", "fr", "pt", "de", "zh" })
+        {
+            Loc.SwitchTo(lang);
+            var text = Loc.Tr("help.info");
+            Assert.DoesNotContain(always, w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+        }
+        Loc.SwitchTo("en");
+    }
+
     private static string? RepoRoot()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
