@@ -43,13 +43,17 @@ public static class WalletStore
         {
             var tmp = path + ".tmp";
             File.Delete(tmp); // a leftover from a crash could have looser permissions
-            using (var stream = new FileStream(tmp, new FileStreamOptions
+            var options = new FileStreamOptions
             {
                 Mode = FileMode.CreateNew,
                 Access = FileAccess.Write,
                 Share = FileShare.None,
-                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
-            }))
+            };
+            // Setting UnixCreateMode throws PlatformNotSupportedException on Windows, where the
+            // file inherits the owner-only ACL of the user profile directory instead.
+            if (!OperatingSystem.IsWindows())
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            using (var stream = new FileStream(tmp, options))
             {
                 stream.Write(new UTF8Encoding(false).GetBytes(content));
                 stream.Flush(flushToDisk: true);
