@@ -77,6 +77,9 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsUnitMicro));
         OnPropertyChanged(nameof(IsUnitSat));
         ApplyCache(_doc?.Cache);
+        RefreshRecipientHint();
+        OnPropertyChanged(nameof(WizardStepText));
+        OnPropertyChanged(nameof(HasWizardStepText));
         // Texts built from translated parts when they were produced: render them again in the new language/unit.
         OnPropertyChanged(nameof(ConnectionStatus));
         OnPropertyChanged(nameof(ConnectionStatusShort));

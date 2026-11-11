@@ -237,6 +237,11 @@ at start. There is no switch inside the running app, on purpose, and Android alw
 
 ## 4. First launch: the setup wizard
 
+A flow that has several screens (new wallet, restore, import, multisig) shows a **step counter**
+("Step 2 of 4") at the top right. A problem with what you typed (words that do not match, two
+different passwords, an invalid address) appears as an amber notice under the title, as well as
+in the status bar. The desktop window can be resized; the smallest size is 760×600.
+
 ### 4.1 Step: data location (desktop only, very first run)
 
 Choose where the wallet stores its data: **"Use the default path"** (shown on screen) or
@@ -399,10 +404,14 @@ wallet must be spendable (not watch-only) to actually broadcast.
 
 ### 8.1 The form
 
+The form scrolls, but the **Prepare** and **Confirm** buttons (and *Sign a PSBT…*) stay at the bottom of the tab on desktop, and the review of a prepared transaction sits right above them.
+
 - **From contacts** — optional dropdown that fills the recipient address from your address
   book.
-- **Recipient address** — validated when you prepare: an address of the wrong network or
-  with a typo is rejected (checksums make silent typos virtually impossible).
+- **Recipient address** — checked as you type: under the box it says *Valid address* with its
+  kind (P2WPKH, P2TR, …) or that the address is not valid for this network. It is validated
+  again when you prepare: an address of the wrong network or with a typo is rejected
+  (checksums make silent typos virtually impossible).
 - **Amount** — interpreted in the **currently selected display unit** (PLM by default — check
   the unit in Settings before typing!). Rejected if negative, malformed, or more precise
   than 1 satoshi (0.00000001 PLM).

@@ -32,6 +32,14 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string newContactAddress = "";
 
+    /// <summary>Why the contact was not saved, shown under the form (the status bar also carries it).</summary>
+    [ObservableProperty]
+    private string contactFormMessage = "";
+
+    partial void OnNewContactNameChanged(string value) => ContactFormMessage = "";
+
+    partial void OnNewContactAddressChanged(string value) => ContactFormMessage = "";
+
     [RelayCommand]
     private void AddContact()
     {
@@ -45,12 +53,12 @@ public partial class MainWindowViewModel
         }
         catch (System.FormatException)
         {
-            StatusMessage = Loc.Tr("msg.contact.address.invalid");
+            StatusMessage = ContactFormMessage = Loc.Tr("msg.contact.address.invalid");
             return;
         }
         if (Contacts.Any(c => string.Equals(c.Address, addr, System.StringComparison.OrdinalIgnoreCase)))
         {
-            StatusMessage = Loc.Tr("msg.contact.duplicate");
+            StatusMessage = ContactFormMessage = Loc.Tr("msg.contact.duplicate");
             return;
         }
         Contacts.Add(new ContactEntry(name, addr));

@@ -49,8 +49,42 @@ public partial class MainWindowViewModel
 
     // The prepared transaction is a snapshot of the form (ADR 0048): anything the user can change
     // that went into it discards it, so what Confirm sends is always what was reviewed.
+    /// <summary>Live check of the recipient box, shown under it (empty while the box is empty).</summary>
+    [ObservableProperty]
+    private string recipientHint = "";
+
+    [ObservableProperty]
+    private bool isRecipientHintError;
+
+    private void RefreshRecipientHint()
+    {
+        var text = SendTo.Trim();
+        if (text.Length == 0)
+        {
+            RecipientHint = "";
+            IsRecipientHintError = false;
+        }
+        else if (TryParseDestination(text, out var address))
+        {
+            var script = address.ScriptPubKey;
+            var kind = script.IsScriptType(NBitcoin.ScriptType.Taproot) ? "P2TR"
+                : script.IsScriptType(NBitcoin.ScriptType.P2WPKH) ? "P2WPKH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2WSH) ? "P2WSH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2SH) ? "P2SH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2PKH) ? "P2PKH" : "";
+            RecipientHint = kind.Length > 0 ? $"{Loc.Tr("send.to.ok")} · {kind}" : Loc.Tr("send.to.ok");
+            IsRecipientHintError = false;
+        }
+        else
+        {
+            RecipientHint = Loc.Tr("msg.address.invalid");
+            IsRecipientHintError = true;
+        }
+    }
+
     partial void OnSendToChanged(string value)
     {
+        RefreshRecipientHint();
         InvalidatePendingSend();
         // The contact picker shows the contact whose address the box holds. When the box no longer holds it (cleared
         // after a send, edited by hand, replaced by a scanned QR) the picker is emptied: otherwise it keeps showing the
@@ -120,6 +154,20 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private string sendPreview = "";
+
+    /// <summary>The first line of the review (what is paid, to whom) and the rest, so the view can give them different weight.</summary>
+    [ObservableProperty]
+    private string sendPreviewHeadline = "";
+
+    [ObservableProperty]
+    private string sendPreviewDetail = "";
+
+    partial void OnSendPreviewChanged(string value)
+    {
+        var newline = value.IndexOf('\n');
+        SendPreviewHeadline = newline < 0 ? value : value[..newline];
+        SendPreviewDetail = newline < 0 ? "" : value[(newline + 1)..].TrimEnd();
+    }
 
     [ObservableProperty]
     private bool hasPendingSend;

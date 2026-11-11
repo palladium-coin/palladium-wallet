@@ -58,11 +58,25 @@
         </StackPanel>
 
         <!-- ============ SETUP WIZARD (§15): one step at a time ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsSetupVisible}">
+        <Grid Grid.Row="1" RowDefinitions="*,Auto" IsVisible="{Binding IsSetupVisible}">
+        <ScrollViewer Grid.Row="0">
             <StackPanel MaxWidth="560" Margin="24,40" Spacing="18"
                         HorizontalAlignment="Stretch">
-                <TextBlock Text="Palladium Wallet" FontSize="28" FontWeight="Bold"
-                           HorizontalAlignment="Center"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Palladium Wallet" FontSize="28" FontWeight="Bold"
+                               LetterSpacing="-0.6"/>
+                    <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center"
+                            IsVisible="{Binding HasWizardStepText}">
+                        <TextBlock Text="{Binding WizardStepText}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </Border>
+                </Grid>
+
+                <!-- A validation message right where the person is looking, not only in the status bar -->
+                <Border Classes="notice" IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource WarningTextBrush}"/>
+                </Border>
 
                 <!-- Step 0 (first launch): where to store data -->
                 <StackPanel IsVisible="{Binding IsStepDataLocation}" Spacing="12">
@@ -268,11 +282,6 @@
                                          TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
                     <Image Source="{Binding MultisigOwnKeyQr}" Width="200" Height="200" HorizontalAlignment="Left"
                            IsVisible="{Binding MultisigOwnKeyQr, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
-                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
-                                Command="{Binding WizardNextFromMultisigCommand}"/>
-                    </StackPanel>
                 </StackPanel>
 
                 <!-- Step: compare the wallet ID with the other cosigners -->
@@ -359,8 +368,11 @@
 
                     <!-- Encryption section -->
                     <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding Loc[wiz.password.label]}" FontWeight="SemiBold" FontSize="13"/>
                         <TextBox PlaceholderText="{Binding Loc[wiz.password.placeholder]}"
                                  PasswordChar="●" Text="{Binding PasswordInput}"/>
+                        <TextBlock Text="{Binding Loc[wiz.password.confirm.label]}" FontWeight="SemiBold" FontSize="13"
+                                   Margin="0,6,0,0"/>
                         <TextBox PlaceholderText="{Binding Loc[wiz.password.confirm]}"
                                  PasswordChar="●" Text="{Binding ConfirmPasswordInput}"/>
                         <CheckBox Content="{Binding Loc[wiz.password.encrypt]}"
@@ -379,6 +391,19 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!-- The multisig step is long: its buttons stay in view while the form scrolls -->
+        <Border Grid.Row="1" IsVisible="{Binding IsStepMultisig}" Padding="0,10"
+                BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+            <Grid MaxWidth="560" Margin="24,0" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                    <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                    <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                            Command="{Binding WizardNextFromMultisigCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        </Grid>
+
         <!-- ============ WALLET PANEL ============ -->
         <Grid Grid.Row="1" RowDefinitions="Auto,*" IsVisible="{Binding IsWalletOpen}" Margin="16">
 
@@ -387,7 +412,10 @@
             <Border Grid.Row="0" Classes="balance-hero" Margin="0,0,0,16">
                 <StackPanel Spacing="4">
                     <TextBlock Text="{Binding Loc[addr.balance]}" Classes="label on-hero"/>
-                    <TextBlock Text="{Binding BalanceText}" Classes="amount"/>
+                    <!-- Shrinks on a narrow screen (a long amount in a long unit name) instead of being clipped -->
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding BalanceText}" Classes="amount"/>
+                    </Viewbox>
                     <TextBlock Text="{Binding UnconfirmedText}" Foreground="#FCD34D"
                                TextWrapping="Wrap"
                                IsVisible="{Binding UnconfirmedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
@@ -515,12 +543,14 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <ScrollViewer>
+                    <!-- The form scrolls; the buttons that act on it stay in view (desktop) -->
+                    <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0">
                     <Panel Margin="16,14">
 
                         <!-- ── DESKTOP: Recipient | Amount side-by-side ── -->
                         <Grid IsVisible="{Binding IsDesktop}"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
+                              RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
 
                             <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="14">
                                 <!-- Recipient card -->
@@ -547,6 +577,10 @@
                                             <TextBox PlaceholderText="{Binding Loc[send.to]}"
                                                      Text="{Binding SendTo}"
                                                      FontFamily="monospace" FontSize="13"/>
+                                            <!-- Live check: kind of address, or why it is not one -->
+                                            <TextBlock Text="{Binding RecipientHint}" FontSize="12" TextWrapping="Wrap"
+                                                       IsVisible="{Binding RecipientHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Classes.error="{Binding IsRecipientHintError}" Classes="hint"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
@@ -593,29 +627,22 @@
                                 </Border>
                             </Grid>
 
-                            <!-- Summary card — full width, visible after Prepare -->
+                            <!-- PSBT of a prepared transaction that this wallet cannot (or not alone) sign -->
                             <Border Grid.Row="1" Classes="card" Padding="22,16"
-                                    IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <StackPanel Spacing="8">
-                                    <TextBlock Text="{Binding Loc[send.summary]}" Classes="section"/>
-                                    <SelectableTextBlock Text="{Binding SendPreview}"
-                                                         TextWrapping="Wrap" FontSize="13" Classes="mono"
-                                                         Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <StackPanel Spacing="6"
-                                                IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                        <TextBlock Text="{Binding Loc[send.psbt.label]}" Classes="label"/>
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
-                                                     FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
-                                                     AcceptsReturn="True" Height="90"/>
-                                            <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
-                                                <Button Content="{Binding Loc[send.psbt.copy]}"
-                                                        Click="OnCopyPsbtClick"/>
-                                                <Button Content="{Binding Loc[psbt.showqr]}"
-                                                        Command="{Binding ShowPendingPsbtQrCommand}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </StackPanel>
+                                    IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding Loc[send.psbt.label]}" Classes="label"/>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
+                                                 FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
+                                                 AcceptsReturn="True" Height="90"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
+                                            <Button Content="{Binding Loc[send.psbt.copy]}"
+                                                    Click="OnCopyPsbtClick"/>
+                                            <Button Content="{Binding Loc[psbt.showqr]}"
+                                                    Command="{Binding ShowPendingPsbtQrCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
@@ -629,20 +656,6 @@
                             <TextBlock Grid.Row="3" Text="{Binding CoinSelectionText}"
                                        IsVisible="{Binding HasCoinSelection}" FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
-
-                            <!-- Action buttons -->
-                            <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="14">
-                                <Button Grid.Column="0" Classes="accent" Content="{Binding Loc[send.prepare]}"
-                                        Command="{Binding PrepareSendCommand}"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
-                                <Button Grid.Column="1" Content="{Binding Loc[send.confirm]}" Classes="accent"
-                                        Command="{Binding ConfirmSendCommand}"
-                                        IsEnabled="{Binding HasPendingSend}"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
-                            </Grid>
-                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
-                            <Button Grid.Row="5" Content="{Binding Loc[psbt.open.btn]}"
-                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
                         </Grid>
 
                         <!-- ── MOBILE: vertical stack ── -->
@@ -688,6 +701,9 @@
                                                 </Viewbox>
                                             </Button>
                                         </Grid>
+                                        <TextBlock Text="{Binding RecipientHint}" FontSize="12" TextWrapping="Wrap"
+                                                   IsVisible="{Binding RecipientHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                   Classes.error="{Binding IsRecipientHintError}" Classes="hint"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -738,11 +754,15 @@
 
                             <!-- Summary card -->
                             <Border Classes="card" Padding="20,16"
+                                    Classes.review="{Binding HasPendingSend}"
                                     IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="{Binding Loc[send.summary]}" Classes="section"/>
-                                    <SelectableTextBlock Text="{Binding SendPreview}"
-                                                         TextWrapping="Wrap" FontSize="13" Classes="mono"
+                                    <SelectableTextBlock Text="{Binding SendPreviewHeadline}"
+                                                         TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" Classes="mono"/>
+                                    <SelectableTextBlock Text="{Binding SendPreviewDetail}"
+                                                         IsVisible="{Binding SendPreviewDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                         TextWrapping="Wrap" FontSize="12" Classes="mono"
                                                          Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     <StackPanel Spacing="6"
                                                 IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -792,6 +812,39 @@
 
                     </Panel>
                     </ScrollViewer>
+
+                    <!-- Pinned footer (desktop): Prepare / Confirm and the PSBT entry are always on screen -->
+                    <Border Grid.Row="1" IsVisible="{Binding IsDesktop}" Padding="16,10"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+                        <StackPanel Spacing="8">
+                            <!-- The review sits right above the button that confirms it: what is paid, to whom, the fee -->
+                            <Border Classes="card" Padding="18,12"
+                                    Classes.review="{Binding HasPendingSend}"
+                                    IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <StackPanel Spacing="4">
+                                    <SelectableTextBlock Text="{Binding SendPreviewHeadline}"
+                                                         TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" Classes="mono"/>
+                                    <SelectableTextBlock Text="{Binding SendPreviewDetail}"
+                                                         IsVisible="{Binding SendPreviewDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                         TextWrapping="Wrap" FontSize="12" Classes="mono"
+                                                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                                <Button Grid.Column="0" Classes="accent" Content="{Binding Loc[send.prepare]}"
+                                        Command="{Binding PrepareSendCommand}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Grid.Column="1" Content="{Binding Loc[send.confirm]}" Classes="accent"
+                                        Command="{Binding ConfirmSendCommand}"
+                                        IsEnabled="{Binding HasPendingSend}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            </Grid>
+                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
+                            <Button Content="{Binding Loc[psbt.open.btn]}"
+                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Border>
+                    </Grid>
                 </TabItem>
 
                 <!-- 3. Receive -->
@@ -812,7 +865,9 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <ScrollViewer>
+                    <!-- The address and QR scroll; on a phone the Copy button stays in view above the status bar -->
+                    <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0">
                     <Panel Margin="16,14">
 
                         <!-- ── DESKTOP: QR left | address right ── -->
@@ -905,18 +960,6 @@
                                                        IsVisible="{Binding ReceivePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                         </StackPanel>
                                     </Border>
-                                    <Button Classes="accent" Click="OnCopyReceiveAddressClick"
-                                            MinHeight="52"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="15">
-                                        <Panel>
-                                            <TextBlock Text="{Binding Loc[receive.copy]}" IsVisible="{Binding !ReceiveCopied}"
-                                                       HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Loc[receive.copied]}" IsVisible="{Binding ReceiveCopied}"
-                                                       HorizontalAlignment="Center"/>
-                                        </Panel>
-                                    </Button>
                                 </StackPanel>
                             </Border>
 
@@ -929,6 +972,22 @@
 
                     </Panel>
                     </ScrollViewer>
+                    <Border Grid.Row="1" IsVisible="{Binding IsMobile}" Padding="16,10"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+                        <Button Classes="accent" Click="OnCopyReceiveAddressClick"
+                                MinHeight="52"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                FontSize="15">
+                            <Panel>
+                                <TextBlock Text="{Binding Loc[receive.copy]}" IsVisible="{Binding !ReceiveCopied}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Loc[receive.copied]}" IsVisible="{Binding ReceiveCopied}"
+                                           HorizontalAlignment="Center"/>
+                            </Panel>
+                        </Button>
+                    </Border>
+                    </Grid>
                 </TabItem>
 
                 <!-- 4. Addresses -->
@@ -1015,7 +1074,7 @@
                                        HorizontalAlignment="Center"/>
                         </StackPanel>
                     </TabItem.Header>
-                    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="4">
+                    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="4">
                         <!-- Column headers — desktop only -->
                         <Grid Grid.Row="0" ColumnDefinitions="180,*" Margin="12,4"
                               IsVisible="{Binding IsDesktop}">
@@ -1078,6 +1137,10 @@
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"/>
                         </StackPanel>
+                        <!-- Why the contact was not saved, next to the form -->
+                        <TextBlock Grid.Row="4" Margin="12,6,12,0" FontSize="12" TextWrapping="Wrap"
+                                   Text="{Binding ContactFormMessage}" Classes="hint error"
+                                   IsVisible="{Binding ContactFormMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     </Grid>
                 </TabItem>
 

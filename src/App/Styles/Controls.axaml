@@ -226,6 +226,24 @@
     <Style Selector="ScrollBar /template/ Thumb#thumb">
         <Setter Property="CornerRadius" Value="6"/>
     </Style>
+    <!-- Inline notice (validation message in a flow): a soft amber block, not a line of small grey text -->
+    <Style Selector="Border.notice">
+        <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="14,10"/>
+    </Style>
+    <!-- Field hint under an input: a quiet confirmation, or the reason it is wrong -->
+    <Style Selector="TextBlock.hint">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.hint.error">
+        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+    </Style>
+    <!-- A prepared transaction awaiting confirmation: the summary card takes the brand tint -->
+    <Style Selector="Border.card.review">
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PrimarySoftBrush}"/>
+    </Style>
     <!-- Tap-to-copy surface (address box): hand cursor and a brand tint on hover show it is a target -->
     <Style Selector="Border.copyable">
         <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>

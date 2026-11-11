@@ -55,7 +55,36 @@ public partial class MainWindowViewModel
 
     // A message belongs to the screen that raised it: leaving a step, or toggling the option the message
     // is about, must not leave it on the status bar.
-    partial void OnSetupStepChanged(string value) => StatusMessage = "";
+    partial void OnSetupStepChanged(string value)
+    {
+        StatusMessage = "";
+        OnPropertyChanged(nameof(WizardStepText));
+        OnPropertyChanged(nameof(HasWizardStepText));
+    }
+
+    private string[] WizardFlowSteps() => _wizardFlow switch
+    {
+        WizardFlowKind.New => [StepShowSeed, StepConfirmSeed, StepPassphrase, StepScriptType, StepPassword],
+        WizardFlowKind.Restore => [StepWords, StepPassphrase, StepScriptType, StepPassword],
+        WizardFlowKind.ImportXkey => [StepImportXkey, StepPassword],
+        WizardFlowKind.ImportWif => [StepImportWif, StepScriptType, StepPassword],
+        WizardFlowKind.ImportAddress => [StepImportAddress, StepPassword],
+        WizardFlowKind.Multisig => [StepMultisig, StepMultisigVerify, StepPassword],
+        _ => [],
+    };
+
+    /// <summary>"Step 2 of 4" while a creation flow is on screen; empty on the start, open and data-location screens.</summary>
+    public string WizardStepText
+    {
+        get
+        {
+            var steps = WizardFlowSteps();
+            var index = Array.IndexOf(steps, SetupStep);
+            return index >= 0 && steps.Length > 1 ? string.Format(Loc.Tr("wiz.step"), index + 1, steps.Length) : "";
+        }
+    }
+
+    public bool HasWizardStepText => WizardStepText.Length > 0;
 
     public bool IsStepDataLocation => SetupStep == StepDataLocation;
     public bool IsStepStart        => SetupStep == StepStart;
