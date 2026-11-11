@@ -62,7 +62,9 @@ chmod 777 "$WORK/node" "$WORK/fulcrum"; chmod 666 "$WORK"/node/palladium.conf "$
 docker network create "$NET" >/dev/null
 docker run -d --name "$NODE" --network "$NET" -v "$WORK/node:/home/palladium/.palladium" -e HOME=/home/palladium \
   --user "$(id -u):$(id -g)" "$NODE_IMAGE" -regtest -acceptnonstdtxn=0 >/dev/null
-for _ in $(seq 30); do docker exec "$NODE" palladium-cli -regtest getblockchaininfo >/dev/null 2>&1 && break; sleep 1; done
+up=0
+for _ in $(seq 30); do docker exec "$NODE" palladium-cli -regtest getblockchaininfo >/dev/null 2>&1 && { up=1; break; }; sleep 1; done
+[[ $up == 1 ]] || { echo "node did not come up; container log:"; docker logs "$NODE" 2>&1 | tail -40; exit 1; }
 docker exec "$NODE" palladium-cli -regtest createwallet t >/dev/null
 MINER=$($CLI getnewaddress "" bech32)
 $CLI generatetoaddress 130 "$MINER" >/dev/null   # coinbase maturity is 120
