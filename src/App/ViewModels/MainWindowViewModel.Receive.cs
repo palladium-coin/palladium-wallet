@@ -46,6 +46,17 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private Bitmap? receiveQr;
 
+    /// <summary>Derivation path of the shown receive address (empty for wallets without one); language-independent.</summary>
+    [ObservableProperty]
+    private string receivePath = "";
+
+    private void ShowReceiveAddress(int index)
+    {
+        ReceiveAddress = _account!.GetReceiveAddress(index).ToString();
+        var account = _doc?.AccountPath;
+        ReceivePath = string.IsNullOrEmpty(account) ? "" : $"m/{account}/0/{index}";
+    }
+
     partial void OnReceiveAddressChanged(string value)
     {
         ReceiveCopied = false; // a new address has not been copied yet
@@ -300,7 +311,7 @@ public partial class MainWindowViewModel
             ImmatureText = "";
             VerifyingText = "";
             FrozenText = "";
-            ReceiveAddress = _account.GetReceiveAddress(0).ToString();
+            ShowReceiveAddress(0);
             History.Clear();
             RefreshCoins(null);
             Addresses.Clear();
@@ -337,7 +348,7 @@ public partial class MainWindowViewModel
         FrozenText = frozenSats != 0
             ? string.Format(Loc.Tr("msg.frozen"), Fmt(frozenSats))
             : "";
-        ReceiveAddress = _account.GetReceiveAddress(cache.NextReceiveIndex).ToString();
+        ShowReceiveAddress(cache.NextReceiveIndex);
         History.Clear();
         foreach (var tx in cache.History)
             History.Add(new HistoryRow(

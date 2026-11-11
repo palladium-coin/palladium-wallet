@@ -826,6 +826,7 @@
                                     <TextBlock Text="{Binding Loc[receive.next]}" Classes="label"
                                                HorizontalAlignment="Center"/>
                                     <Border Background="White" Padding="14" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            Cursor="Hand" Tapped="OnCopyReceiveAddressClick"
                                             HorizontalAlignment="Center">
                                         <Image Source="{Binding ReceiveQr}" Width="230" Height="230"
                                                RenderOptions.BitmapInterpolationMode="None"/>
@@ -838,11 +839,16 @@
                                 <Border Classes="card" Padding="24,22">
                                     <StackPanel Spacing="16">
                                         <TextBlock Text="{Binding Loc[receive.your.address]}" Classes="section"/>
-                                        <Border Background="{DynamicResource SurfaceAltBrush}"
-                                                CornerRadius="8" Padding="16,14">
-                                            <SelectableTextBlock Text="{Binding ReceiveAddress}"
-                                                                 FontFamily="monospace" FontSize="14"
-                                                                 TextWrapping="Wrap" LineHeight="22"/>
+                                        <!-- Tapping the address or the QR copies it: the whole surface is the target -->
+                                        <Border Classes="copyable" CornerRadius="8" Padding="16,14"
+                                                Tapped="OnCopyReceiveAddressClick">
+                                            <StackPanel Spacing="6">
+                                                <SelectableTextBlock Text="{Binding ReceiveAddress}"
+                                                                     FontFamily="monospace" FontSize="14"
+                                                                     TextWrapping="Wrap" LineHeight="22"/>
+                                                <TextBlock Text="{Binding ReceivePath}" Classes="muted mono" FontSize="11"
+                                                           IsVisible="{Binding ReceivePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                            </StackPanel>
                                         </Border>
                                         <Button Classes="accent" Click="OnCopyReceiveAddressClick"
                                                 HorizontalAlignment="Stretch"
@@ -873,8 +879,9 @@
                                     <TextBlock Text="{Binding Loc[receive.next]}" Classes="label"
                                                HorizontalAlignment="Center" FontSize="13"/>
                                     <Border Background="White" Padding="12" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            Cursor="Hand" Tapped="OnCopyReceiveAddressClick"
                                             HorizontalAlignment="Center">
-                                        <Image Source="{Binding ReceiveQr}" Width="184" Height="184"
+                                        <Image Source="{Binding ReceiveQr}" Width="168" Height="168"
                                                RenderOptions.BitmapInterpolationMode="None"/>
                                     </Border>
                                 </StackPanel>
@@ -884,14 +891,19 @@
                             <Border Classes="card" Padding="20,16">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="{Binding Loc[receive.your.address]}" Classes="section"/>
-                                    <Border Background="{DynamicResource SurfaceAltBrush}"
-                                            CornerRadius="8" Padding="16,12">
-                                        <SelectableTextBlock Text="{Binding ReceiveAddress}"
-                                                             FontFamily="monospace" FontSize="14"
-                                                             TextWrapping="Wrap"
-                                                             TextAlignment="Center"
-                                                             HorizontalAlignment="Center"
-                                                             LineHeight="22"/>
+                                    <Border Classes="copyable" CornerRadius="8" Padding="16,12"
+                                            Tapped="OnCopyReceiveAddressClick">
+                                        <StackPanel Spacing="6">
+                                            <SelectableTextBlock Text="{Binding ReceiveAddress}"
+                                                                 FontFamily="monospace" FontSize="14"
+                                                                 TextWrapping="Wrap"
+                                                                 TextAlignment="Center"
+                                                                 HorizontalAlignment="Center"
+                                                                 LineHeight="22"/>
+                                            <TextBlock Text="{Binding ReceivePath}" Classes="muted mono" FontSize="11"
+                                                       HorizontalAlignment="Center"
+                                                       IsVisible="{Binding ReceivePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
                                     </Border>
                                     <Button Classes="accent" Click="OnCopyReceiveAddressClick"
                                             MinHeight="52"

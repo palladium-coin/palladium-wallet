@@ -50,6 +50,16 @@ public sealed class ReceiveCopyTests : VmTestBase
     });
 
     [Fact]
+    public Task The_receive_address_shows_its_derivation_path() => UiSession.Run(() =>
+    {
+        var vm = new MainWindowViewModel();
+        Assert.Equal("", vm.ReceivePath);                 // no wallet open yet
+        RestoreFlow(vm, Mnemonic, null, "path");
+        Assert.Equal("m/84'/746'/0'/0/0", vm.ReceivePath); // native SegWit, coin type 746, first receive index
+        Assert.False(string.IsNullOrEmpty(vm.ReceiveAddress));
+    });
+
+    [Fact]
     public void Every_language_has_the_copied_label()
     {
         foreach (var lang in new[] { "it", "en", "es", "fr", "pt", "de", "zh" })

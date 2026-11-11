@@ -192,6 +192,19 @@
     <Style Selector="Border.balance-hero TextBlock.on-hero">
         <Setter Property="Foreground" Value="#D6E2FF"/>
     </Style>
+    <!-- Tap-to-copy surface (address box): hand cursor and a brand tint on hover show it is a target -->
+    <Style Selector="Border.copyable">
+        <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.copyable:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PrimarySoftBrush}"/>
+    </Style>
     <!-- Status pill / badge -->
     <Style Selector="Border.chip">
         <Setter Property="CornerRadius" Value="20"/>
