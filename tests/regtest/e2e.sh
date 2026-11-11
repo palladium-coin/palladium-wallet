@@ -60,7 +60,7 @@ CONF
 chmod 777 "$WORK/node" "$WORK/fulcrum"; chmod 666 "$WORK"/node/palladium.conf "$WORK"/fulcrum/plm-fulcrum.conf
 
 docker network create "$NET" >/dev/null
-docker run -d --name "$NODE" --network "$NET" -v "$WORK/node:/home/palladium/.palladium" -e HOME=/home/palladium \
+docker run -d --name "$NODE" --network "$NET" -v "$WORK/node:/node/.palladium" -e HOME=/node \
   --user "$(id -u):$(id -g)" "$NODE_IMAGE" -regtest -acceptnonstdtxn=0 >/dev/null
 up=0
 for _ in $(seq 30); do docker exec "$NODE" palladium-cli -regtest getblockchaininfo >/dev/null 2>&1 && { up=1; break; }; sleep 1; done
