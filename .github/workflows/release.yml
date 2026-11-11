@@ -1,0 +1,76 @@
+name: Release
+
+# When a GitHub release is published, build the Windows and Linux binaries with the very same script a person runs
+# locally (docker/build.sh, toolchain pinned in docker/Dockerfile.desktop) and attach them to that release, with
+# checksums and a build-provenance attestation. Android is NOT built here: its release keystore never leaves the
+# release manager's machine, so the APK is built and signed locally and uploaded to the release afterwards
+# (docker/README.md, ADR 0065).
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  desktop:
+    name: Desktop binaries (Windows, Linux x64, Linux ARM64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write       # attach the binaries to the release
+      id-token: write       # build-provenance attestation
+      attestations: write
+    steps:
+      # The tag of the release, not whatever the default branch is now.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      # The tag is passed through the environment, never interpolated into the script (it is user-controlled text).
+      - name: The tag matches the version in the project
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(grep -oP '(?<=<Version>)[^<]+' src/App/PalladiumWallet.App.csproj)
+          if [[ "$TAG" != "v$version" && "$TAG" != "$version" ]]; then
+            echo "::error::Release tag '$TAG' does not match <Version> $version in src/App/PalladiumWallet.App.csproj."
+            echo "Run ./update-version.sh, commit, and tag that commit; the update check compares the two."
+            exit 1
+          fi
+
+      # One target per call: with no argument the script opens a menu, and 'all' includes Android (keystore prompts).
+      - name: Build
+        shell: bash
+        run: |
+          ./docker/build.sh windows
+          ./docker/build.sh linux
+          ./docker/build.sh linux-arm64
+
+      - name: Collect the binaries and write their checksums
+        shell: bash
+        run: |
+          mkdir release-assets
+          cp dist/windows/PalladiumWallet-*-win-x64.exe \
+             dist/linux/PalladiumWallet-*-linux-x64 \
+             dist/linux-arm64/PalladiumWallet-*-linux-arm64 \
+             release-assets/
+          (cd release-assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-assets/*
+
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"

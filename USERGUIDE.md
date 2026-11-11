@@ -172,9 +172,16 @@ as separate amber lines under the balance when present.
 Release binaries are self-contained — no runtime to install. Run the single executable
 (`PalladiumWallet.exe` on Windows, `PalladiumWallet` on Linux).
 
+Windows and Linux files on a release page are built by GitHub Actions. Before running one, check it against
+`SHA256SUMS` from the same release (`sha256sum -c SHA256SUMS` on Linux, `Get-FileHash FILE` on Windows), or verify the
+attestation with `gh attestation verify FILE --repo palladium-coin/palladium-wallet`. Windows may show a SmartScreen
+warning because the executable is not code-signed; the checksum is how you know the file is the published one. On Linux,
+restore the execute bit with `chmod +x` if the download dropped it.
+
 ### 3.2 Android
 
-Install the `.apk` (sideloading must be allowed). Minimum Android version: 6.0 (API 23).
+Install the `.apk` (sideloading must be allowed). The apk is built and signed by hand by the release manager
+(not by CI) and added to the release after it is published, so it can appear a little later than the desktop files. Minimum Android version: 6.0 (API 23).
 The app requests the **camera** permission only if you use the QR scanner; **internet** is
 required for synchronization.
 

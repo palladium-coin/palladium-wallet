@@ -209,6 +209,10 @@ reviewable in the repo. For a wallet this is a trust property, not a
 convenience: anyone can rebuild the published binaries from source and check
 they were produced by the process the repository declares.
 
+When a GitHub release is published, CI builds the Windows and Linux binaries with this same script and attaches them
+to the release with checksums and a provenance attestation; the Android APK is built and signed locally and uploaded
+afterwards (ADR 0065).
+
 See [docker/README.md](docker/README.md) for prerequisites, usage, how to run
 each produced artifact, and troubleshooting. The sections below cover manual
 builds with a locally installed SDK (the normal path during development).
