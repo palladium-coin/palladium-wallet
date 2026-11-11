@@ -76,6 +76,7 @@ docker/           reproducible release builds (build.sh + pinned Dockerfiles) â†
 **Android (apk):** needs the `android` workload (`dotnet workload install android`), a JDK (`JAVA_HOME`), and the Android SDK (`ANDROID_HOME`, or pass `-p:AndroidSdkDirectory=...`; a plain solution-level `dotnet build` needs it too).
 - Provision once: `dotnet build src/App.Android -t:InstallAndroidDependencies -p:AndroidSdkDirectory=$HOME/android-sdk -p:AcceptAndroidSDKLicenses=true`
 - Debug apk: `JAVA_HOME=<jdk> dotnet build src/App.Android -c Debug -t:SignAndroidPackage -p:AndroidSdkDirectory=$HOME/android-sdk` â†’ `src/App.Android/bin/Debug/net10.0-android/*-Signed.apk`
+- Smoke test on an emulator (ADR 0066): `python3 tests/android/smoke.py` (throw-away AVD, drives the accessibility tree, checks start-up, the wizard, Receive, Settings and the System theme following the OS light/dark switch); run by hand, never in CI
 - Head is an app, not a library (`<OutputType>Exe</OutputType>`); min SDK 23 (AndroidX requirement)
 
 **CLI** (`src/Cli`): `create`/`restore`/`restore-xpub`/`info`; `sync`/`send`/`servers`/`reset-certs` (`--server host:port [--ssl]`); `newseed`/`addresses`; `utxos`/`freeze`/`unfreeze` (coins), `restore-wif`; PSBT and multisig: `sign-psbt`, `combine-psbt` (files `.psbt`, base64 or hex; `--psbt-out`), `cosigner-key`, `create-multisig` (`--wrapped`, `--config`, `--expect-id`), `export-multisig`. Default wallet file `~/.palladium-wallet/<network>/wallets/default.wallet.json` (`--file` to change it).

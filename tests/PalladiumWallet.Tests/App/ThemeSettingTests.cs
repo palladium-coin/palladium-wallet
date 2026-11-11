@@ -210,4 +210,46 @@ public sealed class ThemeSettingTests : VmTestBase
         Assert.True(Application.Current!.TryGetResource("OverlayCardBrush", theme, out var brush));
         Assert.Equal(255, ((ISolidColorBrush)brush!).Color.A);
     });
+
+    [Fact]
+    public Task The_system_theme_follows_a_head_that_reports_the_os_mode_and_its_changes() => UiSession.Run(() =>
+    {
+        var saved = PalladiumWallet.App.Services.PlatformServices.IsSystemDark;
+        try
+        {
+            var dark = true;
+            PalladiumWallet.App.Services.PlatformServices.IsSystemDark = () => dark;
+            var vm = new MainWindowViewModel();                  // theme "system"
+            Assert.Equal(ThemeVariant.Dark, Current);            // read at start
+
+            dark = false;
+            vm.RefreshSystemTheme();                             // the head reports that the OS switched
+            Assert.Equal(ThemeVariant.Light, Current);
+            dark = true;
+            vm.RefreshSystemTheme();
+            Assert.Equal(ThemeVariant.Dark, Current);
+
+            vm.SetThemeCommand.Execute("light");                 // a fixed choice ignores the OS
+            dark = true;
+            vm.RefreshSystemTheme();
+            Assert.Equal(ThemeVariant.Light, Current);
+
+            vm.SetThemeCommand.Execute("system");                // back to following it
+            Assert.Equal(ThemeVariant.Dark, Current);
+        }
+        finally
+        {
+            PalladiumWallet.App.Services.PlatformServices.IsSystemDark = saved;
+            Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
+        }
+    });
+
+    [Fact]
+    public Task Without_a_head_report_the_system_theme_is_left_to_avalonia() => UiSession.Run(() =>
+    {
+        Assert.Null(PalladiumWallet.App.Services.PlatformServices.IsSystemDark);
+        var vm = new MainWindowViewModel();
+        vm.RefreshSystemTheme();
+        Assert.Equal(ThemeVariant.Default, Current);
+    });
 }

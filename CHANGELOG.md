@@ -20,6 +20,8 @@ release and covers the full history from the initial commit.
 
 ### Added
 
+- **Android smoke test on an emulator** (`python3 tests/android/smoke.py`, ADR 0066): installs the debug APK on a throw-away AVD (or checks start-up on an existing device), walks the start screen, the restore wizard, the wallet home, Receive and Settings through the accessibility tree, and checks the System theme against the OS light/dark switch. Run by hand.
+
 - **Desktop release binaries are built in CI**: publishing a GitHub release runs `.github/workflows/release.yml`, which builds Windows x64, Linux x64 and Linux ARM64 with the same `docker/build.sh` used locally, checks that the tag matches `<Version>`, and attaches the binaries, `SHA256SUMS` and a build-provenance attestation to the release. Android stays a local, locally-signed build uploaded to the release afterwards. `SECURITY.md` has a supply-chain section (what the checksums and attestation do and do not protect against) and `USERGUIDE.md` tells users how to verify a download. Not run on GitHub yet (ADR 0065).
 
 - **`--net mainnet|testnet|regtest` for the desktop GUI** (`dotnet run --project src/App.Desktop -- --net regtest`): mainnet stays the default, a wrong name is refused, and the window title shows `[REGTEST]`/`[TESTNET]`. `tests/regtest/up.sh` and `down.sh` start and remove a throw-away node + plm-fulcrum to try the GUI against (ADR 0064).
@@ -43,6 +45,8 @@ release and covers the full history from the initial commit.
 - CLI `utxos`, `freeze` and `unfreeze`: list the coins of the last sync and keep a coin out of every spend, offline, with the same flag the Coins tab uses (ADR 0051).
 
 ### Fixed
+
+- **Android: the System theme did not follow the OS switching between light and dark while the app was running.** It was right at start (Avalonia reads the mode then), but the activity declares `UiMode` in `ConfigurationChanges` (recreating it would drop an unlocked wallet), so the system only told the activity and Avalonia was never informed. `MainActivity` now reports the mode through `PlatformServices.IsSystemDark` and `OnConfigurationChanged` → `MainWindowViewModel.RefreshSystemTheme`; desktop is unchanged. Found by the new smoke test, covered by `ThemeSettingTests`.
 
 - **A send from a wallet of many small coins failed with "Invalid transaction: Transaction's size is too high"** (a miner paying 50 PLM from 3.125 PLM rewards): NBitcoin's default policy caps the *serialized* size, witness included, at 100,000 bytes, but the node's rule is a weight of 400,000, i.e. 100,000 vB, and a native-segwit input is 68 vB yet serializes to ~149 bytes. Anything above ~670 inputs was refused although the network takes it (an 800-input send-all of 54,242 vB, 119 KB serialized, was accepted by Palladium Core on regtest). The serialized cap is lifted and the existing virtual-size check (the node's own rule) applies. The coin search also no longer probes with thousands of inputs: it starts at the first prefix of the biggest coins whose total reaches the amount and gallops up from there, so 50 PLM from 4,000 rewards builds with 17 inputs.
 

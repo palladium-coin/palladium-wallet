@@ -35,6 +35,9 @@ public partial class MainWindowViewModel
         ApplySettings(_config);
     }
 
+    /// <summary>The head reports that the operating system changed its light/dark mode: re-apply the theme.</summary>
+    public void RefreshSystemTheme() => ApplyTheme();
+
     /// <summary>Opaque surfaces instead of glass (Settings → Solid surfaces).</summary>
     public bool SolidSurfaces
     {
@@ -61,7 +64,13 @@ public partial class MainWindowViewModel
         {
             "light" => Avalonia.Styling.ThemeVariant.Light,
             "dark" => Avalonia.Styling.ThemeVariant.Dark,
-            _ => Avalonia.Styling.ThemeVariant.Default,
+            // "System": Avalonia follows the OS by itself, except on a head that says it cannot (Android).
+            _ => Services.PlatformServices.IsSystemDark?.Invoke() switch
+            {
+                true => Avalonia.Styling.ThemeVariant.Dark,
+                false => Avalonia.Styling.ThemeVariant.Light,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            },
         };
 
         var merged = app.Resources.MergedDictionaries;

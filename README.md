@@ -332,6 +332,13 @@ $ADB shell monkey -p io.github.davide3011.palladiumwallet -c android.intent.cate
 $ADB logcat -d | grep -iE "monodroid|exception|fatal|avalonia"
 ```
 
+**Automated smoke test** (ADR 0066): `python3 tests/android/smoke.py` installs the debug APK on a throw-away
+AVD it creates and boots headless (or on a device that is already there, start-up check only), walks the start screen,
+the restore wizard, the wallet home, Receive and Settings, and checks that the **System** theme follows the OS
+light/dark switch while the app runs. It drives the accessibility tree, so it taps by label and reads text boxes
+back (`adb shell input text` drops characters). It never uninstalls, and the full walk-through needs a device it booted
+itself or `--reset-data`. Run by hand; CI does not build the Android head.
+
 **VS Code "Android iOS Emulator" extension** (optional, click-to-launch): it only starts an
 existing AVD, so create one first (step 3). Point it at the emulator binary:
 ```jsonc
