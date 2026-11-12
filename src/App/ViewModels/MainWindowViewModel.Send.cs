@@ -178,7 +178,7 @@ public partial class MainWindowViewModel
     /// <summary>True when the open account cannot sign — Send only prepares an unsigned PSBT to export.</summary>
     public bool IsWatchOnlyAccount => _account?.IsWatchOnly ?? false;
 
-    public void NotifyPsbtCopied() => StatusMessage = Loc.Tr("psbt.copied");
+    public void NotifyPsbtCopied() => SetInfoStatus(Loc.Tr("psbt.copied"));
 
     [RelayCommand]
     private async Task ScanQr()

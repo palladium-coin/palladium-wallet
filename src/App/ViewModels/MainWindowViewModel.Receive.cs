@@ -76,7 +76,7 @@ public partial class MainWindowViewModel
 
     public void NotifyAddressCopied()
     {
-        StatusMessage = Loc.Tr("addr.copied");
+        SetInfoStatus(Loc.Tr("addr.copied"));
         ReceiveCopied = true;
         // Only the latest copy may clear the flag, so a quick second click gets its full duration.
         var generation = ++_receiveCopiedGeneration;

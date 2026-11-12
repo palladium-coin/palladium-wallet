@@ -843,7 +843,9 @@
                                                          Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </StackPanel>
                             </Border>
-                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                            <!-- One row: a short window keeps its height for the form. The PSBT entry (a multisig cosigner,
+                                 offline signing) is the quiet third button. -->
+                            <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="12">
                                 <Button Grid.Column="0" Classes="accent" Content="{Binding Loc[send.prepare]}"
                                         Command="{Binding PrepareSendCommand}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
@@ -851,10 +853,9 @@
                                         Command="{Binding ConfirmSendCommand}"
                                         IsEnabled="{Binding HasPendingSend}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Grid.Column="2" Content="{Binding Loc[psbt.open.btn]}"
+                                        Command="{Binding OpenPsbtCommand}"/>
                             </Grid>
-                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
-                            <Button Content="{Binding Loc[psbt.open.btn]}"
-                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Border>
                     </Grid>
