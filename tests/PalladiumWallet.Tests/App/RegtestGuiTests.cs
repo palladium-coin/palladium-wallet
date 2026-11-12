@@ -24,12 +24,14 @@ public sealed class RegtestGuiTests : VmTestBase
     // The tests share one funded wallet: a coin spent by one test (still in the mempool) is never picked by another,
     // even if a first partial snapshot of the next test's sync still lists it. Identical inputs would build the
     // identical transaction, and the node would rightly say it already has it.
-    private static readonly HashSet<string> SpentFundingTxids = [];
+    // Shared with ContactsSendRegtestTests: both classes spend from the same wallet on the same node, so a coin one
+    // of them took must not be offered to the other (a double spend is refused by the node).
+    private static HashSet<string> SpentFundingTxids => RegtestFunding.Spent;
 
     private static CoinRow NextFreshCoin(MainWindowViewModel vm)
     {
         lock (SpentFundingTxids)
-            return vm.Coins.First(c => c.IsSelectable && !SpentFundingTxids.Contains(c.Txid));
+            return vm.Coins.First(c => c.IsSelectable && !SpentFundingTxids.Contains(c.Txid + ":" + c.Vout));
     }
 
     private static (string Host, int Port) Split(string endpoint) =>
@@ -43,7 +45,7 @@ public sealed class RegtestGuiTests : VmTestBase
         var vm = new MainWindowViewModel { ServerHost = host, ServerPort = port.ToString() };
         RestoreFlow(vm, Mnemonic, null, name);
         await Eventually(() => !vm.IsSyncing && vm.IsConnected
-                && vm.Coins.Any(c => c.IsSelectable && !SpentFundingTxids.Contains(c.Txid)),
+                && vm.Coins.Any(c => c.IsSelectable && !SpentFundingTxids.Contains(c.Txid + ":" + c.Vout)),
             timeoutMs: 60_000,
             describe: () => $"syncing={vm.IsSyncing} connected={vm.IsConnected} coins={vm.Coins.Count} status='{vm.StatusMessage}'");
         return vm;
@@ -54,7 +56,7 @@ public sealed class RegtestGuiTests : VmTestBase
         vm.ClearCoinSelectionCommand.Execute(null);
         var coin = NextFreshCoin(vm);                                                  // one coin: no ambiguity
         lock (SpentFundingTxids)
-            SpentFundingTxids.Add(coin.Txid);
+            SpentFundingTxids.Add(coin.Txid + ":" + coin.Vout);
         vm.ToggleCoinSelectedCommand.Execute(coin);
         vm.SendAll = false;
         vm.SendTo = Dest!;
@@ -145,7 +147,7 @@ public sealed class RegtestGuiTests : VmTestBase
             vm.ClearCoinSelectionCommand.Execute(null);
             var coin = NextFreshCoin(vm);
             lock (SpentFundingTxids)
-                SpentFundingTxids.Add(coin.Txid);
+                SpentFundingTxids.Add(coin.Txid + ":" + coin.Vout);
             vm.ToggleCoinSelectedCommand.Execute(coin);
             vm.DonateAmount = "0.1";
             vm.SendFeeRate = "2";
@@ -158,4 +160,10 @@ public sealed class RegtestGuiTests : VmTestBase
         }
         finally { MainWindowViewModel.DonationAddressOverride = null; }
     });
+}
+
+/// <summary>The coins the regtest GUI tests have already spent (txid:vout), shared by every class that spends from the funded wallet.</summary>
+internal static class RegtestFunding
+{
+    public static readonly HashSet<string> Spent = [];
 }

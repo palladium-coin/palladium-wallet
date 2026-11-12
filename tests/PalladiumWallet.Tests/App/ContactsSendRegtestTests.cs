@@ -26,7 +26,7 @@ public sealed class ContactsSendRegtestTests : VmTestBase
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     // The tests share one funded wallet: a coin one test spent (still in the mempool) is never picked by another,
     // or the same inputs would build the same transaction and the node would say it already has it.
-    private static readonly HashSet<string> Used = [];
+    private static HashSet<string> Used => RegtestFunding.Spent; // shared with RegtestGuiTests
     private static bool Enabled => !string.IsNullOrEmpty(Server) && Addresses.Length >= 3;
 
     private async Task<MainWindowViewModel> Open(string name)
