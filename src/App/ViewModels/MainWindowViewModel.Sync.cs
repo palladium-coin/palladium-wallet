@@ -36,11 +36,17 @@ public partial class MainWindowViewModel
     private async Task OpenServerSettings()
     {
         IsSettingsOpen = false;
+        ServerMessage = "";
         RefreshServers();
         IsServerSettingsOpen = true;
         if (_client is { IsConnected: true })
             await DiscoverServers();
     }
+
+    /// <summary>Result of looking for servers / resetting pinned certificates, shown inside the server window: the
+    /// status bar is under that window while it is open.</summary>
+    [ObservableProperty]
+    private string serverMessage = "";
 
     [RelayCommand]
     private void CloseServerSettings() => IsServerSettingsOpen = false;
@@ -310,7 +316,7 @@ public partial class MainWindowViewModel
                     _doc.Cache?.NextChangeIndex ?? 0,
                     net,
                     _doc.Cache?.AnchoredDownTo);
-                _synchronizer.Progress += msg => Dispatcher.UIThread.Post(() => StatusMessage = msg);
+                _synchronizer.Progress += msg => Dispatcher.UIThread.Post(() => SetInfoStatus(msg));
                 // Progressive verification (§7.4): the wallet becomes usable as soon as
                 // transaction downloads finish, without waiting for every historical Merkle
                 // proof — critical on mobile, where verifying thousands of proofs can take far
@@ -364,8 +370,8 @@ public partial class MainWindowViewModel
                 DiscardStalePending(cache); // final state only: a partial snapshot may still be unverified
                 await WalletStore.SaveAsync(_doc, _walletPath!, _password);
                 _syncFailed = false;
-                StatusMessage = $"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
-                    $"{result.History.Count} {Loc.Tr("msg.synced.detail")}";
+                SetInfoStatus($"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
+                    $"{result.History.Count} {Loc.Tr("msg.synced.detail")}");
             } while (_resyncRequested && !ct.IsCancellationRequested);
         }
         catch (OperationCanceledException)
@@ -498,7 +504,7 @@ public partial class MainWindowViewModel
         }
         if (temp is null)
         {
-            StatusMessage = $"{Loc.Tr("msg.peer.discovery.error")}: " +
+            ServerMessage = $"{Loc.Tr("msg.peer.discovery.error")}: " +
                 (lastError is null ? Loc.Tr("conn.none") : DescribeError(lastError));
             return;
         }
@@ -521,13 +527,13 @@ public partial class MainWindowViewModel
             RefreshServers();
             SelectedKnownServer = KnownServers.FirstOrDefault(s => s.Host == selected?.Host)
                 ?? KnownServers.FirstOrDefault();
-            StatusMessage = added > 0
+            ServerMessage = added > 0
                 ? string.Format(Loc.Tr("msg.peer.discovery.found"), added, KnownServers.Count)
                 : string.Format(Loc.Tr("msg.peer.discovery.none"), KnownServers.Count);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"{Loc.Tr("msg.peer.discovery.error")}: {DescribeError(ex)}";
+            ServerMessage = $"{Loc.Tr("msg.peer.discovery.error")}: {DescribeError(ex)}";
         }
     }
 
@@ -562,7 +568,7 @@ public partial class MainWindowViewModel
     private void ResetCertificates()
     {
         new CertificatePinStore(AppPaths.CertificatePinsPath(Net)).ResetAll();
-        StatusMessage = Loc.Tr("msg.certreset");
+        ServerMessage = Loc.Tr("msg.certreset");
     }
 
     /// <summary>

@@ -62,6 +62,11 @@ public sealed class RegtestGuiTests : VmTestBase
         vm.SendFeeRate = "2";
         await vm.PrepareSendCommand.ExecuteAsync(null);
         Assert.True(vm.HasPendingSend, vm.SendPreview);
+        // The review card as the real node's transaction fills it: what is paid and to whom on top, the rest below,
+        // and no amber notice (a prepared send is not a problem).
+        Assert.Contains(Dest!, vm.SendPreviewHeadline);
+        Assert.NotEmpty(vm.SendPreviewDetail);
+        Assert.False(vm.ShowNotice, vm.StatusMessage);
     }
 
     [Fact]

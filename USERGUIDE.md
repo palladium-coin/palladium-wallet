@@ -153,8 +153,9 @@ a sync cache (balances, history, verified proofs).
 
 Incoming funds are not immediately spendable. The exact rules on mainnet:
 
-- **Unconfirmed (mempool)** transactions: shown as *"pending confirmation … not yet
-  spendable"*. Never spendable, and — important — unconfirmed amounts are reported by the
+- **Unconfirmed (mempool)** transactions: incoming ones are shown as *"pending confirmation … not yet
+  spendable"*; money you just sent reads *"outgoing, awaiting confirmation: −X"* (it has already left
+  your spendable balance). Never spendable, and — important — unconfirmed amounts are reported by the
   server **without cryptographic proof**, so treat them as provisional until confirmed.
 - **Regular outputs**: spendable after **6 confirmations** (~12 minutes at 2-minute blocks).
 - **Mining (coinbase) outputs**: spendable after **121 confirmations** (~4 hours). Until
@@ -609,8 +610,12 @@ amount, and compare the wallet ID or first address shown by the device.
 ## 9. Transaction history and details
 
 The **History** tab lists all wallet transactions, newest first; unconfirmed ones are
-labeled **mempool** and sorted on top, confirmed ones show their **block height**. The
-amount is the transaction's net effect on your wallet (`+` incoming).
+labeled **in mempool** and sorted on top, confirmed ones show their **number of
+confirmations** (the block height is in the details). Columns have headers on the desktop; the
+transaction ID is shortened (the full one is in the details). The amount is the transaction's net
+effect on your wallet (`+` incoming). A new wallet's History and Contacts tabs say that they are
+still empty. The details of a transaction that only *received* money have no fee row (the sender
+paid it); a sent one shows its fee.
 
 **Double-click** (desktop) or **tap** (Android) a row to open the full details. This
 requires a live server connection (details are fetched on demand): otherwise *"Connect to

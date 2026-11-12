@@ -18,7 +18,11 @@ namespace PalladiumWallet.App.ViewModels;
 
 /// <summary>Transaction history row for the view.</summary>
 public sealed record HistoryRow(string Conferma, string Importo, string Txid, bool Verified = true,
-    bool Unanchored = false);
+    bool Unanchored = false)
+{
+    /// <summary>First and last characters of the txid: the full one is in the details and a row is not the place for 64 digits.</summary>
+    public string TxidShort => Txid.Length > 20 ? $"{Txid[..10]}…{Txid[^10..]}" : Txid;
+}
 
 /// <summary>
 /// Address view row: public data and derivation path only. The private key is never held here;
@@ -120,7 +124,31 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsSetupVisible => !IsWalletOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotice))]
     private string statusMessage = "";
+
+    /// <summary>True when <see cref="StatusMessage"/> is a plain confirmation ("Settings saved"), not a problem.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotice))]
+    private bool statusIsInfo;
+
+    private bool _settingInfo;
+
+    partial void OnStatusMessageChanged(string value)
+    {
+        if (!_settingInfo) StatusIsInfo = false; // anything assigned directly is treated as a problem to read
+    }
+
+    /// <summary>Sets a status that is a confirmation, not an error: the status bar shows it, the inline notice does not.</summary>
+    private void SetInfoStatus(string text)
+    {
+        _settingInfo = true;
+        try { StatusMessage = text; StatusIsInfo = true; }
+        finally { _settingInfo = false; }
+    }
+
+    /// <summary>The amber inline notice of the wizard: only for messages that are about a problem.</summary>
+    public bool ShowNotice => !string.IsNullOrEmpty(StatusMessage) && !StatusIsInfo;
 
     [ObservableProperty]
     private int selectedTabIndex;
@@ -131,6 +159,8 @@ public partial class MainWindowViewModel : ViewModelBase
     // ---- dashboard collections ----
 
     public ObservableCollection<HistoryRow> History { get; } = [];
+    public bool HasHistory => History.Count > 0;
+    public bool HasContacts => Contacts.Count > 0;
     public ObservableCollection<AddressRow> Addresses { get; } = [];
 
     // ---- helpers ----
@@ -162,6 +192,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _loc = Loc.SwitchTo(_config.Language);
+        // The empty-state messages of the History and Contacts tabs follow their lists.
+        History.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasHistory));
+        Contacts.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasContacts));
         ApplyTheme();
         if (!AppPaths.IsDataLocationConfigured())
             SetupStep = StepDataLocation;

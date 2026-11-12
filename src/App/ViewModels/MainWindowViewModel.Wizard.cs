@@ -659,7 +659,7 @@ public partial class MainWindowViewModel
         LoadContacts();
         ApplyCache(doc.Cache);
         IsWalletOpen = true;
-        StatusMessage = Loc.Tr("msg.opened");
+        SetInfoStatus(Loc.Tr("msg.opened"));
         _autoReconnect = true;  // keepalive retries the connection even if the first attempt fails
         _syncFailed = true;     // force the first automatic sync
         _ = ConnectAndSync();

@@ -125,7 +125,7 @@ public partial class MainWindowViewModel
         RenderFeeHint();
         if (_pendingSend is not null && _renderSendPreview is { } send) SendPreview = send();
         if (_pendingDonate is not null && _renderDonatePreview is { } donate) DonatePreview = donate();
-        StatusMessage = Localization.Loc.Tr("msg.settings.saved");
+        SetInfoStatus(Localization.Loc.Tr("msg.settings.saved"));
     }
 
     // ---- overlay impostazioni, server, help ----

@@ -73,7 +73,7 @@
                 </Grid>
 
                 <!-- A validation message right where the person is looking, not only in the status bar -->
-                <Border Classes="notice" IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <Border Classes="notice" IsVisible="{Binding ShowNotice}">
                     <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="13"
                                Foreground="{DynamicResource WarningTextBrush}"/>
                 </Border>
@@ -475,21 +475,37 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <Grid RowDefinitions="Auto,*" Margin="4">
+                    <Grid RowDefinitions="Auto,Auto,*" Margin="4">
                         <TextBlock Grid.Row="0" Text="{Binding Loc[history.hint]}"
                                    IsVisible="{Binding IsDesktop}"
                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="6,2"/>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding History}"
+                        <!-- Column headers (the phone shows cards, no columns) -->
+                        <Grid Grid.Row="1" ColumnDefinitions="110,160,*" Margin="12,4,12,0">
+                            <Grid.IsVisible>
+                                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                    <Binding Path="IsDesktop"/>
+                                    <Binding Path="HasHistory"/>
+                                </MultiBinding>
+                            </Grid.IsVisible>
+                            <TextBlock Grid.Column="0" Text="{Binding Loc[history.col.conf]}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Loc[history.col.amount]}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Loc[tx.id]}" FontWeight="Bold" FontSize="12"/>
+                        </Grid>
+                        <TextBlock Grid.Row="2" Text="{Binding Loc[history.empty]}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Center" Margin="24,32"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding !HasHistory}"/>
+                        <ListBox Grid.Row="2" ItemsSource="{Binding History}"
                                  DoubleTapped="OnHistoryRowDoubleTapped">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:HistoryRow">
                                     <Panel Cursor="Hand">
                                         <!-- Desktop: 3 fixed columns -->
-                                        <Grid ColumnDefinitions="90,160,*,Auto"
+                                        <Grid ColumnDefinitions="110,160,*,Auto"
                                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsDesktop}">
                                             <TextBlock Grid.Column="0" Text="{Binding Conferma}" Foreground="{DynamicResource TextSecondaryBrush}"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Importo}" FontFamily="monospace"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding Txid}"
+                                            <TextBlock Grid.Column="2" Text="{Binding TxidShort}"
                                                        FontFamily="monospace" FontSize="12"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Grid.Column="3" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
@@ -506,7 +522,7 @@
                                             <TextBlock Text="{Binding Importo}"
                                                        FontFamily="monospace" FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding Conferma}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
-                                            <TextBlock Text="{Binding Txid}" FontFamily="monospace" FontSize="11"
+                                            <TextBlock Text="{Binding TxidShort}" FontFamily="monospace" FontSize="11"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
                                                        Foreground="#FCD34D" FontSize="11"
@@ -1079,6 +1095,10 @@
                             <TextBlock Grid.Column="1" Text="{Binding Loc[contacts.address]}" FontWeight="Bold"/>
                         </Grid>
                         <!-- Contacts list -->
+                        <TextBlock Grid.Row="1" Text="{Binding Loc[contacts.empty.hint]}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Center" Margin="24,32"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding !HasContacts}"/>
                         <ListBox Grid.Row="1" ItemsSource="{Binding Contacts}"
                                  SelectedItem="{Binding SelectedContactInList}">
                             <ListBox.ItemTemplate>
@@ -1160,6 +1180,10 @@
                     </TabItem.Header>
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
+                            <Border Classes="notice" IsVisible="{Binding CoinsMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="{Binding CoinsMessage}" TextWrapping="Wrap" FontSize="13"
+                                           Foreground="{DynamicResource WarningTextBrush}"/>
+                            </Border>
                             <TextBlock Text="{Binding Loc[coins.hint]}" TextWrapping="Wrap" Opacity="0.7"/>
                             <TextBlock Text="{Binding Loc[coins.empty]}" TextWrapping="Wrap"
                                        IsVisible="{Binding !HasCoins}"/>
@@ -1414,7 +1438,7 @@
                                             <TextBlock Grid.Column="0" Classes="label" Text="{Binding AmountHeader}"/>
                                             <SelectableTextBlock Grid.Column="1" FontSize="13" Classes="mono" Text="{Binding AmountText}"/>
                                         </Grid>
-                                        <Grid ColumnDefinitions="150,*">
+                                        <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowFee}">
                                             <TextBlock Grid.Column="0" Classes="label" Text="{Binding Loc[tx.fee]}"/>
                                             <SelectableTextBlock Grid.Column="1" FontSize="13" Classes="mono" Text="{Binding FeeText}"/>
                                         </Grid>
@@ -1574,6 +1598,10 @@
 
                     <!-- Connection status -->
                     <TextBlock Text="{Binding ConnectionStatus}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Classes="notice" IsVisible="{Binding ServerMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding ServerMessage}" TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource WarningTextBrush}"/>
+                    </Border>
 
                     <!-- Known servers: click to populate host/port -->
                     <TextBlock Text="{Binding Loc[server.known]}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>

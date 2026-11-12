@@ -111,9 +111,13 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            StatusMessage = $"{Loc.Tr("msg.error")}: {ex.Message}";
+            CoinsMessage = $"{Loc.Tr("msg.error")}: {ex.Message}";
         }
     }
+
+    /// <summary>A problem with a coin action, shown at the top of the Coins tab where it was caused.</summary>
+    [ObservableProperty]
+    private string coinsMessage = "";
 
     /// <summary>Adds or removes a coin from the coin-control selection. Only spendable, unfrozen coins can be selected.</summary>
     [RelayCommand]
@@ -121,6 +125,7 @@ public partial class MainWindowViewModel
     {
         if (row is null || _doc?.Cache is null)
             return;
+        CoinsMessage = "";
         var key = (row.Txid, row.Vout);
         if (_selectedCoins.Remove(key))
         {
@@ -131,7 +136,7 @@ public partial class MainWindowViewModel
         var coin = _doc.Cache.Utxos.FirstOrDefault(u => u.Txid == row.Txid && u.Vout == row.Vout);
         if (coin is null || coin.Frozen || !coin.IsSpendable(Profile, _doc.Cache.TipHeight))
         {
-            StatusMessage = Loc.Tr("msg.coins.notspendable");
+            CoinsMessage = Loc.Tr("msg.coins.notspendable");
             return;
         }
         _selectedCoins.Add(key);

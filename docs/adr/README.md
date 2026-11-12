@@ -70,6 +70,7 @@ One ADR per feature or significant design decision. Format: `template.md`. Workf
 | 0064 | [Select the network of the desktop GUI with a `--net` argument](0064-select-the-network-of-the-desktop-gui-with-a-net-argument.md) | UI | Accepted |
 | 0065 | [Build the desktop release binaries in CI when a release is published](0065-build-the-desktop-release-binaries-in-ci-when-a-release-is-published.md) | Distribution | Accepted |
 | 0066 | [Smoke-test the Android head on an emulator](0066-smoke-test-the-android-head-on-an-emulator.md) | Testing | Accepted |
+| 0067 | [History columns, empty states and where a message is shown](0067-history-columns-empty-states-and-message-placement.md) | GUI | Accepted |
 
 ADRs `0002` onwards were written retroactively on 2026-11-03 from the code, comments and changelog. 
 If one misstates the original reasoning, fix it in a pull request.

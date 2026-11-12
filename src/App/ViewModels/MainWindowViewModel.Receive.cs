@@ -300,7 +300,7 @@ public partial class MainWindowViewModel
 
     // ---- update display from the sync result ----
 
-    private void ApplyCache(SyncCache? cache)
+    internal void ApplyCache(SyncCache? cache) // internal: tests feed it a cache directly
     {
         if (_account is null)
             return;
@@ -332,7 +332,11 @@ public partial class MainWindowViewModel
         RefreshCoins(cache);
         var pending = cache.History.Where(t => t.Height <= 0).Sum(t => t.DeltaSats);
         UnconfirmedText = pending != 0
-            ? $"{Loc.Tr("msg.pending")}: {(pending > 0 ? "+" : "")}{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"
+            // Incoming money waits for its confirmations; outgoing money has already left the spendable balance, so
+            // "not yet spendable" would be wrong for it.
+            ? pending > 0
+                ? $"{Loc.Tr("msg.pending")}: +{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"
+                : $"{Loc.Tr("msg.pending.out")}: {Fmt(pending)}"
             : "";
         ImmatureText = cache.ImmatureSats != 0
             ? $"{Loc.Tr("msg.immature")}: {Fmt(cache.ImmatureSats)} — {Loc.Tr("msg.notspendable")}"
@@ -352,7 +356,9 @@ public partial class MainWindowViewModel
         History.Clear();
         foreach (var tx in cache.History)
             History.Add(new HistoryRow(
-                tx.Height > 0 ? tx.Height.ToString() : "mempool",
+                // Confirmations, not the block height: that is what tells how safe the payment is. The height is in the details.
+                tx.Height <= 0 ? Loc.Tr("tx.mempool")
+                    : cache.TipHeight >= tx.Height ? (cache.TipHeight - tx.Height + 1).ToString() : "1",
                 (tx.DeltaSats >= 0 ? "+" : "") + Fmt(tx.DeltaSats, withLabel: false),
                 tx.Txid,
                 tx.Verified,

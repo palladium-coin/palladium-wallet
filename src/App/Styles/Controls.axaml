@@ -206,6 +206,14 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="BoxShadow" Value="0 18 40 -12 #803B82F6"/>
     </Style>
+    <!-- Short window: a slimmer balance card leaves the tabs their height -->
+    <Style Selector=".short Border.balance-hero">
+        <Setter Property="Padding" Value="20,10"/>
+        <Setter Property="CornerRadius" Value="18"/>
+    </Style>
+    <Style Selector=".short Border.balance-hero TextBlock.amount">
+        <Setter Property="FontSize" Value="24"/>
+    </Style>
     <Style Selector="Border.balance-hero TextBlock.amount">
         <Setter Property="Foreground" Value="#FFFFFF"/>
     </Style>
