@@ -513,4 +513,70 @@ public class TransactionFactoryTests
             1_000_000, 3m, changeIndex: 0, tipHeight: 200);
         Assert.False(unsigned.Signed);
     }
+
+    /// <summary>A miner's wallet: thousands of 3.125 PLM coinbase rewards paid to one address.</summary>
+    private static (HdAccount Account, List<CachedUtxo> Utxos, Dictionary<string, Transaction> Txs) MinerWallet(int count)
+    {
+        var account = Account();
+        var address = account.GetReceiveAddress(0);
+        var utxos = new List<CachedUtxo>();
+        var txs = new Dictionary<string, Transaction>();
+        for (var i = 0; i < count; i++)
+        {
+            var coinbase = Net.CreateTransaction();
+            coinbase.Inputs.Add(new TxIn(new OutPoint(uint256.Zero, uint.MaxValue)) { ScriptSig = new Script(Op.GetPushOp(i + 1)) });
+            coinbase.Outputs.Add(Money.Satoshis(312_500_000), address);
+            var txid = coinbase.GetHash().ToString();
+            txs[txid] = coinbase;
+            utxos.Add(new CachedUtxo
+            {
+                Txid = txid, Vout = 0, ValueSats = 312_500_000, Address = address.ToString(),
+                IsChange = false, AddressIndex = 0, Height = 100, Verified = true, IsCoinbase = true,
+            });
+        }
+        return (account, utxos, txs);
+    }
+
+    [Theory]
+    [InlineData(40)]
+    [InlineData(1_500)]
+    [InlineData(4_000)]
+    public void Fifty_plm_from_a_miners_wallet_uses_only_the_coins_it_needs(int coins)
+    {
+        var (account, utxos, txs) = MinerWallet(coins);
+
+        var built = new TransactionFactory(account).Build(utxos, txs, account.GetReceiveAddress(5), 5_000_000_000,
+            feeRateSatPerVByte: 2, changeIndex: 0, tipHeight: 100_000);
+
+        // 16 × 3.125 = 50 exactly, and the fee needs one more.
+        Assert.Equal(17, built.Transaction.Inputs.Count);
+        Assert.True(built.Signed);
+        Assert.Contains(built.Transaction.Outputs, o => o.Value.Satoshi == 5_000_000_000);
+    }
+
+    [Fact]
+    public void A_send_all_of_hundreds_of_inputs_is_not_refused_by_a_serialized_size_cap_the_node_does_not_have()
+    {
+        // 800 native-segwit inputs: ~54,000 vB (well inside the 100,000 vB relay limit) but ~119,000 bytes serialized.
+        var (account, utxos, txs) = MinerWallet(800);
+
+        var built = new TransactionFactory(account).Build(utxos, txs, account.GetReceiveAddress(5), 0,
+            feeRateSatPerVByte: 2, changeIndex: 0, tipHeight: 100_000, sendAll: true);
+
+        Assert.Equal(800, built.Transaction.Inputs.Count);
+        Assert.InRange(built.Transaction.GetVirtualSize(), 40_000, 100_000);
+        Assert.True(built.Transaction.GetSerializedSize() > 100_000);
+    }
+
+    [Fact]
+    public void A_payment_that_really_needs_too_many_inputs_still_reports_the_relay_limit()
+    {
+        var (account, utxos, txs) = MinerWallet(1_600);   // 1,600 inputs ≈ 108,000 vB
+
+        var ex = Assert.Throws<WalletSpendException>(() => new TransactionFactory(account).Build(
+            utxos, txs, account.GetReceiveAddress(5), 1_600L * 312_500_000 - 1_000_000,
+            feeRateSatPerVByte: 2, changeIndex: 0, tipHeight: 100_000));
+
+        Assert.Contains("standard relay limit", ex.Message);
+    }
 }

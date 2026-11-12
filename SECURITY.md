@@ -105,6 +105,10 @@ Servers learned through peer discovery are listed and can be selected by the use
 
 The wallet file is the only thing that needs to be backed up. For encrypted wallets, the password is also required. If both the file and the password are lost, funds are unrecoverable (no server-side backup). For watch-only wallets (restored from xpub or from a plain address), the private keys must be kept in a separate cold storage device.
 
+## Release binaries (supply chain)
+
+The Windows and Linux binaries of a release are built by GitHub Actions when the release is published, with the same pinned Docker toolchain (`docker/build.sh`) anyone can run to rebuild them from the tagged source (ADR 0065). The release carries a `SHA256SUMS` file and a build-provenance attestation, so a download can be checked against the commit and workflow that produced it (`sha256sum -c SHA256SUMS`, or `gh attestation verify FILE --repo palladium-coin/palladium-wallet`). **Limits:** the Windows executable is not Authenticode-signed (SmartScreen warns); the build is not bit-for-bit reproducible (embedded metadata differs between builds); and the checksums and the binaries sit on the same release page, so they protect against a corrupted or swapped download from a mirror, not against a compromise of the GitHub account or repository itself. The actions the workflows use are pinned to commit hashes, not to tags that can be moved,; updating them is a manual, reviewed change. The Android APK is never built in CI: it is built and signed on the release manager's machine with the persistent keystore (`docker/keystore/`, never committed), which is what lets an update install over the previous one, and its checksum is published by hand.
+
 ---
 
 ## AI-assisted testing and vulnerability discovery

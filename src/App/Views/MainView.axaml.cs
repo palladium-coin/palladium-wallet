@@ -24,7 +24,12 @@ public partial class MainView : UserControl
     public MainView()
     {
         InitializeComponent();
+        // A short window (the 600 px minimum height) gives the tabs the room the balance card would take.
+        SizeChanged += (_, e) => Classes.Set("short", e.NewSize.Height < ShortWindowHeight);
     }
+
+    /// <summary>Below this height the balance card gets compact (class <c>short</c> on the root).</summary>
+    public const double ShortWindowHeight = 640;
 
     private void OnHistoryRowDoubleTapped(object? sender, TappedEventArgs e)
     {

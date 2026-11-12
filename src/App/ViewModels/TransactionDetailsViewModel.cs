@@ -48,9 +48,10 @@ public sealed class TransactionDetailsViewModel
             ? Signed(d.ReceivedSats)
             : Signed(-d.SentToOthersSats);
 
-        FeeText = d.FeeSats is { } fee
-            ? (d.IsIncoming ? Abs(fee) : Signed(-fee))
-            : "—";
+        // The fee of a transaction that only pays us was paid by the sender: showing it as "Transaction fee" next to our
+        // own amounts reads like a cost to the user, so that row is hidden (the rate stays: it says how fast it confirms).
+        ShowFee = !d.IsIncoming;
+        FeeText = d.FeeSats is { } fee ? Signed(-fee) : "—";
 
         NetText = Signed(d.NetSats);
 
@@ -87,6 +88,7 @@ public sealed class TransactionDetailsViewModel
     public string CounterpartyText { get; }
     public string AmountHeader { get; }
     public string AmountText { get; }
+    public bool ShowFee { get; }
     public string FeeText { get; }
     public string NetText { get; }
     public string TotalSizeText { get; }
@@ -112,5 +114,4 @@ public sealed class TransactionDetailsViewModel
         return sign + CoinAmount.FormatIn(Math.Abs(sats), _unit);
     }
 
-    private string Abs(long sats) => CoinAmount.FormatIn(Math.Abs(sats), _unit);
 }

@@ -10,7 +10,7 @@ Unlike generic wallets adapted to many coins, Palladium Wallet is designed aroun
 - **Security**: seed and private keys encrypted on disk (AES-GCM, PBKDF2-SHA512), never in plaintext in logs or on the wire; every server response is validated with Merkle proofs + checkpoints.
 - **HD wallet** (BIP39/BIP32), SegWit/wrapped/legacy addresses, watch-only from xpub or from plain addresses (no key material at all).
 - **PSBT-centric**: signing flows go through PSBT (offline / air-gapped); watch-only wallets export an unsigned PSBT for offline signing. M-of-N **multisig** (P2WSH or P2SH-P2WSH, BIP48, `sortedmulti`) is supported from the CLI and the GUI wizard: cosigners exchange public keys, each builds the same wallet, and a PSBT collects the signatures (`create-multisig`, `cosigner-key`, `sign-psbt`, `combine-psbt`); addresses are checked against Palladium Core.
-- **Multi-network**: mainnet, testnet, regtest in the core and the CLI (`--net`); the GUI works on mainnet only. Testnet and regtest ship without bootstrap servers or checkpoints, so pass `--server host:port`.
+- **Multi-network**: mainnet, testnet, regtest in the core and the CLI (`--net`); the desktop GUI runs on mainnet unless started with `--net` (ADR 0064). Testnet and regtest ship without bootstrap servers or checkpoints, so pass `--server host:port`.
 - **Cross-platform**: desktop (Windows/Linux) and Android share one Avalonia UI; a **CLI** runs on the same core.
 - **Multilingual**: Italian, English, Spanish, French, Portuguese, German, Chinese (Simplified).
 
@@ -209,6 +209,10 @@ reviewable in the repo. For a wallet this is a trust property, not a
 convenience: anyone can rebuild the published binaries from source and check
 they were produced by the process the repository declares.
 
+When a GitHub release is published, CI builds the Windows and Linux binaries with this same script and attaches them
+to the release with checksums and a provenance attestation; the Android APK is built and signed locally and uploaded
+afterwards (ADR 0065).
+
 See [docker/README.md](docker/README.md) for prerequisites, usage, how to run
 each produced artifact, and troubleshooting. The sections below cover manual
 builds with a locally installed SDK (the normal path during development).
@@ -327,6 +331,15 @@ $ADB install -r src/App.Android/bin/Debug/net10.0-android/*-Signed.apk
 $ADB shell monkey -p io.github.davide3011.palladiumwallet -c android.intent.category.LAUNCHER 1
 $ADB logcat -d | grep -iE "monodroid|exception|fatal|avalonia"
 ```
+
+**Automated smoke test** (ADR 0066): `python3 tests/android/smoke.py` installs the debug APK on a throw-away
+AVD it creates and boots headless (or on a device that is already there, start-up check only), walks the start screen,
+the restore wizard, the wallet home, Receive and Settings, and checks that the **System** theme follows the OS
+light/dark switch while the app runs. It drives the accessibility tree, so it taps by label and reads text boxes
+back (`adb shell input text` drops characters). It never uninstalls, and the full walk-through needs a device it booted
+itself or `--reset-data`. `--langs de,fr,zh` repeats Settings and Receive in other languages and fails on anything
+that sticks out of the screen, and `python3 -m unittest discover -s tests/android` tests the script's own parsing
+without a device. Run by hand; CI does not build the Android head.
 
 **VS Code "Android iOS Emulator" extension** (optional, click-to-launch): it only starts an
 existing AVD, so create one first (step 3). Point it at the emulator binary:

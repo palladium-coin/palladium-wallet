@@ -36,20 +36,50 @@ public partial class MainWindowViewModel
     private async Task OpenServerSettings()
     {
         IsSettingsOpen = false;
+        ServerMessage = "";
         RefreshServers();
         IsServerSettingsOpen = true;
         if (_client is { IsConnected: true })
             await DiscoverServers();
     }
 
+    /// <summary>Result of looking for servers / resetting pinned certificates, shown inside the server window: the
+    /// status bar is under that window while it is open.</summary>
+    [ObservableProperty]
+    private string serverMessage = "";
+
     [RelayCommand]
     private void CloseServerSettings() => IsServerSettingsOpen = false;
 
-    [ObservableProperty]
-    private string connectionStatus = Loc.Tr("conn.none");
+    // The connection texts are derived from the state, never stored as translated strings, so a
+    // language switch re-renders them (see ApplySettings).
+    private enum ConnState { None, Connecting, Connected, Reconnecting }
+    private ConnState _connState = ConnState.None;
+    private string _connEndpoint = "";
 
-    [ObservableProperty]
-    private string connectionStatusShort = Loc.Tr("conn.none");
+    private void SetConn(ConnState state, string? endpoint = null)
+    {
+        _connState = state;
+        if (endpoint is not null) _connEndpoint = endpoint;
+        OnPropertyChanged(nameof(ConnectionStatus));
+        OnPropertyChanged(nameof(ConnectionStatusShort));
+    }
+
+    public string ConnectionStatus => _connState switch
+    {
+        ConnState.Connecting => $"{Loc.Tr("conn.connectingto")} {_connEndpoint}…",
+        ConnState.Connected => $"{Loc.Tr("conn.connectedto")} {_connEndpoint}",
+        ConnState.Reconnecting => Loc.Tr("conn.reconnecting"),
+        _ => Loc.Tr("conn.none"),
+    };
+
+    public string ConnectionStatusShort => _connState switch
+    {
+        ConnState.Connecting => Loc.Tr("conn.connectingto") + "…",
+        ConnState.Connected => Loc.Tr("conn.connectedto"),
+        ConnState.Reconnecting => Loc.Tr("conn.reconnecting"),
+        _ => Loc.Tr("conn.none"),
+    };
 
     [ObservableProperty]
     private bool isConnected;
@@ -215,8 +245,7 @@ public partial class MainWindowViewModel
                 foreach (var (h, p) in candidates)
                 {
                     ct.ThrowIfCancellationRequested();
-                    ConnectionStatus = $"{Loc.Tr("conn.connectingto")} {h}:{p}…";
-                    ConnectionStatusShort = Loc.Tr("conn.connectingto") + "…";
+                    SetConn(ConnState.Connecting, $"{h}:{p}");
                     try
                     {
                         var pins = new CertificatePinStore(AppPaths.CertificatePinsPath(Net));
@@ -232,13 +261,11 @@ public partial class MainWindowViewModel
                         _client.Disconnected += _ => Dispatcher.UIThread.Post(() =>
                         {
                             IsConnected = false;
-                            ConnectionStatus = Loc.Tr("conn.none");
-                            ConnectionStatusShort = Loc.Tr("conn.none");
+                            SetConn(ConnState.None);
                         });
                         IsConnected = true;
                         _autoReconnect = true;
-                        ConnectionStatus = $"{Loc.Tr("conn.connectedto")} {h}:{p}";
-                        ConnectionStatusShort = Loc.Tr("conn.connectedto");
+                        SetConn(ConnState.Connected, $"{h}:{p}");
                         // Update the UI to reflect the server actually connected.
                         _syncingServerFields = true;
                         ServerHost = h;
@@ -289,7 +316,7 @@ public partial class MainWindowViewModel
                     _doc.Cache?.NextChangeIndex ?? 0,
                     net,
                     _doc.Cache?.AnchoredDownTo);
-                _synchronizer.Progress += msg => Dispatcher.UIThread.Post(() => StatusMessage = msg);
+                _synchronizer.Progress += msg => Dispatcher.UIThread.Post(() => SetInfoStatus(msg));
                 // Progressive verification (§7.4): the wallet becomes usable as soon as
                 // transaction downloads finish, without waiting for every historical Merkle
                 // proof — critical on mobile, where verifying thousands of proofs can take far
@@ -343,8 +370,8 @@ public partial class MainWindowViewModel
                 DiscardStalePending(cache); // final state only: a partial snapshot may still be unverified
                 await WalletStore.SaveAsync(_doc, _walletPath!, _password);
                 _syncFailed = false;
-                StatusMessage = $"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
-                    $"{result.History.Count} {Loc.Tr("msg.synced.detail")}";
+                SetInfoStatus($"{Loc.Tr("msg.synced")}: {Loc.Tr("msg.height")} {result.TipHeight}, " +
+                    $"{result.History.Count} {Loc.Tr("msg.synced.detail")}");
             } while (_resyncRequested && !ct.IsCancellationRequested);
         }
         catch (OperationCanceledException)
@@ -354,15 +381,13 @@ public partial class MainWindowViewModel
             // (_resumeRecovering) — neither is an error the user needs to see as one.
             cancelled = true;
             IsConnected = false;
-            ConnectionStatus = _resumeRecovering ? Loc.Tr("conn.reconnecting") : Loc.Tr("conn.none");
-            ConnectionStatusShort = _resumeRecovering ? Loc.Tr("conn.reconnecting") : Loc.Tr("conn.none");
+            SetConn(_resumeRecovering ? ConnState.Reconnecting : ConnState.None);
             StatusMessage = "";
         }
         catch (CertificatePinMismatchException ex)
         {
             IsConnected = false;
-            ConnectionStatus = Loc.Tr("conn.none");
-            ConnectionStatusShort = Loc.Tr("conn.none");
+            SetConn(ConnState.None);
             StatusMessage = DescribeError(ex);
         }
         catch (Exception ex)
@@ -375,13 +400,11 @@ public partial class MainWindowViewModel
                 // is a race, not a real failure — show "reconnecting" and restart right away
                 // instead of a scary error message and a wait for the next keep-alive tick.
                 cancelled = true;
-                ConnectionStatus = Loc.Tr("conn.reconnecting");
-                ConnectionStatusShort = Loc.Tr("conn.reconnecting");
+                SetConn(ConnState.Reconnecting);
             }
             else
             {
-                ConnectionStatus = IsConnected ? ConnectionStatus : Loc.Tr("conn.none");
-                ConnectionStatusShort = IsConnected ? Loc.Tr("conn.connectedto") : Loc.Tr("conn.none");
+                SetConn(IsConnected ? ConnState.Connected : ConnState.None);
                 StatusMessage = $"{Loc.Tr("msg.error")}: {DescribeError(ex)}";
             }
             if (_account is not null)
@@ -481,7 +504,7 @@ public partial class MainWindowViewModel
         }
         if (temp is null)
         {
-            StatusMessage = $"{Loc.Tr("msg.peer.discovery.error")}: " +
+            ServerMessage = $"{Loc.Tr("msg.peer.discovery.error")}: " +
                 (lastError is null ? Loc.Tr("conn.none") : DescribeError(lastError));
             return;
         }
@@ -504,13 +527,13 @@ public partial class MainWindowViewModel
             RefreshServers();
             SelectedKnownServer = KnownServers.FirstOrDefault(s => s.Host == selected?.Host)
                 ?? KnownServers.FirstOrDefault();
-            StatusMessage = added > 0
+            ServerMessage = added > 0
                 ? string.Format(Loc.Tr("msg.peer.discovery.found"), added, KnownServers.Count)
                 : string.Format(Loc.Tr("msg.peer.discovery.none"), KnownServers.Count);
         }
         catch (Exception ex)
         {
-            StatusMessage = $"{Loc.Tr("msg.peer.discovery.error")}: {DescribeError(ex)}";
+            ServerMessage = $"{Loc.Tr("msg.peer.discovery.error")}: {DescribeError(ex)}";
         }
     }
 
@@ -545,7 +568,7 @@ public partial class MainWindowViewModel
     private void ResetCertificates()
     {
         new CertificatePinStore(AppPaths.CertificatePinsPath(Net)).ResetAll();
-        StatusMessage = Loc.Tr("msg.certreset");
+        ServerMessage = Loc.Tr("msg.certreset");
     }
 
     /// <summary>

@@ -49,7 +49,49 @@ public partial class MainWindowViewModel
 
     // The prepared transaction is a snapshot of the form (ADR 0048): anything the user can change
     // that went into it discards it, so what Confirm sends is always what was reviewed.
-    partial void OnSendToChanged(string value) => InvalidatePendingSend();
+    /// <summary>Live check of the recipient box, shown under it (empty while the box is empty).</summary>
+    [ObservableProperty]
+    private string recipientHint = "";
+
+    [ObservableProperty]
+    private bool isRecipientHintError;
+
+    private void RefreshRecipientHint()
+    {
+        var text = SendTo.Trim();
+        if (text.Length == 0)
+        {
+            RecipientHint = "";
+            IsRecipientHintError = false;
+        }
+        else if (TryParseDestination(text, out var address))
+        {
+            var script = address.ScriptPubKey;
+            var kind = script.IsScriptType(NBitcoin.ScriptType.Taproot) ? "P2TR"
+                : script.IsScriptType(NBitcoin.ScriptType.P2WPKH) ? "P2WPKH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2WSH) ? "P2WSH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2SH) ? "P2SH"
+                : script.IsScriptType(NBitcoin.ScriptType.P2PKH) ? "P2PKH" : "";
+            RecipientHint = kind.Length > 0 ? $"{Loc.Tr("send.to.ok")} · {kind}" : Loc.Tr("send.to.ok");
+            IsRecipientHintError = false;
+        }
+        else
+        {
+            RecipientHint = Loc.Tr("msg.address.invalid");
+            IsRecipientHintError = true;
+        }
+    }
+
+    partial void OnSendToChanged(string value)
+    {
+        RefreshRecipientHint();
+        InvalidatePendingSend();
+        // The contact picker shows the contact whose address the box holds. When the box no longer holds it (cleared
+        // after a send, edited by hand, replaced by a scanned QR) the picker is emptied: otherwise it keeps showing the
+        // old contact and picking that same contact again changes nothing, so the box stays empty.
+        if (SendToContact is { } contact && !string.Equals(contact.Address, value, StringComparison.OrdinalIgnoreCase))
+            SendToContact = null;
+    }
 
     partial void OnSendAmountChanged(string value) => InvalidatePendingSend();
 
@@ -75,17 +117,23 @@ public partial class MainWindowViewModel
         }
     }
 
-    private void ApplyFeeEstimates(FeeEstimates estimates)
+    private void RenderFeeHint()
     {
-        _feeEstimates = estimates;
-        HasFeeEstimates = estimates.HasAny;
-        FeeEstimateHint = estimates.HasAny
+        var estimates = _feeEstimates;
+        FeeEstimateHint = estimates is { HasAny: true }
             ? string.Format(Loc.Tr("send.fee.hint"),
                 estimates.Fast is { } f ? FeePolicy.Format(f) : "—",
                 estimates.Normal is { } n ? FeePolicy.Format(n) : "—",
                 estimates.Economy is { } e ? FeePolicy.Format(e) : "—",
                 estimates.Relay is { } r ? FeePolicy.Format(r) : "—")
             : "";
+    }
+
+    private void ApplyFeeEstimates(FeeEstimates estimates)
+    {
+        _feeEstimates = estimates;
+        HasFeeEstimates = estimates.HasAny;
+        RenderFeeHint();
         // Preselect the normal estimate unless the user already typed something.
         if (!_feeRateTouched && estimates.HasAny)
             SetFeeRate(FeePolicy.Format(FeePolicy.DefaultRate(estimates)));
@@ -107,6 +155,20 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string sendPreview = "";
 
+    /// <summary>The first line of the review (what is paid, to whom) and the rest, so the view can give them different weight.</summary>
+    [ObservableProperty]
+    private string sendPreviewHeadline = "";
+
+    [ObservableProperty]
+    private string sendPreviewDetail = "";
+
+    partial void OnSendPreviewChanged(string value)
+    {
+        var newline = value.IndexOf('\n');
+        SendPreviewHeadline = newline < 0 ? value : value[..newline];
+        SendPreviewDetail = newline < 0 ? "" : value[(newline + 1)..].TrimEnd();
+    }
+
     [ObservableProperty]
     private bool hasPendingSend;
 
@@ -116,7 +178,7 @@ public partial class MainWindowViewModel
     /// <summary>True when the open account cannot sign — Send only prepares an unsigned PSBT to export.</summary>
     public bool IsWatchOnlyAccount => _account?.IsWatchOnly ?? false;
 
-    public void NotifyPsbtCopied() => StatusMessage = Loc.Tr("psbt.copied");
+    public void NotifyPsbtCopied() => SetInfoStatus(Loc.Tr("psbt.copied"));
 
     [RelayCommand]
     private async Task ScanQr()
@@ -128,6 +190,21 @@ public partial class MainWindowViewModel
         var address = raw.Contains(':') ? raw.Split(':')[1] : raw;
         if (address.Contains('?')) address = address.Split('?')[0];
         SendTo = address.Trim();
+    }
+
+    /// <summary>Parses a pasted recipient for the current network; false (not an exception text) when it is empty or wrong.</summary>
+    private bool TryParseDestination(string text, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BitcoinAddress? address)
+    {
+        try
+        {
+            address = BitcoinAddress.Create(text.Trim(), PalladiumNetworks.For(Net));
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        {
+            address = null;
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -147,7 +224,11 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            var destination = BitcoinAddress.Create(SendTo.Trim(), PalladiumNetworks.For(Net));
+            if (!TryParseDestination(SendTo, out var destination))
+            {
+                SendPreview = Loc.Tr("msg.address.invalid");
+                return;
+            }
             long amount = 0;
             if (!SendAll && (!CoinAmount.TryParseIn(SendAmount, _config.Unit, out amount) || amount <= 0))
             {
@@ -176,15 +257,10 @@ public partial class MainWindowViewModel
                 pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, SendAll);
 
-            SendPreview = DescribePayment(_pendingSend, destination) +
-                (_pendingSend.TxidIsFinal
-                    ? $"txid {_pendingSend.Txid[..16]}… · "
-                    : Loc.Tr("msg.txid.notfinal") + " · ") +
-                $"fee {Fmt(_pendingSend.Fee.Satoshi)} " +
-                $"({_pendingSend.Transaction.GetVirtualSize()} vB)" +
-                (_pendingSend.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
-                HighFeeWarning(_pendingSend.Fee.Satoshi,
-                    SendAll ? _pendingSend.Transaction.TotalOut.Satoshi : amount);
+            var built = _pendingSend;
+            var paid = SendAll ? built.Transaction.TotalOut.Satoshi : amount;
+            _renderSendPreview = () => BuildPreview(built, destination, paid);
+            SendPreview = _renderSendPreview();
             HasPendingSend = _pendingSend.Signed;
             PendingPsbtBase64 = _pendingSend.Signed ? "" : _pendingSend.Psbt.ToBase64();
         }
@@ -199,6 +275,7 @@ public partial class MainWindowViewModel
     private void DiscardPendingSend()
     {
         _pendingSend = null;
+        _renderSendPreview = null;
         HasPendingSend = false;
         PendingPsbtBase64 = "";
     }
@@ -225,6 +302,18 @@ public partial class MainWindowViewModel
     /// If the transaction does not pay the requested address there is nothing to confirm, so this
     /// throws instead of showing a review that does not match.
     /// </summary>
+    // The review of a prepared transaction is rendered from the transaction, so a change of language or
+    // unit re-renders it instead of leaving the text of the moment it was prepared (see ApplySettings).
+    private Func<string>? _renderSendPreview;
+    private Func<string>? _renderDonatePreview;
+
+    private string BuildPreview(BuiltTransaction built, BitcoinAddress destination, long paidSats) =>
+        DescribePayment(built, destination) +
+        (built.TxidIsFinal ? $"txid {built.Txid[..16]}… · " : Loc.Tr("msg.txid.notfinal") + " · ") +
+        string.Format(Loc.Tr("send.review.fee"), Fmt(built.Fee.Satoshi), built.Transaction.GetVirtualSize()) +
+        (built.Signed ? "" : Loc.Tr("msg.unsigned.watchonly")) +
+        HighFeeWarning(built.Fee.Satoshi, paidSats);
+
     private string DescribePayment(BuiltTransaction built, BitcoinAddress destination)
     {
         var outputs = built.Transaction.Outputs;

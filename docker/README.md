@@ -144,6 +144,29 @@ via `adb install dist/android/PalladiumWallet-*.apk`. Supports Android 6.0+
 
 ---
 
+## Releases built by CI
+
+When a GitHub release is **published**, `.github/workflows/release.yml` builds Windows x64, Linux x64 and Linux ARM64
+with this same script (`./docker/build.sh windows`, `linux`, `linux-arm64`, one call each) and attaches the three
+binaries, a `SHA256SUMS` file and a build-provenance attestation to the release (ADR 0065). It refuses a tag that does not
+match `<Version>` in the App csproj (`v1.3.0` or `1.3.0`), so run `./update-version.sh` and tag that commit.
+
+- **Test a build before releasing:** run the same command locally (`./docker/build.sh windows`) and try the file in
+  `dist/`; nothing is uploaded from your machine.
+- **Android is never built by CI.** Build and sign it locally (`./docker/build.sh android`, which asks for the keystore
+  passwords) and attach it to the release that already exists:
+
+  ```bash
+  gh release upload vX.Y.Z dist/android/PalladiumWallet-X.Y.Z.apk
+  # CI's SHA256SUMS does not list it; add one for the APK:
+  (cd dist/android && sha256sum PalladiumWallet-X.Y.Z.apk > SHA256SUMS-android) && gh release upload vX.Y.Z dist/android/SHA256SUMS-android
+  ```
+
+- Android users can see the new release before the APK is attached: upload it right after publishing.
+- The Windows `.exe` is not code-signed (SmartScreen warns); CI and local builds differ only in embedded metadata.
+
+---
+
 ## How it works
 
 ### Docker images

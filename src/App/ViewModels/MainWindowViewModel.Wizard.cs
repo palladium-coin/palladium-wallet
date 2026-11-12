@@ -53,6 +53,39 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsStepMultisigVerify))]
     private string setupStep = StepStart;
 
+    // A message belongs to the screen that raised it: leaving a step, or toggling the option the message
+    // is about, must not leave it on the status bar.
+    partial void OnSetupStepChanged(string value)
+    {
+        StatusMessage = "";
+        OnPropertyChanged(nameof(WizardStepText));
+        OnPropertyChanged(nameof(HasWizardStepText));
+    }
+
+    private string[] WizardFlowSteps() => _wizardFlow switch
+    {
+        WizardFlowKind.New => [StepShowSeed, StepConfirmSeed, StepPassphrase, StepScriptType, StepPassword],
+        WizardFlowKind.Restore => [StepWords, StepPassphrase, StepScriptType, StepPassword],
+        WizardFlowKind.ImportXkey => [StepImportXkey, StepPassword],
+        WizardFlowKind.ImportWif => [StepImportWif, StepScriptType, StepPassword],
+        WizardFlowKind.ImportAddress => [StepImportAddress, StepPassword],
+        WizardFlowKind.Multisig => [StepMultisig, StepMultisigVerify, StepPassword],
+        _ => [],
+    };
+
+    /// <summary>"Step 2 of 4" while a creation flow is on screen; empty on the start, open and data-location screens.</summary>
+    public string WizardStepText
+    {
+        get
+        {
+            var steps = WizardFlowSteps();
+            var index = Array.IndexOf(steps, SetupStep);
+            return index >= 0 && steps.Length > 1 ? string.Format(Loc.Tr("wiz.step"), index + 1, steps.Length) : "";
+        }
+    }
+
+    public bool HasWizardStepText => WizardStepText.Length > 0;
+
     public bool IsStepDataLocation => SetupStep == StepDataLocation;
     public bool IsStepStart        => SetupStep == StepStart;
     public bool IsStepChooseWallet => SetupStep == StepChooseWallet;
@@ -129,6 +162,8 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private bool encryptWallet = true;
+
+    partial void OnEncryptWalletChanged(bool value) => StatusMessage = ""; // "passwords do not match" is moot once encryption is off
 
     [ObservableProperty]
     private bool walletFileExists;
@@ -624,7 +659,7 @@ public partial class MainWindowViewModel
         LoadContacts();
         ApplyCache(doc.Cache);
         IsWalletOpen = true;
-        StatusMessage = Loc.Tr("msg.opened");
+        SetInfoStatus(Loc.Tr("msg.opened"));
         _autoReconnect = true;  // keepalive retries the connection even if the first attempt fails
         _syncFailed = true;     // force the first automatic sync
         _ = ConnectAndSync();

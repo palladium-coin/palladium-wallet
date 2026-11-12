@@ -150,7 +150,7 @@ public sealed class CoinControlTests : VmTestBase
 
         vm.ToggleCoinSelectedCommand.Execute(vm.Coins.Single(c => c.Vout == 1));
         Assert.False(vm.HasCoinSelection);
-        Assert.Equal(Loc.Tr("msg.coins.notspendable"), vm.StatusMessage);
+        Assert.Equal(Loc.Tr("msg.coins.notspendable"), vm.CoinsMessage); // inline in the Coins tab, not only in the status bar
     });
 
     [Fact]

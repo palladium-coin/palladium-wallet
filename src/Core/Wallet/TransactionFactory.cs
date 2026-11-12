@@ -136,31 +136,66 @@ public sealed class TransactionFactory(IWalletAccount account)
             }
         }
 
+        // Coins are taken biggest first, and the builder is given a prefix of them: the smallest prefix that works is the
+        // selection. The search starts where the cumulative value first reaches the amount (nothing shorter can pay it) and
+        // gallops upwards: a wallet of thousands of small coins (a miner's 3.125 PLM rewards) needs a few dozen inputs, so
+        // the builder is never asked to assemble, sign and verify a transaction of thousands of inputs just to find that out.
+        var first = ordered.Count;
+        long running = 0;
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            running += ordered[i].ValueSats;
+            if (running >= amountSats) { first = i + 1; break; }
+        }
+
         NotEnoughFundsException? lastInsufficientFunds = null;
         TransactionTooLargeException? tooLarge = null;
         BuiltTransaction? best = null;
-        var low = 1;
-        var high = ordered.Count;
-        while (low <= high)
+
+        // true: built (kept in best); false: not enough funds yet; null: too large, more coins only make it worse.
+        bool? TryPrefix(int count)
         {
-            var count = low + ((high - low) / 2);
             try
             {
                 best = BuildWithSelectedUtxos(
                     ordered.Take(count).ToList(), transactions, destination, amountSats, feeRate, changeIndex,
                     sendAll: false, totalSpendableCount: ordered.Count);
-                high = count - 1;
+                return true;
             }
             catch (NotEnoughFundsException ex)
             {
                 lastInsufficientFunds = ex;
-                low = count + 1;
+                return false;
             }
             catch (TransactionTooLargeException ex)
             {
                 tooLarge = ex;
-                high = count - 1;
+                return null;
             }
+        }
+
+        var low = first;       // the smallest prefix not yet known to fall short
+        var high = ordered.Count;
+        var count = first;
+        var step = 1;
+        while (true)
+        {
+            var result = TryPrefix(count);
+            if (result is null) { high = count - 1; break; }
+            if (result is true) { high = count - 1; break; }
+            low = count + 1;
+            if (count == ordered.Count) break;
+            count = Math.Min(ordered.Count, count + step);
+            step *= 2;
+        }
+
+        // The answer lies in [low, high]: keep the smallest prefix that builds.
+        while (low <= high)
+        {
+            var mid = low + ((high - low) / 2);
+            var result = TryPrefix(mid);
+            if (result is false) low = mid + 1;
+            else high = mid - 1;
         }
 
         if (best is not null)
@@ -190,6 +225,11 @@ public sealed class TransactionFactory(IWalletAccount account)
         builder.SetVersion(2);
         // RBF sequence to allow fee bumping (§6.6).
         builder.OptInRBF = true;
+        // NBitcoin's default policy caps the *serialized* size (witness included) at 100,000 bytes, which is stricter than
+        // the node: Core limits the weight to 400,000, i.e. 100,000 vB, and a segwit input weighs 68 vB but serializes to
+        // ~149 bytes. The cap would refuse a send of ~700 or more inputs the network accepts, so it is lifted here and the
+        // virtual-size check below (the node's own rule) is the one that applies.
+        builder.StandardTransactionPolicy.MaxTransactionSize = null;
         builder.AddCoins(coins);
         builder.SetChange(account.GetChangeAddress(changeIndex));
         builder.SendEstimatedFees(feeRate);

@@ -46,14 +46,46 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private Bitmap? receiveQr;
 
+    /// <summary>Derivation path of the shown receive address (empty for wallets without one); language-independent.</summary>
+    [ObservableProperty]
+    private string receivePath = "";
+
+    private void ShowReceiveAddress(int index)
+    {
+        ReceiveAddress = _account!.GetReceiveAddress(index).ToString();
+        var account = _doc?.AccountPath;
+        ReceivePath = string.IsNullOrEmpty(account) ? "" : $"m/{account}/0/{index}";
+    }
+
     partial void OnReceiveAddressChanged(string value)
     {
+        ReceiveCopied = false; // a new address has not been copied yet
         var previous = ReceiveQr;
         ReceiveQr = string.IsNullOrEmpty(value) ? null : GenerateQr(value);
         previous?.Dispose();
     }
 
-    public void NotifyAddressCopied() => StatusMessage = Loc.Tr("addr.copied");
+    /// <summary>True for a moment after the receive address was copied: the Copy button confirms in place.</summary>
+    [ObservableProperty]
+    private bool receiveCopied;
+
+    /// <summary>How long the button keeps saying "Copied" (a test seam).</summary>
+    internal static TimeSpan ReceiveCopiedDuration { get; set; } = TimeSpan.FromMilliseconds(1800);
+
+    private int _receiveCopiedGeneration;
+
+    public void NotifyAddressCopied()
+    {
+        SetInfoStatus(Loc.Tr("addr.copied"));
+        ReceiveCopied = true;
+        // Only the latest copy may clear the flag, so a quick second click gets its full duration.
+        var generation = ++_receiveCopiedGeneration;
+        _ = Task.Delay(ReceiveCopiedDuration).ContinueWith(_ =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (generation == _receiveCopiedGeneration) ReceiveCopied = false;
+            }), TaskScheduler.Default);
+    }
 
     private static Bitmap? GenerateQr(string text)
     {
@@ -268,7 +300,7 @@ public partial class MainWindowViewModel
 
     // ---- update display from the sync result ----
 
-    private void ApplyCache(SyncCache? cache)
+    internal void ApplyCache(SyncCache? cache) // internal: tests feed it a cache directly
     {
         if (_account is null)
             return;
@@ -279,7 +311,7 @@ public partial class MainWindowViewModel
             ImmatureText = "";
             VerifyingText = "";
             FrozenText = "";
-            ReceiveAddress = _account.GetReceiveAddress(0).ToString();
+            ShowReceiveAddress(0);
             History.Clear();
             RefreshCoins(null);
             Addresses.Clear();
@@ -300,7 +332,11 @@ public partial class MainWindowViewModel
         RefreshCoins(cache);
         var pending = cache.History.Where(t => t.Height <= 0).Sum(t => t.DeltaSats);
         UnconfirmedText = pending != 0
-            ? $"{Loc.Tr("msg.pending")}: {(pending > 0 ? "+" : "")}{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"
+            // Incoming money waits for its confirmations; outgoing money has already left the spendable balance, so
+            // "not yet spendable" would be wrong for it.
+            ? pending > 0
+                ? $"{Loc.Tr("msg.pending")}: +{Fmt(pending)} — {Loc.Tr("msg.notspendable")}"
+                : $"{Loc.Tr("msg.pending.out")}: {Fmt(pending)}"
             : "";
         ImmatureText = cache.ImmatureSats != 0
             ? $"{Loc.Tr("msg.immature")}: {Fmt(cache.ImmatureSats)} — {Loc.Tr("msg.notspendable")}"
@@ -316,11 +352,13 @@ public partial class MainWindowViewModel
         FrozenText = frozenSats != 0
             ? string.Format(Loc.Tr("msg.frozen"), Fmt(frozenSats))
             : "";
-        ReceiveAddress = _account.GetReceiveAddress(cache.NextReceiveIndex).ToString();
+        ShowReceiveAddress(cache.NextReceiveIndex);
         History.Clear();
         foreach (var tx in cache.History)
             History.Add(new HistoryRow(
-                tx.Height > 0 ? tx.Height.ToString() : "mempool",
+                // Confirmations, not the block height: that is what tells how safe the payment is. The height is in the details.
+                tx.Height <= 0 ? Loc.Tr("tx.mempool")
+                    : cache.TipHeight >= tx.Height ? (cache.TipHeight - tx.Height + 1).ToString() : "1",
                 (tx.DeltaSats >= 0 ? "+" : "") + Fmt(tx.DeltaSats, withLabel: false),
                 tx.Txid,
                 tx.Verified,

@@ -59,8 +59,8 @@ What this wallet intentionally does **not** include (as of this version):
 - RBF fee bumping (transactions *signal* RBF, but there is no "bump fee" button)
 - Tor/proxy support — the indexing server can observe which addresses you query
 - Fiat currency conversion
-- Network selection in the GUI — the **GUI operates on mainnet only**; testnet and regtest
-  are available through the CLI (`--net`)
+- A network switch inside the GUI — the GUI runs on mainnet unless the desktop app is
+  *started* with `--net testnet|regtest` (see "Trying the GUI on regtest" below)
 
 ---
 
@@ -153,8 +153,9 @@ a sync cache (balances, history, verified proofs).
 
 Incoming funds are not immediately spendable. The exact rules on mainnet:
 
-- **Unconfirmed (mempool)** transactions: shown as *"pending confirmation … not yet
-  spendable"*. Never spendable, and — important — unconfirmed amounts are reported by the
+- **Unconfirmed (mempool)** transactions: incoming ones are shown as *"pending confirmation … not yet
+  spendable"*; money you just sent reads *"outgoing, awaiting confirmation: −X"* (it has already left
+  your spendable balance). Never spendable, and — important — unconfirmed amounts are reported by the
   server **without cryptographic proof**, so treat them as provisional until confirmed.
 - **Regular outputs**: spendable after **6 confirmations** (~12 minutes at 2-minute blocks).
 - **Mining (coinbase) outputs**: spendable after **121 confirmations** (~4 hours). Until
@@ -172,9 +173,16 @@ as separate amber lines under the balance when present.
 Release binaries are self-contained — no runtime to install. Run the single executable
 (`PalladiumWallet.exe` on Windows, `PalladiumWallet` on Linux).
 
+Windows and Linux files on a release page are built by GitHub Actions. Before running one, check it against
+`SHA256SUMS` from the same release (`sha256sum -c SHA256SUMS` on Linux, `Get-FileHash FILE` on Windows), or verify the
+attestation with `gh attestation verify FILE --repo palladium-coin/palladium-wallet`. Windows may show a SmartScreen
+warning because the executable is not code-signed; the checksum is how you know the file is the published one. On Linux,
+restore the execute bit with `chmod +x` if the download dropped it.
+
 ### 3.2 Android
 
-Install the `.apk` (sideloading must be allowed). Minimum Android version: 6.0 (API 23).
+Install the `.apk` (sideloading must be allowed). The apk is built and signed by hand by the release manager
+(not by CI) and added to the release after it is published, so it can appear a little later than the desktop files. Minimum Android version: 6.0 (API 23).
 The app requests the **camera** permission only if you use the QR scanner; **internet** is
 required for synchronization.
 
@@ -208,11 +216,32 @@ Resolution order:
 
 Inside the data root: `mainnet/wallets/*.wallet.json` (your wallets),
 `mainnet/server-certs.json` (pinned TLS certificates), `mainnet/servers.json` (discovered
-servers), `config.json` (language, unit, last server — shared across wallets).
+servers), `config.json` (language, unit, theme, solid surfaces, last server — shared across wallets).
+
+### 3.5 Trying the GUI on a test network (regtest)
+
+The desktop app starts on mainnet. To try features without real funds, start it on another network:
+
+```bash
+dotnet run --project src/App.Desktop                       # mainnet (default)
+dotnet run --project src/App.Desktop -- --net regtest      # regtest (or testnet)
+```
+
+The title then ends with `[REGTEST]` (or `[TESTNET]`); mainnet shows no tag. A test network has its own wallets,
+servers and settings folder, so it never touches your mainnet files, and it ships with no bootstrap servers: open the
+server settings and enter the server yourself. For a local chain run `tests/regtest/up.sh` (needs Docker): it starts a
+throw-away node and plm-fulcrum, mines 130 blocks and prints the server to use (`127.0.0.1:50111`, no SSL) and the
+command that sends coins to a GUI address; `tests/regtest/down.sh` removes everything. A wrong network name is refused
+at start. There is no switch inside the running app, on purpose, and Android always runs on mainnet.
 
 ---
 
 ## 4. First launch: the setup wizard
+
+A flow that has several screens (new wallet, restore, import, multisig) shows a **step counter**
+("Step 2 of 4") at the top right. A problem with what you typed (words that do not match, two
+different passwords, an invalid address) appears as an amber notice under the title, as well as
+in the status bar. The desktop window can be resized; the smallest size is 760×600.
 
 ### 4.1 Step: data location (desktop only, very first run)
 
@@ -376,10 +405,14 @@ wallet must be spendable (not watch-only) to actually broadcast.
 
 ### 8.1 The form
 
+The form scrolls, but the **Prepare** and **Confirm** buttons (and *Sign a PSBT…*) stay at the bottom of the tab on desktop, and the review of a prepared transaction sits right above them.
+
 - **From contacts** — optional dropdown that fills the recipient address from your address
   book.
-- **Recipient address** — validated when you prepare: an address of the wrong network or
-  with a typo is rejected (checksums make silent typos virtually impossible).
+- **Recipient address** — checked as you type: under the box it says *Valid address* with its
+  kind (P2WPKH, P2TR, …) or that the address is not valid for this network. It is validated
+  again when you prepare: an address of the wrong network or with a typo is rejected
+  (checksums make silent typos virtually impossible).
 - **Amount** — interpreted in the **currently selected display unit** (PLM by default — check
   the unit in Settings before typing!). Rejected if negative, malformed, or more precise
   than 1 satoshi (0.00000001 PLM).
@@ -577,8 +610,12 @@ amount, and compare the wallet ID or first address shown by the device.
 ## 9. Transaction history and details
 
 The **History** tab lists all wallet transactions, newest first; unconfirmed ones are
-labeled **mempool** and sorted on top, confirmed ones show their **block height**. The
-amount is the transaction's net effect on your wallet (`+` incoming).
+labeled **in mempool** and sorted on top, confirmed ones show their **number of
+confirmations** (the block height is in the details). Columns have headers on the desktop; the
+transaction ID is shortened (the full one is in the details). The amount is the transaction's net
+effect on your wallet (`+` incoming). A new wallet's History and Contacts tabs say that they are
+still empty. The details of a transaction that only *received* money have no fee row (the sender
+paid it); a sent one shows its fee.
 
 **Double-click** (desktop) or **tap** (Android) a row to open the full details. This
 requires a live server connection (details are fetched on demand): otherwise *"Connect to
@@ -751,6 +788,11 @@ the door to the server settings:
 
 - **Language** — Italiano, English, Español, Français, Português, Deutsch. Applies
   immediately. Default: English.
+- **Theme** — System (follows the operating system, default), Light or Dark. Applies
+  immediately and is remembered.
+- **Solid surfaces** — replaces the translucent glass look with opaque backgrounds (cards, dialogs,
+  buttons, the window background). Off by default; turn it on if the translucency makes text hard
+  to read. Applies immediately and is remembered.
 - **Amount unit** — how amounts are displayed *and interpreted when you type them*:
 
   | Unit | In satoshi | Decimals shown |
@@ -878,8 +920,7 @@ binary); with no arguments it prints usage.
 
 **Shared conventions.** Default wallet file:
 `~/.palladium-wallet/<network>/wallets/default.wallet.json` — override with `--file PATH`.
-Default network mainnet — override with `--net testnet|regtest` (the CLI is the only way to
-use test networks).
+Default network mainnet — override with `--net testnet|regtest`.
 
 **Wallet password.** `create`/`restore*` ask for a password and encrypt the file; encrypted
 wallets need it for `info`/`sync`/`send`. Supply it, in order of preference, with:

@@ -18,7 +18,11 @@ namespace PalladiumWallet.App.ViewModels;
 
 /// <summary>Transaction history row for the view.</summary>
 public sealed record HistoryRow(string Conferma, string Importo, string Txid, bool Verified = true,
-    bool Unanchored = false);
+    bool Unanchored = false)
+{
+    /// <summary>First and last characters of the txid: the full one is in the details and a row is not the place for 64 digits.</summary>
+    public string TxidShort => Txid.Length > 20 ? $"{Txid[..10]}…{Txid[^10..]}" : Txid;
+}
 
 /// <summary>
 /// Address view row: public data and derivation path only. The private key is never held here;
@@ -88,10 +92,18 @@ public partial class MainWindowViewModel : ViewModelBase
             ? $"{v.Major}.{v.Minor}.{v.Build}"
             : "";
 
-    public string WindowTitle => $"Palladium Wallet {AppVersion}";
+    /// <summary>Marks a test network in the title so it is never mistaken for the real chain.</summary>
+    public string WindowTitle => Net == NetKind.Mainnet
+        ? $"Palladium Wallet {AppVersion}"
+        : $"Palladium Wallet {AppVersion} [{Net.ToString().ToUpperInvariant()}]";
 
     /// <summary>True on desktop; false on Android/iOS — hides filesystem-dependent features.</summary>
-    public bool IsDesktop => !OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS();
+    public bool IsDesktop => MobileLayoutOverride is { } mobile
+        ? !mobile
+        : !OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS();
+
+    /// <summary>Test seam: renders the mobile layout (Android/iOS) on a desktop machine, so it can be checked headlessly.</summary>
+    internal static bool? MobileLayoutOverride { get; set; }
 
     public bool IsMobile => !IsDesktop;
 
@@ -112,7 +124,31 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsSetupVisible => !IsWalletOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotice))]
     private string statusMessage = "";
+
+    /// <summary>True when <see cref="StatusMessage"/> is a plain confirmation ("Settings saved"), not a problem.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotice))]
+    private bool statusIsInfo;
+
+    private bool _settingInfo;
+
+    partial void OnStatusMessageChanged(string value)
+    {
+        if (!_settingInfo) StatusIsInfo = false; // anything assigned directly is treated as a problem to read
+    }
+
+    /// <summary>Sets a status that is a confirmation, not an error: the status bar shows it, the inline notice does not.</summary>
+    private void SetInfoStatus(string text)
+    {
+        _settingInfo = true;
+        try { StatusMessage = text; StatusIsInfo = true; }
+        finally { _settingInfo = false; }
+    }
+
+    /// <summary>The amber inline notice of the wizard: only for messages that are about a problem.</summary>
+    public bool ShowNotice => !string.IsNullOrEmpty(StatusMessage) && !StatusIsInfo;
 
     [ObservableProperty]
     private int selectedTabIndex;
@@ -123,12 +159,14 @@ public partial class MainWindowViewModel : ViewModelBase
     // ---- dashboard collections ----
 
     public ObservableCollection<HistoryRow> History { get; } = [];
+    public bool HasHistory => History.Count > 0;
+    public bool HasContacts => Contacts.Count > 0;
     public ObservableCollection<AddressRow> Addresses { get; } = [];
 
     // ---- helpers ----
 
-    // Mainnet only in the shipped app; the test seam below may select another profile (the regtest GUI tests).
-    private NetKind Net => ProfileOverride?.Kind ?? NetKind.Mainnet;
+    // Mainnet unless the desktop head was started with --net (StartupOptions); the test seam below may select another profile.
+    private NetKind Net => ProfileOverride?.Kind ?? StartupOptions.Net;
     /// <summary>Test seam: lets tests drop the real bootstrap servers so nothing reaches the internet.</summary>
     internal static ChainProfile? ProfileOverride { get; set; }
 
@@ -154,6 +192,10 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _loc = Loc.SwitchTo(_config.Language);
+        // The empty-state messages of the History and Contacts tabs follow their lists.
+        History.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasHistory));
+        Contacts.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasContacts));
+        ApplyTheme();
         if (!AppPaths.IsDataLocationConfigured())
             SetupStep = StepDataLocation;
         else
@@ -204,14 +246,14 @@ public partial class MainWindowViewModel : ViewModelBase
                     await DisconnectAsync();
                     if (_autoReconnect)
                     {
-                        ConnectionStatus = Loc.Tr("conn.reconnecting");
+                        SetConn(ConnState.Reconnecting);
                         await ConnectAndSync();
                     }
                 }
             }
             else if (_autoReconnect)
             {
-                ConnectionStatus = Loc.Tr("conn.reconnecting");
+                SetConn(ConnState.Reconnecting);
                 await ConnectAndSync();
             }
         }
@@ -239,8 +281,7 @@ public partial class MainWindowViewModel : ViewModelBase
             // so it shows "reconnecting" and restarts immediately instead of
             // flashing a scary error message and waiting for the next keep-alive tick.
             _resumeRecovering = true;
-            ConnectionStatus = Loc.Tr("conn.reconnecting");
-            ConnectionStatusShort = Loc.Tr("conn.reconnecting");
+            SetConn(ConnState.Reconnecting);
             _syncCts.Cancel();
             // Deliberately not DisconnectAsync() here: it also nulls _synchronizer,
             // which still holds whatever this sync already downloaded/verified (e.g.
@@ -290,7 +331,7 @@ public partial class MainWindowViewModel : ViewModelBase
         AddressInfo = null; // also drops a revealed private key
         IsWalletOpen = false;
         IsConnected = false;
-        ConnectionStatus = Loc.Tr("conn.none");
+        SetConn(ConnState.None);
         RefreshSetupState();
     }
 }

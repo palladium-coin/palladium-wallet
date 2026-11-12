@@ -21,7 +21,7 @@
             <Setter Property="Margin" Value="16"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="24"/>
         </Style>
     </UserControl.Styles>
 
@@ -58,11 +58,25 @@
         </StackPanel>
 
         <!-- ============ SETUP WIZARD (§15): one step at a time ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsSetupVisible}">
+        <Grid Grid.Row="1" RowDefinitions="*,Auto" IsVisible="{Binding IsSetupVisible}">
+        <ScrollViewer Grid.Row="0">
             <StackPanel MaxWidth="560" Margin="24,40" Spacing="18"
                         HorizontalAlignment="Stretch">
-                <TextBlock Text="Palladium Wallet" FontSize="28" FontWeight="Bold"
-                           HorizontalAlignment="Center"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Palladium Wallet" FontSize="28" FontWeight="Bold"
+                               LetterSpacing="-0.6"/>
+                    <Border Grid.Column="1" Classes="chip" VerticalAlignment="Center"
+                            IsVisible="{Binding HasWizardStepText}">
+                        <TextBlock Text="{Binding WizardStepText}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </Border>
+                </Grid>
+
+                <!-- A validation message right where the person is looking, not only in the status bar -->
+                <Border Classes="notice" IsVisible="{Binding ShowNotice}">
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="13"
+                               Foreground="{DynamicResource WarningTextBrush}"/>
+                </Border>
 
                 <!-- Step 0 (first launch): where to store data -->
                 <StackPanel IsVisible="{Binding IsStepDataLocation}" Spacing="12">
@@ -87,7 +101,7 @@
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             IsVisible="{Binding WalletFileExists}"
                             Command="{Binding WizardStartOpenCommand}"/>
-                    <Button Content="{Binding Loc[wiz.new.btn]}" FontSize="16"
+                    <Button Content="{Binding Loc[wiz.new.btn]}" FontSize="16" Classes="accent"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{Binding WizardStartNewCommand}"/>
                     <Button Content="{Binding Loc[wiz.restore.btn]}" FontSize="16"
@@ -268,11 +282,6 @@
                                          TextWrapping="Wrap" FontFamily="monospace" FontSize="12"/>
                     <Image Source="{Binding MultisigOwnKeyQr}" Width="200" Height="200" HorizontalAlignment="Left"
                            IsVisible="{Binding MultisigOwnKeyQr, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
-                        <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
-                                Command="{Binding WizardNextFromMultisigCommand}"/>
-                    </StackPanel>
                 </StackPanel>
 
                 <!-- Step: compare the wallet ID with the other cosigners -->
@@ -342,10 +351,7 @@
                     <TextBlock Text="{Binding Loc[wiz.password.title]}" FontSize="18" FontWeight="Bold"/>
 
                     <!-- Name section: visually distinct from the password group -->
-                    <Border BorderBrush="{DynamicResource SystemAccentColor}"
-                            BorderThickness="0,0,0,0"
-                            Background="{DynamicResource SurfaceAltBrush}"
-                            CornerRadius="6" Padding="12,10">
+                    <Border Classes="card" CornerRadius="16" Padding="16,12">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding Loc[wiz.name.label]}"
                                        FontWeight="SemiBold" FontSize="13"/>
@@ -359,8 +365,11 @@
 
                     <!-- Encryption section -->
                     <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding Loc[wiz.password.label]}" FontWeight="SemiBold" FontSize="13"/>
                         <TextBox PlaceholderText="{Binding Loc[wiz.password.placeholder]}"
                                  PasswordChar="●" Text="{Binding PasswordInput}"/>
+                        <TextBlock Text="{Binding Loc[wiz.password.confirm.label]}" FontWeight="SemiBold" FontSize="13"
+                                   Margin="0,6,0,0"/>
                         <TextBox PlaceholderText="{Binding Loc[wiz.password.confirm]}"
                                  PasswordChar="●" Text="{Binding ConfirmPasswordInput}"/>
                         <CheckBox Content="{Binding Loc[wiz.password.encrypt]}"
@@ -379,6 +388,19 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!-- The multisig step is long: its buttons stay in view while the form scrolls -->
+        <Border Grid.Row="1" IsVisible="{Binding IsStepMultisig}" Padding="0,10"
+                BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+            <Grid MaxWidth="560" Margin="24,0" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+                    <Button Content="{Binding Loc[wiz.back]}" Command="{Binding WizardBackCommand}"/>
+                    <Button Content="{Binding Loc[wiz.next]}" Classes="accent"
+                            Command="{Binding WizardNextFromMultisigCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        </Grid>
+
         <!-- ============ WALLET PANEL ============ -->
         <Grid Grid.Row="1" RowDefinitions="Auto,*" IsVisible="{Binding IsWalletOpen}" Margin="16">
 
@@ -387,7 +409,10 @@
             <Border Grid.Row="0" Classes="balance-hero" Margin="0,0,0,16">
                 <StackPanel Spacing="4">
                     <TextBlock Text="{Binding Loc[addr.balance]}" Classes="label on-hero"/>
-                    <TextBlock Text="{Binding BalanceText}" Classes="amount"/>
+                    <!-- Shrinks on a narrow screen (a long amount in a long unit name) instead of being clipped -->
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding BalanceText}" Classes="amount"/>
+                    </Viewbox>
                     <TextBlock Text="{Binding UnconfirmedText}" Foreground="#FCD34D"
                                TextWrapping="Wrap"
                                IsVisible="{Binding UnconfirmedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
@@ -413,7 +438,11 @@
                 <TabControl.Styles>
                     <Style Selector="TabStrip">
                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
-                        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                    </Style>
+                    <!-- ItemsPanel belongs to the TabControl (its template binds the presenter to it); set on the
+                         TabStrip it was ignored and the tabs wrapped at phone width. One row of equal cells, never wrapped. -->
+                    <Style Selector="TabControl">
                         <Setter Property="ItemsPanel">
                             <ItemsPanelTemplate>
                                 <UniformGrid Rows="1" Columns="6"/>
@@ -424,7 +453,7 @@
                         <Setter Property="HorizontalAlignment" Value="Stretch"/>
                         <Setter Property="HorizontalContentAlignment" Value="Center"/>
                         <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Padding" Value="8,12"/>
+                        <Setter Property="Padding" Value="2,12"/>
                     </Style>
                 </TabControl.Styles>
 
@@ -446,21 +475,37 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <Grid RowDefinitions="Auto,*" Margin="4">
+                    <Grid RowDefinitions="Auto,Auto,*" Margin="4">
                         <TextBlock Grid.Row="0" Text="{Binding Loc[history.hint]}"
                                    IsVisible="{Binding IsDesktop}"
                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="6,2"/>
-                        <ListBox Grid.Row="1" ItemsSource="{Binding History}"
+                        <!-- Column headers (the phone shows cards, no columns) -->
+                        <Grid Grid.Row="1" ColumnDefinitions="110,160,*" Margin="12,4,12,0">
+                            <Grid.IsVisible>
+                                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                    <Binding Path="IsDesktop"/>
+                                    <Binding Path="HasHistory"/>
+                                </MultiBinding>
+                            </Grid.IsVisible>
+                            <TextBlock Grid.Column="0" Text="{Binding Loc[history.col.conf]}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Loc[history.col.amount]}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Loc[tx.id]}" FontWeight="Bold" FontSize="12"/>
+                        </Grid>
+                        <TextBlock Grid.Row="2" Text="{Binding Loc[history.empty]}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Center" Margin="24,32"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding !HasHistory}"/>
+                        <ListBox Grid.Row="2" ItemsSource="{Binding History}"
                                  DoubleTapped="OnHistoryRowDoubleTapped">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:HistoryRow">
                                     <Panel Cursor="Hand">
                                         <!-- Desktop: 3 fixed columns -->
-                                        <Grid ColumnDefinitions="90,160,*,Auto"
+                                        <Grid ColumnDefinitions="110,160,*,Auto"
                                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsDesktop}">
                                             <TextBlock Grid.Column="0" Text="{Binding Conferma}" Foreground="{DynamicResource TextSecondaryBrush}"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Importo}" FontFamily="monospace"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding Txid}"
+                                            <TextBlock Grid.Column="2" Text="{Binding TxidShort}"
                                                        FontFamily="monospace" FontSize="12"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Grid.Column="3" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
@@ -477,7 +522,7 @@
                                             <TextBlock Text="{Binding Importo}"
                                                        FontFamily="monospace" FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding Conferma}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
-                                            <TextBlock Text="{Binding Txid}" FontFamily="monospace" FontSize="11"
+                                            <TextBlock Text="{Binding TxidShort}" FontFamily="monospace" FontSize="11"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).Loc[history.unverified]}"
                                                        Foreground="#FCD34D" FontSize="11"
@@ -511,12 +556,14 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <ScrollViewer>
+                    <!-- The form scrolls; the buttons that act on it stay in view (desktop) -->
+                    <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0">
                     <Panel Margin="16,14">
 
                         <!-- ── DESKTOP: Recipient | Amount side-by-side ── -->
                         <Grid IsVisible="{Binding IsDesktop}"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="14">
+                              RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
 
                             <Grid Grid.Row="0" ColumnDefinitions="*,*" ColumnSpacing="14">
                                 <!-- Recipient card -->
@@ -543,6 +590,10 @@
                                             <TextBox PlaceholderText="{Binding Loc[send.to]}"
                                                      Text="{Binding SendTo}"
                                                      FontFamily="monospace" FontSize="13"/>
+                                            <!-- Live check: kind of address, or why it is not one -->
+                                            <TextBlock Text="{Binding RecipientHint}" FontSize="12" TextWrapping="Wrap"
+                                                       IsVisible="{Binding RecipientHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Classes.error="{Binding IsRecipientHintError}" Classes="hint"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
@@ -589,29 +640,22 @@
                                 </Border>
                             </Grid>
 
-                            <!-- Summary card — full width, visible after Prepare -->
+                            <!-- PSBT of a prepared transaction that this wallet cannot (or not alone) sign -->
                             <Border Grid.Row="1" Classes="card" Padding="22,16"
-                                    IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <StackPanel Spacing="8">
-                                    <TextBlock Text="{Binding Loc[send.summary]}" Classes="section"/>
-                                    <SelectableTextBlock Text="{Binding SendPreview}"
-                                                         TextWrapping="Wrap" FontSize="13" Classes="mono"
-                                                         Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <StackPanel Spacing="6"
-                                                IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                        <TextBlock Text="{Binding Loc[send.psbt.label]}" Classes="label"/>
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
-                                                     FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
-                                                     AcceptsReturn="True" Height="90"/>
-                                            <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
-                                                <Button Content="{Binding Loc[send.psbt.copy]}"
-                                                        Click="OnCopyPsbtClick"/>
-                                                <Button Content="{Binding Loc[psbt.showqr]}"
-                                                        Command="{Binding ShowPendingPsbtQrCommand}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </StackPanel>
+                                    IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding Loc[send.psbt.label]}" Classes="label"/>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBox Grid.Column="0" Text="{Binding PendingPsbtBase64}" IsReadOnly="True"
+                                                 FontFamily="monospace" FontSize="11" TextWrapping="Wrap"
+                                                 AcceptsReturn="True" Height="90"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="6">
+                                            <Button Content="{Binding Loc[send.psbt.copy]}"
+                                                    Click="OnCopyPsbtClick"/>
+                                            <Button Content="{Binding Loc[psbt.showqr]}"
+                                                    Command="{Binding ShowPendingPsbtQrCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
@@ -625,20 +669,6 @@
                             <TextBlock Grid.Row="3" Text="{Binding CoinSelectionText}"
                                        IsVisible="{Binding HasCoinSelection}" FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
-
-                            <!-- Action buttons -->
-                            <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="14">
-                                <Button Grid.Column="0" Content="{Binding Loc[send.prepare]}"
-                                        Command="{Binding PrepareSendCommand}"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
-                                <Button Grid.Column="1" Content="{Binding Loc[send.confirm]}" Classes="accent"
-                                        Command="{Binding ConfirmSendCommand}"
-                                        IsEnabled="{Binding HasPendingSend}"
-                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
-                            </Grid>
-                            <!-- Sign a PSBT made elsewhere (multisig cosigner, offline signing) -->
-                            <Button Grid.Row="5" Content="{Binding Loc[psbt.open.btn]}"
-                                    Command="{Binding OpenPsbtCommand}" HorizontalAlignment="Left"/>
                         </Grid>
 
                         <!-- ── MOBILE: vertical stack ── -->
@@ -684,6 +714,9 @@
                                                 </Viewbox>
                                             </Button>
                                         </Grid>
+                                        <TextBlock Text="{Binding RecipientHint}" FontSize="12" TextWrapping="Wrap"
+                                                   IsVisible="{Binding RecipientHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                   Classes.error="{Binding IsRecipientHintError}" Classes="hint"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -734,11 +767,15 @@
 
                             <!-- Summary card -->
                             <Border Classes="card" Padding="20,16"
+                                    Classes.review="{Binding HasPendingSend}"
                                     IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="{Binding Loc[send.summary]}" Classes="section"/>
-                                    <SelectableTextBlock Text="{Binding SendPreview}"
-                                                         TextWrapping="Wrap" FontSize="13" Classes="mono"
+                                    <SelectableTextBlock Text="{Binding SendPreviewHeadline}"
+                                                         TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" Classes="mono"/>
+                                    <SelectableTextBlock Text="{Binding SendPreviewDetail}"
+                                                         IsVisible="{Binding SendPreviewDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                         TextWrapping="Wrap" FontSize="12" Classes="mono"
                                                          Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     <StackPanel Spacing="6"
                                                 IsVisible="{Binding PendingPsbtBase64, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -775,7 +812,7 @@
                                     MinHeight="52"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     FontSize="15"/>
-                            <Button Content="{Binding Loc[send.prepare]}"
+                            <Button Classes="accent" Content="{Binding Loc[send.prepare]}"
                                     Command="{Binding PrepareSendCommand}"
                                     MinHeight="48"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
@@ -788,6 +825,40 @@
 
                     </Panel>
                     </ScrollViewer>
+
+                    <!-- Pinned footer (desktop): Prepare / Confirm and the PSBT entry are always on screen -->
+                    <Border Grid.Row="1" IsVisible="{Binding IsDesktop}" Padding="16,10"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+                        <StackPanel Spacing="8">
+                            <!-- The review sits right above the button that confirms it: what is paid, to whom, the fee -->
+                            <Border Classes="card" Padding="18,12"
+                                    Classes.review="{Binding HasPendingSend}"
+                                    IsVisible="{Binding SendPreview, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <StackPanel Spacing="4">
+                                    <SelectableTextBlock Text="{Binding SendPreviewHeadline}"
+                                                         TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" Classes="mono"/>
+                                    <SelectableTextBlock Text="{Binding SendPreviewDetail}"
+                                                         IsVisible="{Binding SendPreviewDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                         TextWrapping="Wrap" FontSize="12" Classes="mono"
+                                                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- One row: a short window keeps its height for the form. The PSBT entry (a multisig cosigner,
+                                 offline signing) is the quiet third button. -->
+                            <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="12">
+                                <Button Grid.Column="0" Classes="accent" Content="{Binding Loc[send.prepare]}"
+                                        Command="{Binding PrepareSendCommand}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Grid.Column="1" Content="{Binding Loc[send.confirm]}" Classes="accent"
+                                        Command="{Binding ConfirmSendCommand}"
+                                        IsEnabled="{Binding HasPendingSend}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                                <Button Grid.Column="2" Content="{Binding Loc[psbt.open.btn]}"
+                                        Command="{Binding OpenPsbtCommand}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    </Grid>
                 </TabItem>
 
                 <!-- 3. Receive -->
@@ -808,7 +879,9 @@
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                     </TabItem.Header>
-                    <ScrollViewer>
+                    <!-- The address and QR scroll; on a phone the Copy button stays in view above the status bar -->
+                    <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0">
                     <Panel Margin="16,14">
 
                         <!-- ── DESKTOP: QR left | address right ── -->
@@ -816,12 +889,13 @@
                               ColumnDefinitions="Auto,*" ColumnSpacing="14">
 
                             <!-- QR hero card -->
-                            <Border Grid.Column="0" Classes="card" Padding="28,24"
+                            <Border Grid.Column="0" Classes="card" Padding="28,24" VerticalAlignment="Top"
                                     IsVisible="{Binding ReceiveQr, Converter={x:Static ObjectConverters.IsNotNull}}">
                                 <StackPanel Spacing="18" HorizontalAlignment="Center">
                                     <TextBlock Text="{Binding Loc[receive.next]}" Classes="label"
                                                HorizontalAlignment="Center"/>
-                                    <Border Background="White" Padding="14" CornerRadius="10"
+                                    <Border Background="White" Padding="14" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            Cursor="Hand" Tapped="OnCopyReceiveAddressClick"
                                             HorizontalAlignment="Center">
                                         <Image Source="{Binding ReceiveQr}" Width="230" Height="230"
                                                RenderOptions.BitmapInterpolationMode="None"/>
@@ -830,20 +904,32 @@
                             </Border>
 
                             <!-- Address + hint column -->
-                            <StackPanel Grid.Column="1" Spacing="14" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="1" Spacing="14" VerticalAlignment="Top">
                                 <Border Classes="card" Padding="24,22">
                                     <StackPanel Spacing="16">
                                         <TextBlock Text="{Binding Loc[receive.your.address]}" Classes="section"/>
-                                        <Border Background="{DynamicResource SurfaceAltBrush}"
-                                                CornerRadius="8" Padding="16,14">
-                                            <SelectableTextBlock Text="{Binding ReceiveAddress}"
-                                                                 FontFamily="monospace" FontSize="14"
-                                                                 TextWrapping="Wrap" LineHeight="22"/>
+                                        <!-- Tapping the address or the QR copies it: the whole surface is the target -->
+                                        <Border Classes="copyable" CornerRadius="8" Padding="16,14"
+                                                Tapped="OnCopyReceiveAddressClick">
+                                            <StackPanel Spacing="6">
+                                                <SelectableTextBlock Text="{Binding ReceiveAddress}"
+                                                                     FontFamily="monospace" FontSize="14"
+                                                                     TextWrapping="Wrap" LineHeight="22"/>
+                                                <TextBlock Text="{Binding ReceivePath}" Classes="muted mono" FontSize="11"
+                                                           IsVisible="{Binding ReceivePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                            </StackPanel>
                                         </Border>
-                                        <Button Content="{Binding Loc[receive.copy]}" Classes="accent"
-                                                Click="OnCopyReceiveAddressClick"
+                                        <Button Classes="accent" Click="OnCopyReceiveAddressClick"
                                                 HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Center"/>
+                                                HorizontalContentAlignment="Center">
+                                            <!-- Confirms in place for a moment (feedback next to the action, not only in the status bar) -->
+                                            <Panel>
+                                                <TextBlock Text="{Binding Loc[receive.copy]}" IsVisible="{Binding !ReceiveCopied}"
+                                                           HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Loc[receive.copied]}" IsVisible="{Binding ReceiveCopied}"
+                                                           HorizontalAlignment="Center"/>
+                                            </Panel>
+                                        </Button>
                                     </StackPanel>
                                 </Border>
                                 <TextBlock Text="{Binding Loc[receive.hint]}"
@@ -856,38 +942,38 @@
                         <StackPanel IsVisible="{Binding IsMobile}" Spacing="12">
 
                             <!-- QR card: full-width, centered with generous padding -->
-                            <Border Classes="card" Padding="24,22"
+                            <Border Classes="card" Padding="20,16"
                                     IsVisible="{Binding ReceiveQr, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <StackPanel Spacing="16" HorizontalAlignment="Center">
+                                <StackPanel Spacing="12" HorizontalAlignment="Center">
                                     <TextBlock Text="{Binding Loc[receive.next]}" Classes="label"
                                                HorizontalAlignment="Center" FontSize="13"/>
-                                    <Border Background="White" Padding="16" CornerRadius="12"
+                                    <Border Background="White" Padding="12" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            Cursor="Hand" Tapped="OnCopyReceiveAddressClick"
                                             HorizontalAlignment="Center">
-                                        <Image Source="{Binding ReceiveQr}" Width="220" Height="220"
+                                        <Image Source="{Binding ReceiveQr}" Width="168" Height="168"
                                                RenderOptions.BitmapInterpolationMode="None"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
 
                             <!-- Address card: label + monospace box + big Copy button -->
-                            <Border Classes="card" Padding="20,20">
-                                <StackPanel Spacing="14">
+                            <Border Classes="card" Padding="20,16">
+                                <StackPanel Spacing="12">
                                     <TextBlock Text="{Binding Loc[receive.your.address]}" Classes="section"/>
-                                    <Border Background="{DynamicResource SurfaceAltBrush}"
-                                            CornerRadius="8" Padding="16,12">
-                                        <SelectableTextBlock Text="{Binding ReceiveAddress}"
-                                                             FontFamily="monospace" FontSize="14"
-                                                             TextWrapping="Wrap"
-                                                             TextAlignment="Center"
-                                                             HorizontalAlignment="Center"
-                                                             LineHeight="22"/>
+                                    <Border Classes="copyable" CornerRadius="8" Padding="16,12"
+                                            Tapped="OnCopyReceiveAddressClick">
+                                        <StackPanel Spacing="6">
+                                            <SelectableTextBlock Text="{Binding ReceiveAddress}"
+                                                                 FontFamily="monospace" FontSize="14"
+                                                                 TextWrapping="Wrap"
+                                                                 TextAlignment="Center"
+                                                                 HorizontalAlignment="Center"
+                                                                 LineHeight="22"/>
+                                            <TextBlock Text="{Binding ReceivePath}" Classes="muted mono" FontSize="11"
+                                                       HorizontalAlignment="Center"
+                                                       IsVisible="{Binding ReceivePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
                                     </Border>
-                                    <Button Content="{Binding Loc[receive.copy]}" Classes="accent"
-                                            Click="OnCopyReceiveAddressClick"
-                                            MinHeight="52"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Center"
-                                            FontSize="15"/>
                                 </StackPanel>
                             </Border>
 
@@ -900,6 +986,22 @@
 
                     </Panel>
                     </ScrollViewer>
+                    <Border Grid.Row="1" IsVisible="{Binding IsMobile}" Padding="16,10"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+                        <Button Classes="accent" Click="OnCopyReceiveAddressClick"
+                                MinHeight="52"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                FontSize="15">
+                            <Panel>
+                                <TextBlock Text="{Binding Loc[receive.copy]}" IsVisible="{Binding !ReceiveCopied}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Loc[receive.copied]}" IsVisible="{Binding ReceiveCopied}"
+                                           HorizontalAlignment="Center"/>
+                            </Panel>
+                        </Button>
+                    </Border>
+                    </Grid>
                 </TabItem>
 
                 <!-- 4. Addresses -->
@@ -986,7 +1088,7 @@
                                        HorizontalAlignment="Center"/>
                         </StackPanel>
                     </TabItem.Header>
-                    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="4">
+                    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="4">
                         <!-- Column headers — desktop only -->
                         <Grid Grid.Row="0" ColumnDefinitions="180,*" Margin="12,4"
                               IsVisible="{Binding IsDesktop}">
@@ -994,6 +1096,10 @@
                             <TextBlock Grid.Column="1" Text="{Binding Loc[contacts.address]}" FontWeight="Bold"/>
                         </Grid>
                         <!-- Contacts list -->
+                        <TextBlock Grid.Row="1" Text="{Binding Loc[contacts.empty.hint]}" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" VerticalAlignment="Top" TextAlignment="Center" Margin="24,32"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding !HasContacts}"/>
                         <ListBox Grid.Row="1" ItemsSource="{Binding Contacts}"
                                  SelectedItem="{Binding SelectedContactInList}">
                             <ListBox.ItemTemplate>
@@ -1034,7 +1140,7 @@
                             <TextBox Grid.Column="1" PlaceholderText="{Binding Loc[contacts.address.ph]}"
                                      Text="{Binding NewContactAddress}" FontFamily="monospace"
                                      Margin="0,0,6,0"/>
-                            <Button Grid.Column="2" Content="{Binding Loc[contacts.add]}"
+                            <Button Grid.Column="2" Classes="accent" Content="{Binding Loc[contacts.add]}"
                                     Command="{Binding AddContactCommand}"/>
                         </Grid>
                         <!-- Add contact form — Mobile: vertical -->
@@ -1044,11 +1150,15 @@
                                      Text="{Binding NewContactName}"/>
                             <TextBox PlaceholderText="{Binding Loc[contacts.address.ph]}"
                                      Text="{Binding NewContactAddress}" FontFamily="monospace"/>
-                            <Button Content="{Binding Loc[contacts.add]}"
+                            <Button Classes="accent" Content="{Binding Loc[contacts.add]}"
                                     Command="{Binding AddContactCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"/>
                         </StackPanel>
+                        <!-- Why the contact was not saved, next to the form -->
+                        <TextBlock Grid.Row="4" Margin="12,6,12,0" FontSize="12" TextWrapping="Wrap"
+                                   Text="{Binding ContactFormMessage}" Classes="hint error"
+                                   IsVisible="{Binding ContactFormMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     </Grid>
                 </TabItem>
 
@@ -1071,6 +1181,10 @@
                     </TabItem.Header>
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
+                            <Border Classes="notice" IsVisible="{Binding CoinsMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="{Binding CoinsMessage}" TextWrapping="Wrap" FontSize="13"
+                                           Foreground="{DynamicResource WarningTextBrush}"/>
+                            </Border>
                             <TextBlock Text="{Binding Loc[coins.hint]}" TextWrapping="Wrap" Opacity="0.7"/>
                             <TextBlock Text="{Binding Loc[coins.empty]}" TextWrapping="Wrap"
                                        IsVisible="{Binding !HasCoins}"/>
@@ -1084,8 +1198,7 @@
                             <ItemsControl ItemsSource="{Binding Coins}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CoinRow">
-                                        <Border Padding="12" Margin="0,4" CornerRadius="6"
-                                                BorderThickness="1" BorderBrush="{DynamicResource SurfaceBrush}">
+                                        <Border Classes="card" Padding="16,12" Margin="0,4" CornerRadius="16">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="{Binding Amount}" FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding Outpoint}" FontFamily="monospace"
@@ -1118,7 +1231,7 @@
 
         <!-- Status bar: message on the left, connection status on the right.
              The connection status is tappable and opens the server settings. -->
-        <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}"
+        <Border Grid.Row="2" Background="{DynamicResource GlassBrush}"
                 BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0"
                 Padding="12,7">
             <Grid ColumnDefinitions="*,Auto">
@@ -1147,8 +1260,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnAddressOverlayBackdropTapped"
                 IsVisible="{Binding AddressInfo, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="540" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     DataContext="{Binding AddressInfo}">
@@ -1187,7 +1299,7 @@
 
                         <!-- Not yet revealed: single reveal button -->
                         <Button IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsAddressPrivKeyRevealed}"
-                                Content="{Binding Loc[walletinfo.seed.reveal]}"
+                                Content="{Binding Loc[addr.privkey.reveal]}"
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RequestPrivKeyRevealCommand}"/>
 
                         <!-- Revealed: key text + hide button -->
@@ -1197,7 +1309,7 @@
                                                  FontFamily="monospace" FontSize="12"
                                                  Foreground="{DynamicResource DangerBrush}"
                                                  TextWrapping="Wrap"/>
-                            <Button Content="{Binding Loc[walletinfo.seed.hide]}"
+                            <Button Content="{Binding Loc[addr.privkey.hide]}"
                                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HideAddressPrivKeyCommand}"/>
                         </StackPanel>
                     </StackPanel>
@@ -1215,8 +1327,7 @@
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
                 IsVisible="{Binding IsPrivKeyPromptOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="360" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="14">
@@ -1235,7 +1346,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Content="{Binding Loc[addr.close]}"
                                 Command="{Binding CancelPrivKeyPromptCommand}"/>
-                        <Button Content="{Binding Loc[walletinfo.seed.reveal]}" Classes="accent"
+                        <Button Content="{Binding Loc[addr.privkey.reveal]}" Classes="accent"
                                 Command="{Binding ConfirmPrivKeyPasswordCommand}"/>
                     </StackPanel>
                 </StackPanel>
@@ -1249,8 +1360,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnTxDetailsOverlayBackdropTapped"
                 IsVisible="{Binding IsTxDetailsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="660" MaxHeight="800" Margin="16" Padding="0"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Panel Margin="24">
@@ -1275,7 +1385,7 @@
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).CloseTransactionDetailsCommand}"/>
 
                         <ScrollViewer>
-                            <StackPanel Spacing="18">
+                            <StackPanel Spacing="18" Margin="0,0,14,0">
 
                                 <!-- Header: net amount highlighted + status/SPV badges -->
                                 <StackPanel Spacing="10">
@@ -1285,17 +1395,16 @@
                                                          FontSize="28" FontWeight="Bold"/>
                                     <WrapPanel>
                                         <!-- Coinbase badge: coins generated by mining (no sender) -->
-                                        <Border Classes="chip" Margin="0,0,8,6" IsVisible="{Binding IsCoinbase}"
-                                                Background="{DynamicResource WarningBrush}">
+                                        <Border Classes="chip warn" Margin="0,0,8,6" IsVisible="{Binding IsCoinbase}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <Viewbox Width="14" Height="14" VerticalAlignment="Center">
                                                     <Canvas Width="24" Height="24">
-                                                        <Path Fill="#FFFFFF"
+                                                        <Path Fill="{DynamicResource WarningTextBrush}"
                                                               Data="M21,16.5C21,16.88 20.79,17.21 20.47,17.38L12.57,21.82C12.41,21.94 12.21,22 12,22C11.79,22 11.59,21.94 11.43,21.82L3.53,17.38C3.21,17.21 3,16.88 3,16.5V7.5C3,7.12 3.21,6.79 3.53,6.62L11.43,2.18C11.59,2.06 11.79,2 12,2C12.21,2 12.41,2.06 12.57,2.18L20.47,6.62C20.79,6.79 21,7.12 21,7.5V16.5M12,4.15L6.04,7.5L12,10.85L17.96,7.5L12,4.15M5,15.91L11,19.29V12.58L5,9.21V15.91M19,15.91V9.21L13,12.58V19.29L19,15.91Z"/>
                                                     </Canvas>
                                                 </Viewbox>
                                                 <TextBlock Text="{Binding Loc[tx.coinbase]}"
-                                                           Foreground="#FFFFFF"
+                                                           Foreground="{DynamicResource WarningTextBrush}"
                                                            FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
@@ -1330,7 +1439,7 @@
                                             <TextBlock Grid.Column="0" Classes="label" Text="{Binding AmountHeader}"/>
                                             <SelectableTextBlock Grid.Column="1" FontSize="13" Classes="mono" Text="{Binding AmountText}"/>
                                         </Grid>
-                                        <Grid ColumnDefinitions="150,*">
+                                        <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowFee}">
                                             <TextBlock Grid.Column="0" Classes="label" Text="{Binding Loc[tx.fee]}"/>
                                             <SelectableTextBlock Grid.Column="1" FontSize="13" Classes="mono" Text="{Binding FeeText}"/>
                                         </Grid>
@@ -1386,7 +1495,7 @@
                                                         <SelectableTextBlock Grid.Column="0" Text="{Binding Address}"
                                                                              FontFamily="monospace" FontSize="11"
                                                                              TextWrapping="Wrap" VerticalAlignment="Top"
-                                                                             Foreground="{Binding IsMine, Converter={x:Static vm:MineColorConverter.Instance}}"/>
+                                                                             Classes.mine="{Binding IsMine}"/>
                                                         <SelectableTextBlock Grid.Column="1" Text="{Binding Amount}"
                                                                              FontFamily="monospace" FontFeatures="+tnum" FontSize="11"
                                                                              VerticalAlignment="Top" Margin="12,0,0,0"/>
@@ -1410,7 +1519,7 @@
                                                     <SelectableTextBlock Grid.Column="1" Text="{Binding Address}"
                                                                          FontFamily="monospace" FontSize="11"
                                                                          TextWrapping="Wrap" VerticalAlignment="Top"
-                                                                         Foreground="{Binding IsMine, Converter={x:Static vm:MineColorConverter.Instance}}"/>
+                                                                         Classes.mine="{Binding IsMine}"/>
                                                     <SelectableTextBlock Grid.Column="2" Text="{Binding Amount}"
                                                                          FontFamily="monospace" FontFeatures="+tnum" FontSize="11"
                                                                          VerticalAlignment="Top" Margin="12,0,0,0"/>
@@ -1435,8 +1544,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnServerOverlayBackdropTapped"
                 IsVisible="{Binding IsServerSettingsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
+            <Border Classes="overlay-surface"
                     Classes.desktop-overlay="{Binding IsDesktop}">
                 <ScrollViewer>
                 <StackPanel Margin="24" Spacing="14">
@@ -1491,6 +1599,10 @@
 
                     <!-- Connection status -->
                     <TextBlock Text="{Binding ConnectionStatus}" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Border Classes="notice" IsVisible="{Binding ServerMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding ServerMessage}" TextWrapping="Wrap" FontSize="13"
+                                   Foreground="{DynamicResource WarningTextBrush}"/>
+                    </Border>
 
                     <!-- Known servers: click to populate host/port -->
                     <TextBlock Text="{Binding Loc[server.known]}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
@@ -1556,8 +1668,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnPsbtOverlayBackdropTapped"
                 IsVisible="{Binding IsPsbtOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="640" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="640">
@@ -1600,15 +1711,15 @@
         <Border Grid.Row="0" Grid.RowSpan="3"
                 Background="{DynamicResource ScrimBrush}"
                 IsVisible="{Binding IsUrQrOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="480" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="12">
                     <TextBlock Text="{Binding Loc[psbt.urqr.title]}" FontSize="18" FontWeight="Bold"/>
                     <TextBlock Text="{Binding Loc[psbt.urqr.hint]}" TextWrapping="Wrap" FontSize="12"
                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                    <Border Background="White" Padding="8" HorizontalAlignment="Center" CornerRadius="4">
+                    <Border Background="White" Padding="12" HorizontalAlignment="Center" CornerRadius="12"
+                            BorderThickness="1" BorderBrush="{DynamicResource BorderSubtleBrush}">
                         <Image Source="{Binding UrQrImage}" Width="320" Height="320"/>
                     </Border>
                     <TextBlock Text="{Binding UrQrCaption}" HorizontalAlignment="Center" FontSize="12"/>
@@ -1623,8 +1734,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnWalletInfoOverlayBackdropTapped"
                 IsVisible="{Binding IsWalletInfoOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="500" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="620">
@@ -1763,8 +1873,8 @@
                         <!-- Revealed seed -->
                         <StackPanel IsVisible="{Binding IsWalletInfoSeedRevealed}" Spacing="8">
                             <Border BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                    CornerRadius="6" Padding="14"
-                                    Background="{DynamicResource SurfaceAltBrush}">
+                                    CornerRadius="12" Padding="14"
+                                    Background="{DynamicResource GlassInsetBrush}">
                                 <SelectableTextBlock Text="{Binding WalletInfoSeedText}"
                                                      FontFamily="monospace" FontSize="15"
                                                      TextWrapping="Wrap"/>
@@ -1792,8 +1902,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnSettingsOverlayBackdropTapped"
                 IsVisible="{Binding IsSettingsOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <ScrollViewer MaxHeight="640">
@@ -1848,6 +1957,29 @@
                         </WrapPanel>
                     </StackPanel>
 
+                    <!-- Theme: follow the system, or force light/dark -->
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding Loc[settings.theme]}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <WrapPanel>
+                            <RadioButton GroupName="theme" Content="{Binding Loc[settings.theme.system]}" Margin="0,0,14,4"
+                                         IsChecked="{Binding IsThemeSystem, Mode=OneWay}"
+                                         Command="{Binding SetThemeCommand}" CommandParameter="system"/>
+                            <RadioButton GroupName="theme" Content="{Binding Loc[settings.theme.light]}" Margin="0,0,14,4"
+                                         IsChecked="{Binding IsThemeLight, Mode=OneWay}"
+                                         Command="{Binding SetThemeCommand}" CommandParameter="light"/>
+                            <RadioButton GroupName="theme" Content="{Binding Loc[settings.theme.dark]}" Margin="0,0,14,4"
+                                         IsChecked="{Binding IsThemeDark, Mode=OneWay}"
+                                         Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <!-- Opaque surfaces: for a person who finds the translucent look hard to read -->
+                    <StackPanel Spacing="2">
+                        <CheckBox Content="{Binding Loc[settings.solid]}" IsChecked="{Binding SolidSurfaces}"/>
+                        <TextBlock Text="{Binding Loc[settings.solid.hint]}" FontSize="11" TextWrapping="Wrap"
+                                   Margin="28,0,0,0" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
+
                     <!-- Indexing server (configurable even before a wallet is open) -->
                     <Button Content="{Binding Loc[settings.server]}"
                             HorizontalAlignment="Left"
@@ -1867,8 +1999,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnHelpOverlayBackdropTapped"
                 IsVisible="{Binding IsHelpOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Stretch" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="16">
@@ -1975,8 +2106,7 @@
                 Background="{DynamicResource ScrimBrush}"
                 Tapped="OnUpdateAvailableOverlayBackdropTapped"
                 IsVisible="{Binding IsUpdateAvailableOpen}">
-            <Border Background="{DynamicResource OverlayCardBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8"
+            <Border Classes="overlay-surface"
                     MaxWidth="440" Margin="16"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel Margin="24" Spacing="16">

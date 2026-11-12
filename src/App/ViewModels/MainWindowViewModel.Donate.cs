@@ -34,6 +34,7 @@ public partial class MainWindowViewModel
     private void DiscardPendingDonate()
     {
         _pendingDonate = null;
+        _renderDonatePreview = null;
         HasPendingDonate = false;
     }
 
@@ -57,7 +58,11 @@ public partial class MainWindowViewModel
         }
         try
         {
-            var destination = BitcoinAddress.Create(DonationAddressOverride ?? DevAddress, PalladiumNetworks.For(Net));
+            if (!TryParseDestination(DonationAddressOverride ?? DevAddress, out var destination))
+            {
+                DonatePreview = Loc.Tr("msg.address.invalid");
+                return;
+            }
             if (!CoinAmount.TryParseIn(DonateAmount.Trim(), _config.Unit, out var amount) || amount <= 0)
             {
                 DonatePreview = Loc.Tr("msg.amount.invalid");
@@ -85,20 +90,15 @@ public partial class MainWindowViewModel
                 pool, _lastTransactions, destination, amount, feeRate,
                 _doc.Cache.NextChangeIndex, _doc.Cache.TipHeight, sendAll: false);
 
-            DonatePreview = DescribePayment(_pendingDonate, destination) +
-                (_pendingDonate.TxidIsFinal
-                    ? $"txid {_pendingDonate.Txid[..16]}… · "
-                    : Loc.Tr("msg.txid.notfinal") + " · ") +
-                $"fee {Fmt(_pendingDonate.Fee.Satoshi)} " +
-                $"({_pendingDonate.Transaction.GetVirtualSize()} vB)" +
-                (_pendingDonate.Signed ? "" : " · watch-only") +
-                HighFeeWarning(_pendingDonate.Fee.Satoshi, amount);
+            var built = _pendingDonate;
+            _renderDonatePreview = () => BuildPreview(built, destination, amount);
+            DonatePreview = _renderDonatePreview();
             HasPendingDonate = _pendingDonate.Signed;
         }
         catch (Exception ex)
         {
             DiscardPendingDonate();
-            DonatePreview = $"{Loc.Tr("msg.error")}: {ex.Message}";
+            DonatePreview = $"{Loc.Tr("msg.error")}: {DescribeError(ex)}";
         }
         await Task.CompletedTask;
     }

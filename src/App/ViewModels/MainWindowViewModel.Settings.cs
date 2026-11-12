@@ -13,6 +13,9 @@ public partial class MainWindowViewModel
     public bool IsLangPt => _config.Language == "pt";
     public bool IsLangDe => _config.Language == "de";
     public bool IsLangZh => _config.Language == "zh";
+    public bool IsThemeSystem => _config.Theme is not ("light" or "dark");
+    public bool IsThemeLight => _config.Theme == "light";
+    public bool IsThemeDark => _config.Theme == "dark";
     public bool IsUnitPlm => _config.Unit == "PLM";
     public bool IsUnitMilli => _config.Unit == "mPLM";
     public bool IsUnitMicro => _config.Unit == "µPLM";
@@ -23,6 +26,63 @@ public partial class MainWindowViewModel
     {
         _config.Language = language;
         ApplySettings(_config);
+    }
+
+    [RelayCommand]
+    private void SetTheme(string theme)
+    {
+        _config.Theme = theme is "light" or "dark" ? theme : "system";
+        ApplySettings(_config);
+    }
+
+    /// <summary>The head reports that the operating system changed its light/dark mode: re-apply the theme.</summary>
+    public void RefreshSystemTheme() => ApplyTheme();
+
+    /// <summary>Opaque surfaces instead of glass (Settings → Solid surfaces).</summary>
+    public bool SolidSurfaces
+    {
+        get => _config.SolidSurfaces;
+        set
+        {
+            if (_config.SolidSurfaces == value) return;
+            _config.SolidSurfaces = value;
+            ApplySettings(_config);
+        }
+    }
+
+    private static Avalonia.Markup.Xaml.Styling.ResourceInclude? _solidSurfaces;
+
+    /// <summary>
+    /// Sets the Avalonia theme variant from the saved choice ("system" follows the OS) and merges, or removes,
+    /// <c>Styles/SolidSurfaces.axaml</c>, whose opaque brushes replace the glass ones.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        if (Avalonia.Application.Current is not { } app)
+            return;
+        app.RequestedThemeVariant = _config.Theme switch
+        {
+            "light" => Avalonia.Styling.ThemeVariant.Light,
+            "dark" => Avalonia.Styling.ThemeVariant.Dark,
+            // "System": Avalonia follows the OS by itself, except on a head that says it cannot (Android).
+            _ => Services.PlatformServices.IsSystemDark?.Invoke() switch
+            {
+                true => Avalonia.Styling.ThemeVariant.Dark,
+                false => Avalonia.Styling.ThemeVariant.Light,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            },
+        };
+
+        var merged = app.Resources.MergedDictionaries;
+        _solidSurfaces ??= new Avalonia.Markup.Xaml.Styling.ResourceInclude(new System.Uri("avares://PalladiumWallet.App/"))
+        {
+            Source = new System.Uri("/Styles/SolidSurfaces.axaml", System.UriKind.Relative),
+        };
+        var present = merged.Contains(_solidSurfaces);
+        if (_config.SolidSurfaces && !present)
+            merged.Add(_solidSurfaces);
+        else if (!_config.SolidSurfaces && present)
+            merged.Remove(_solidSurfaces);
     }
 
     [RelayCommand]
@@ -39,6 +99,11 @@ public partial class MainWindowViewModel
         _loc = Localization.Loc.SwitchTo(config.Language);
         OnPropertyChanged(nameof(Loc));
         OnPropertyChanged(nameof(UnitLabel));
+        ApplyTheme();
+        OnPropertyChanged(nameof(SolidSurfaces));
+        OnPropertyChanged(nameof(IsThemeSystem));
+        OnPropertyChanged(nameof(IsThemeLight));
+        OnPropertyChanged(nameof(IsThemeDark));
         OnPropertyChanged(nameof(IsLangIt));
         OnPropertyChanged(nameof(IsLangEn));
         OnPropertyChanged(nameof(IsLangEs));
@@ -51,7 +116,16 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsUnitMicro));
         OnPropertyChanged(nameof(IsUnitSat));
         ApplyCache(_doc?.Cache);
-        StatusMessage = Localization.Loc.Tr("msg.settings.saved");
+        RefreshRecipientHint();
+        OnPropertyChanged(nameof(WizardStepText));
+        OnPropertyChanged(nameof(HasWizardStepText));
+        // Texts built from translated parts when they were produced: render them again in the new language/unit.
+        OnPropertyChanged(nameof(ConnectionStatus));
+        OnPropertyChanged(nameof(ConnectionStatusShort));
+        RenderFeeHint();
+        if (_pendingSend is not null && _renderSendPreview is { } send) SendPreview = send();
+        if (_pendingDonate is not null && _renderDonatePreview is { } donate) DonatePreview = donate();
+        SetInfoStatus(Localization.Loc.Tr("msg.settings.saved"));
     }
 
     // ---- overlay impostazioni, server, help ----

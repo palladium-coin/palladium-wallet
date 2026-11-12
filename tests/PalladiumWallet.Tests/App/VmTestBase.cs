@@ -49,6 +49,8 @@ public abstract class VmTestBase : IDisposable
         // keep-alive timers running, and restoring the real profile would let them reconnect to
         // the real bootstrap servers after the test is over. Nothing else in the suite uses it.
         AppPaths.OverrideDataRoot = _savedOverride;
+        PalladiumWallet.App.StartupOptions.Net = NetKind.Mainnet; // StartupOptionsTests changes it
+        MainWindowViewModel.MobileLayoutOverride = null;           // MobileLayoutTests changes it
         Loc.SwitchTo("en");
         _server.DisposeAsync().AsTask().GetAwaiter().GetResult();
         try { Directory.Delete(_root, recursive: true); } catch { /* best effort */ }

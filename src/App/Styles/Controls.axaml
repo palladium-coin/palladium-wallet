@@ -26,11 +26,13 @@
     <Style Selector="TextBlock.h1">
         <Setter Property="FontSize" Value="20"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="LetterSpacing" Value="-0.3"/> <!-- size-specific tracking: tighter as type grows -->
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
     </Style>
     <Style Selector="TextBlock.label">
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="LetterSpacing" Value="0.2"/> <!-- small text: slightly open for legibility -->
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
     </Style>
     <Style Selector="TextBlock.muted">
@@ -40,6 +42,7 @@
     <Style Selector="TextBlock.amount">
         <Setter Property="FontSize" Value="34"/>
         <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="LetterSpacing" Value="-0.8"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="FontFeatures" Value="+tnum"/>
     </Style>
@@ -57,8 +60,33 @@
 
     <!-- ===== Buttons ===== -->
     <Style Selector="Button">
-        <Setter Property="MinHeight" Value="36"/>
-        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Padding" Value="16,8"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <!-- Press feedback is instant and physical: scale down on press (state change
+         is immediate), ease back out on release. Compositor-friendly (transform only). -->
+    <Style Selector="Button">
+        <Setter Property="RenderTransform" Value="none"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" Easing="CubicEaseOut"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)"/>
+    </Style>
+    <!-- A toggle button (e.g. "Use in next send") is not a Button to a selector: give it the same size and shape so the two
+         sit side by side without looking like different controls. -->
+    <Style Selector="ToggleButton">
+        <Setter Property="MinHeight" Value="38"/>
+        <Setter Property="Padding" Value="16,8"/>
+        <Setter Property="CornerRadius" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -98,8 +126,15 @@
         <Setter Property="Margin" Value="0,1"/>
     </Style>
     <!-- Hover: neutral tint; selected: subtle brand-blue tint -->
+    <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
     <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>
     </Style>
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource PrimarySoftBrush}"/>
@@ -108,6 +143,8 @@
     <!-- ===== Tabs (dashboard) ===== -->
     <!-- Selected item: brand blue + bold; unselected: muted -->
     <Style Selector="TabItem">
+        <!-- Fluent's default header size (20) is too loud in the About dialog; the main tab strip sets its own sizes -->
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="FontWeight" Value="Medium"/>
     </Style>
@@ -126,11 +163,11 @@
     <!-- ===== Reusable classes ===== -->
     <!-- Card: elevated surface with a subtle border and soft corners -->
     <Style Selector="Border.card">
-        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource GlassBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="14"/>
-        <Setter Property="BoxShadow" Value="0 1 3 0 #14000000"/>
+        <Setter Property="CornerRadius" Value="20"/>
+        <Setter Property="BoxShadow" Value="0 6 20 -8 #1F1E3A8A"/>
         <Setter Property="Transitions">
             <Transitions>
                 <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18"/>
@@ -138,14 +175,23 @@
         </Setter>
     </Style>
     <Style Selector="Border.card:pointerover">
-        <Setter Property="BoxShadow" Value="0 6 16 -4 #26000000"/>
+        <Setter Property="BoxShadow" Value="0 12 28 -8 #331E3A8A"/>
+    </Style>
+    <!-- Overlay surface (address/tx details, settings, help): bigger surface reads
+         as thicker, so a deeper, softer shadow than a card; same radius family. -->
+    <Style Selector="Border.overlay-surface">
+        <Setter Property="Background" Value="{DynamicResource OverlayCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="24"/>
+        <Setter Property="BoxShadow" Value="0 24 56 -14 #66101A40"/>
     </Style>
     <!-- Balance card: subtle blue accent, slightly more prominent -->
     <Style Selector="Border.balance-card">
-        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource GlassBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="CornerRadius" Value="20"/>
         <Setter Property="Padding" Value="20,16"/>
         <Setter Property="BoxShadow" Value="0 2 8 0 #1A000000"/>
     </Style>
@@ -153,9 +199,20 @@
          element; overlaid text is white (on-hero class). -->
     <Style Selector="Border.balance-hero">
         <Setter Property="Background" Value="{DynamicResource BalanceGradientBrush}"/>
-        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="CornerRadius" Value="24"/>
         <Setter Property="Padding" Value="24,20"/>
-        <Setter Property="BoxShadow" Value="0 8 24 -6 #663B82F6"/>
+        <!-- bright rim on the lit edge: the glass catches light -->
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BoxShadow" Value="0 18 40 -12 #803B82F6"/>
+    </Style>
+    <!-- Short window: a slimmer balance card leaves the tabs their height -->
+    <Style Selector=".short Border.balance-hero">
+        <Setter Property="Padding" Value="20,10"/>
+        <Setter Property="CornerRadius" Value="18"/>
+    </Style>
+    <Style Selector=".short Border.balance-hero TextBlock.amount">
+        <Setter Property="FontSize" Value="24"/>
     </Style>
     <Style Selector="Border.balance-hero TextBlock.amount">
         <Setter Property="Foreground" Value="#FFFFFF"/>
@@ -163,10 +220,68 @@
     <Style Selector="Border.balance-hero TextBlock.on-hero">
         <Setter Property="Foreground" Value="#D6E2FF"/>
     </Style>
+    <!-- Warning chip (e.g. Coinbase): soft amber tint with amber text, not white on a solid fill -->
+    <Style Selector="Border.chip.warn">
+        <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+    </Style>
+    <!-- Own addresses in transaction lists: theme-aware green (a fixed colour fails in one of the variants) -->
+    <Style Selector="SelectableTextBlock.mine">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}"/>
+    </Style>
+    <!-- A card inside an overlay is a recessed group, not a second sheet of glass:
+         never stack a translucent surface on another (legibility, and the double rim reads as noise). -->
+    <Style Selector="Border.overlay-surface Border.card">
+        <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="BoxShadow" Value="none"/>
+    </Style>
+    <Style Selector="Border.overlay-surface Border.card:pointerover">
+        <Setter Property="BoxShadow" Value="none"/>
+    </Style>
+    <!-- Scrollbars: a slim rounded thumb that widens on hover; content keeps clear of it (see Margin on the
+         scrolled panel). -->
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb#thumb">
+        <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <!-- Inline notice (validation message in a flow): a soft amber block, not a line of small grey text -->
+    <Style Selector="Border.notice">
+        <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="14,10"/>
+    </Style>
+    <!-- Field hint under an input: a quiet confirmation, or the reason it is wrong -->
+    <Style Selector="TextBlock.hint">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.hint.error">
+        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+    </Style>
+    <!-- A prepared transaction awaiting confirmation: the summary card takes the brand tint -->
+    <Style Selector="Border.card.review">
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PrimarySoftBrush}"/>
+    </Style>
+    <!-- Tap-to-copy surface (address box): hand cursor and a brand tint on hover show it is a target -->
+    <Style Selector="Border.copyable">
+        <Setter Property="Background" Value="{DynamicResource GlassInsetBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.copyable:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PrimarySoftBrush}"/>
+    </Style>
     <!-- Status pill / badge -->
     <Style Selector="Border.chip">
         <Setter Property="CornerRadius" Value="20"/>
         <Setter Property="Padding" Value="10,5"/>
-        <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource GlassBrush}"/>
     </Style>
 </Styles>
