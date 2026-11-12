@@ -5,7 +5,7 @@ Technical changelog for PalladiumWallet. Format loosely follows
 by subsystem rather than strictly by date, since `0.9.0` is the first
 release and covers the full history from the initial commit.
 
-## [Unreleased]
+## [1.3.0] — 2026-11-12
 
 ### Changed
 
