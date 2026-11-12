@@ -28,7 +28,7 @@ jobs:
       attestations: write
     steps:
       # The tag of the release, not whatever the default branch is now.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.release.tag_name }}
 
@@ -64,7 +64,7 @@ jobs:
           (cd release-assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: release-assets/*
 
